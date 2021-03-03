@@ -14,4 +14,13 @@
 // The opposit to __out__. Represents a pointer value that is coming in.
 #define __in__
 
+
+
+/**
+ * Matches the given input with the second input whilst taking the delimieter into account.
+ * "input2" must be null terminated with no delmieter.
+ * "input1" can end with either a null terminator of the given delimieter.
+ */
+int str_matches(const char *input, const char *input2, char delim);
+
 #endif

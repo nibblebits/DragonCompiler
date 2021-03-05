@@ -33,33 +33,22 @@ struct lex_stack_entry
     LEX_FLAG flags;
 };
 
-/**
- * States can sometimes stack, because of this we need to have a lexcial analysis
- * stack that we can push and pop from
- */
-struct lex_stack
-{   
-    struct lex_stack_entry* current;
-    struct lex_stack_entry* prev;
-    struct lex_stack_entry* next;
-};
 
 /**
  * Represents a lexical analysis stream that can be manipulated
  */
 struct lex_stream
 {
+    // The current input for the next byte in the stream
     const char* input;
-    size_t* len;
-}
+    // The length that is left for this stream until its read.
+    size_t len;
+};
 
 struct lex_process
 {
-    // Current lex stack
-    struct lex_stack stack;
-
-    // The root token of the lexcial process.
-    struct token* token;
+    // A stack of tokens performed by lexical analysis.
+    struct stack* token_stack;
 
     // The input stream for this lexcial analysis.
     struct lex_stream* stream;
@@ -78,33 +67,6 @@ struct token
  * \param process The process to be used for this lexcial analysis.
  */
 int dragon_lex(struct lex_process* process, const char* input);
-
-/**
- * Gets the next token from the given input
- * 
- * \param input The current input pointer, it will be adjusted after this function is executed
- * \param input_len The length of whats left of the input. This is adjusted when new token has been parsed
- */
-struct token* dragon_lex_new_token(const char** input, size_t* input_len);
-
-void dragon_lex_free(struct lex_process* process);
-
-/**
- * Returns the given flag state for the current lexer stack.
- * 
- * If the flag is set then LEX_FLAG_STATE_ON is returned. Otherwise LEG_FLAG_STATE_OFF
- */
-LEX_FLAG_STATE dragon_lex_get_flag(LEX_FLAG flag);
-
-struct lex_stack_entry* dragon_lex_get_current_stack(struct lex_process* process);
-
-/**
- * Creates a new stream for the given input
- */
-struct lex_stream* dragon_new_stream(const char* input);
-void dragon_free_stream(struct lex_stream* stream);
-
-struct dragon_stream* dragon_stream(struct lex_process* process);
 
 
 #endif

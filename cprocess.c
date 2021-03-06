@@ -1,4 +1,6 @@
 #include "compiler.h"
+#include "helpers/vector.h"
+#include <memory.h>
 
 struct compile_process* compile_process_create(const char* filename)
 {   
@@ -9,7 +11,9 @@ struct compile_process* compile_process_create(const char* filename)
     }
 
     struct compile_process* process = malloc(sizeof(struct compile_process));
+    memset(process, 0, sizeof(struct compile_process));
     process->cfile = file;
+    process->token_vec = vector_create(sizeof(struct token));
     return process;
 }
 

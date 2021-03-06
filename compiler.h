@@ -2,6 +2,7 @@
 #define COMPILER_H
 #include <stdio.h>
 #include <stdlib.h>
+#include "helpers/vector.h"
 
 struct pos
 {
@@ -20,6 +21,8 @@ struct compile_process
     // Current line position information.
     struct pos pos;
 
+    // Stack of tokens that have undergone lexcial analysis.
+    struct vector* token_vec;
 };
 
 

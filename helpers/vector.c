@@ -47,6 +47,7 @@ void vector_push(struct vector* vector, void* elem)
     {
         vector_resize(vector);
     }
+    
     void* ptr = vector_at(vector, vector->rindex);
     memcpy(ptr, elem, vector->esize);
 

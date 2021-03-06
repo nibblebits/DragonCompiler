@@ -4,16 +4,9 @@
 #include <stddef.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <memory.h>
 
-static char error_buf[2056];
-static char *pos_string(struct pos *p) {
-     sprintf(error_buf, "%s:%d:%d", "(unknown)", p->line, p->col);
-     return error_buf;
-}
-
-#define errorp(p, ...) errorf(__FILE__ ":" STR(__LINE__), pos_string(&p), __VA_ARGS__)
-#define warnp(p, ...)  warnf(__FILE__ ":" STR(__LINE__), pos_string(&p), __VA_ARGS__)
-
+static struct token tmp_token;
 static struct compile_process* current_process;
 static char nextc()
 {
@@ -37,12 +30,14 @@ static char assert_next_char(char expected_char)
     return c;
 }
 
-static struct token* token_create(struct token* token_tmp)
+static struct token* token_create(struct token* _token)
 {
-    struct token* token = malloc(sizeof(struct token));
-    *token = *token_tmp;
-    token->pos = compiler_file_position();
-    return token;
+    // Shared temp token for all tokens, only one token should be created
+    // per build token, to avoid memory leaks.
+    // Once its pushed to the token stack then its safe to call this function again
+    memcpy(&tmp_token, _token, sizeof(tmp_token));
+    tmp_token.pos = compiler_file_position();
+    return &tmp_token;
 }
 
 static struct token* token_make_string()
@@ -53,6 +48,8 @@ static struct token* token_make_string()
     {
         buffer_write(buf, c);
     }
+    // Null terminator.
+    buffer_write(buf, 0x00);
     return token_create(&(struct token){TOKEN_TYPE_STRING, .sval=buffer_ptr(buf)});
 }
 
@@ -65,6 +62,12 @@ static struct token* read_next_token()
         case '"':
             token = token_make_string();
         break;
+
+        case EOF:
+            // aha we are done!
+        break;
+        default:
+            printf("Invalid token provided. Character %c\n", c);
     }
 
     return token;
@@ -77,6 +80,7 @@ int lex(struct compile_process* process)
     struct token* token = read_next_token();
     while(token)
     {
+        vector_push(process->token_vec, token);
         token = read_next_token();
     }
 

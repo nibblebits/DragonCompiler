@@ -1,36 +1,23 @@
-#include "misc.h"
-#include "lexer.h"
-#include "stack.h"
+#include "compiler.h"
+#include "helpers/vector.h"
 #include <stdio.h>
 
-
-#warning "debugger seems to be broken..."
 int main(int argc, char** argv)
 {
-   // struct lex_process process;
-    //dragon_lex(&process, "dog int abc; int def; long wine;");
-    
-    // Let's try to create a stack of integers to see if this is working..
-    struct stack* stack = stack_create(sizeof(int));
-    // OK i see what i did lol
-
-    int r;
-    r = 50;
-    stack_push_back(stack, (void*) &r);
-    r = 28;
-    stack_push_back(stack, (void*) &r);
-    r = 45;
-    stack_push_back(stack, (void*) &r);
-    r = 99;
-    stack_push_back(stack, (void*) &r);
-
-
-    int total = stack_count(stack);
-    for (int i = 0; i < total; i++)
+    if(compile_file("./test.c") != COMPILER_FILE_COMPILED_OK)
     {
-        int val;
-        stack_pop_head(stack, &val);
-        printf("%i\n", val);
+        printf("Problem compiling input file\n");
     }
+
+    struct vector* vec = vector_create(sizeof(int));
+
+    int val = 0;
+    for (int i = 0; i < vector_count(vec); i++)
+    {
+        val = 50;
+        printf("%i\n", *(int*)(vector_at(vec, i)));
+    }
+
+    vector_free(vec);
     return 0;
 }

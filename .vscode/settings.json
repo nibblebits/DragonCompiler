@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "compiler.h": "c",
+        "stdarg.h": "c"
+    }
+}

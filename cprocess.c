@@ -29,8 +29,20 @@ char compile_process_next_char(struct compile_process* process)
     char c = getc(process->cfile);
     if (c == '\n')
     {
-        process->pos.line +=1 ;
+        process->pos.line +=1;
         process->pos.col = 0;
     }
     return c;
+}
+
+char compile_process_peek_char(struct compile_process* process)
+{
+    char c = getc(process->cfile);
+    ungetc(c, process->cfile);
+    return c;
+}
+
+void compile_process_push_char(struct compile_process* process, char c)
+{
+    ungetc(c, process->cfile);
 }

@@ -1,6 +1,6 @@
 #include "compiler.h"
 #include "helpers/vector.h"
-void compiler_error(struct compile_process* compiler, const char *msg, ...)
+void compiler_error(struct compile_process *compiler, const char *msg, ...)
 {
     va_list args;
     va_start(args, msg);
@@ -12,6 +12,20 @@ void compiler_error(struct compile_process* compiler, const char *msg, ...)
     exit(-1);
 }
 
+void test(struct node* node)
+{
+    if (node->type == NODE_TYPE_NUMBER)
+    {
+        printf("%i", node->inum);
+    }
+    else if (node->type == NODE_TYPE_EXPRESSION)
+    {
+        test(node->exp.left);
+        printf("%s", node->exp.op);
+        test(node->exp.right);
+
+    }
+}
 int compile_file(const char *filename)
 {
     struct compile_process *process = compile_process_create(filename);
@@ -21,34 +35,14 @@ int compile_file(const char *filename)
     if (lex(process) != LEXICAL_ANALYSIS_ALL_OK)
         return COMPILER_FAILED_WITH_ERRORS;
 
-    for (int i = 0; i < vector_count(process->token_vec); i++)
+    if (parse(process) != PARSE_ALL_OK)
+        return COMPILER_FAILED_WITH_ERRORS;
+
+    for (int i = 0; i < vector_count(process->node_vec); i++)
     {
-        struct token *ptr;
-        ptr = vector_at(process->token_vec, i);
-        if (ptr->type == TOKEN_TYPE_NUMBER)
-        {
-            printf("%i\n", ptr->inum);
-            continue;
-        }
-        
-        switch(ptr->type)
-        {
-            case TOKEN_TYPE_KEYWORD:
-            case TOKEN_TYPE_IDENTIFIER:
-            case TOKEN_TYPE_STRING:
-            case TOKEN_TYPE_COMMENT:
-            case TOKEN_TYPE_OPERATOR:
-            printf("%s\n", ptr->sval);
-            break;
-
-            case TOKEN_TYPE_NUMBER:
-            printf("%i\n", ptr->inum);
-            break;
-
-            case TOKEN_TYPE_SYMBOL:
-            printf("%c\n", ptr->cval);
-            break;
-        }
+        struct node *ptr;
+        ptr = *((struct node **)(vector_at(process->node_vec, i)));
+        test(ptr);
     }
     return COMPILER_FILE_COMPILED_OK;
 }

@@ -1,5 +1,5 @@
 INCLUDES= -I ./ -I ./helpers
-OBJECTS= ./build/misc.o ./build/lexer.o ./build/helpers/vector.o ./build/helpers/buffer.o ./build/compiler.o ./build/cprocess.o
+OBJECTS= ./build/misc.o ./build/lexer.o ./build/parser.o ./build/helpers/vector.o ./build/helpers/buffer.o ./build/compiler.o ./build/cprocess.o
 all: ${OBJECTS}
 	gcc main.c -o main ${OBJECTS} -g
 
@@ -8,6 +8,10 @@ all: ${OBJECTS}
 
 ./build/lexer.o: ./lexer.c
 	gcc lexer.c ${INCLUDES} -o ./build/lexer.o -g -c
+
+./build/parser.o: ./parser.c
+	gcc parser.c ${INCLUDES} -o ./build/parser.o -g -c
+
 
 ./build/compiler.o: ./compiler.c
 	gcc compiler.c ${INCLUDES} -o ./build/compiler.o -g -c

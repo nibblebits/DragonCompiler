@@ -114,7 +114,8 @@ static bool op_valid(const char* op)
            S_EQ(op, "^=") || 
            S_EQ(op, "==") || 
            S_EQ(op, "!=") ||
-           S_EQ(op, "->");
+           S_EQ(op, "->") ||
+           S_EQ(op, "**");
 }
 
 static struct compile_process *compiler_process()

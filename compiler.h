@@ -68,7 +68,18 @@ struct compile_process
     struct pos pos;
 
     // Stack of tokens that have undergone lexcial analysis.
+    // Vector of struct <struct token> individual tokens (not pointers)
     struct vector* token_vec;
+
+    // Contains pointers to the root of the tree
+    // Vector of <struct node*> node pointers
+    struct vector* node_tree_vec;
+
+    // Used to store nodes that can be popped during parsing.
+    // All nodes get pushed here, they can be popped to form other bigger nodes such as expressions
+    // Vector of <struct node*> node pointers
+    struct vector* node_vec;
+  
 };
 
 
@@ -106,6 +117,46 @@ struct token
 
 enum
 {
+    NODE_TYPE_EXPRESSION,
+    NODE_TYPE_NUMBER,
+    NODE_TYPE_IDENTIFIER
+};
+
+
+
+enum
+{
+    PARSE_ALL_OK,
+    PARSE_GENERAL_ERROR
+};
+
+struct node
+{
+    int type;
+    union
+    {
+        struct exp
+        {
+            struct node* left;
+            struct node* right;
+            // Operator for the expression
+            const char* op;
+        } exp;
+    };
+
+    // Possible literal values for all nodes.
+    union
+    {
+        char cval;
+        const char* sval;
+        unsigned int inum;
+        unsigned long lnum;
+        unsigned long long llnum;
+    };    
+};
+
+enum
+{
     COMPILER_FILE_COMPILED_OK,
     COMPILER_FAILED_WITH_ERRORS,
 };
@@ -125,6 +176,11 @@ int compile_file(const char* filename);
  * Lexical analysis
  */
 int lex(struct compile_process* process);
+
+/**
+ * Parses the tree provided from lexical analysis
+ */
+int parse(struct compile_process *process);
 
 
 /**

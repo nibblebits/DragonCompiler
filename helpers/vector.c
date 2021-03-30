@@ -3,10 +3,22 @@
 #include <memory.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <stdbool.h>
 
-static void vector_assert_bounds(struct vector* vector, int index)
+static bool vector_in_bounds_for_at(struct vector* vector, int index)
 {
-    assert (index > 0 && index < vector->mindex);
+    return (index >= 0 && index < vector->rindex);
+}
+
+
+static bool vector_in_bounds_for_pop(struct vector* vector, int index)
+{
+    return (index >= 0 && index < vector->mindex);
+}
+
+static void vector_assert_bounds_for_pop(struct vector* vector, int index)
+{
+    assert (vector_in_bounds_for_pop(vector, index));
 }
 
 struct vector* vector_create(size_t esize)
@@ -41,6 +53,23 @@ void* vector_at(struct vector* vector, int index)
     return vector->data+(index * vector->esize);
 }
 
+void vector_set_peek_pointer(struct vector* vector, int index)
+{
+    vector->pindex = index;
+}
+
+void* vector_peek(struct vector* vector)
+{
+    if (!vector_in_bounds_for_at(vector, vector->pindex))
+    {
+        return NULL;
+    }
+
+    void* ptr = vector_at(vector, vector->pindex);
+    vector->pindex++;
+    return ptr;
+}
+
 void vector_push(struct vector* vector, void* elem)
 {
     if (vector->rindex >= vector->mindex)
@@ -58,16 +87,17 @@ void vector_push(struct vector* vector, void* elem)
 
 void vector_pop(struct vector* vector)
 {
-    vector_assert_bounds(vector, vector->rindex);
     // Popping from the vector will just decrement the index, no need to free memory
     // the next push will overwrite it.
     vector->rindex -=1;
     vector->count -=1;
+
+    vector_assert_bounds_for_pop(vector, vector->rindex);
 }
 
 void* vector_back(struct vector* vector)
 {
-    vector_assert_bounds(vector, vector->rindex);
+    vector_assert_bounds_for_pop(vector, vector->rindex);
 
     return vector_at(vector, vector->rindex-1);
 }

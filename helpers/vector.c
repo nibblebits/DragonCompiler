@@ -58,7 +58,7 @@ void vector_set_peek_pointer(struct vector* vector, int index)
     vector->pindex = index;
 }
 
-void* vector_peek(struct vector* vector)
+void* vector_peek_no_increment(struct vector* vector)
 {
     if (!vector_in_bounds_for_at(vector, vector->pindex))
     {
@@ -66,6 +66,12 @@ void* vector_peek(struct vector* vector)
     }
 
     void* ptr = vector_at(vector, vector->pindex);
+    return ptr;
+}
+
+void* vector_peek(struct vector* vector)
+{
+    void* ptr = vector_peek_no_increment(vector);
     vector->pindex++;
     return ptr;
 }

@@ -3,11 +3,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <memory.h>
+#include <string.h>
 #include "helpers/vector.h"
 
 // Macro's make life cleaner..
 #define S_EQ(str, str2) \
-    strcmp(str, str2) == 0
+    (strcmp(str, str2) == 0)
 
 #define OPERATOR_CASE_EXCLUDING_DIVISON \
     case '+': \
@@ -56,6 +58,30 @@ struct pos
     int col;
 };
 
+
+
+enum
+{
+    // Signifies we are on the right node of a single part of an expression
+    // I.e (50+20+40+96). 20 is the right node and so is 96.
+    // This flag will be set in the event the right node of an expression part is being processed
+    EXPRESSION_FLAG_RIGHT_NODE = 0b00000001,
+};
+
+/**
+ * An expression state describes the state of an individual expression. 
+ * These expression states are created when ever we enter a new expression i.e (50+20).
+ * They are important as they help describe the state of an expression so during iterations
+ * any function call will have a better understanding of what to do and what not to do.
+ * 
+ * The last thing we need is a corrupted assembly output that has unexpected behaviour
+ * expression states help ensure we can avoid this problem by obaying rules we set our program.
+ */
+struct expression_state
+{
+    int flags;
+};
+
 /**
  * This file represents a compilation process
  */
@@ -80,6 +106,18 @@ struct compile_process
     // Vector of <struct node*> node pointers
     struct vector* node_vec;
   
+    struct generator
+    {
+        struct states
+        {
+            // Expression state vector - A vector used as a stack of expression states.
+            // Most recently pushed element is the current expression state rules.
+            // Should pop from this vector when an expression ends, push when an expression starts
+            // I.e opening brackets starts a new expression (50+20)
+            // See enum expression_state for more information
+            struct vector* expr;
+        } states;
+    } generator;
 };
 
 
@@ -128,6 +166,12 @@ enum
 {
     PARSE_ALL_OK,
     PARSE_GENERAL_ERROR
+};
+
+enum
+{
+    CODEGEN_ALL_OK,
+    CODEGEN_GENERAL_ERROR
 };
 
 struct node
@@ -182,6 +226,10 @@ int lex(struct compile_process* process);
  */
 int parse(struct compile_process *process);
 
+/**
+ * Generates the assembly output for the given AST
+ */
+int codegen(struct compile_process* process);
 
 /**
  * Compiler process

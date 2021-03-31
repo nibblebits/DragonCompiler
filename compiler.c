@@ -44,5 +44,11 @@ int compile_file(const char *filename)
         ptr = *((struct node **)(vector_at(process->node_vec, i)));
         test(ptr);
     }
+    printf("\n");
+    // Do validation here..
+
+    if (codegen(process) != CODEGEN_ALL_OK)
+        return COMPILER_FAILED_WITH_ERRORS;
+    
     return COMPILER_FILE_COMPILED_OK;
 }

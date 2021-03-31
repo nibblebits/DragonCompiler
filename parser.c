@@ -67,9 +67,17 @@ static struct node *node_pop()
     return last_node;
 }
 
+
 static void node_push(struct node *node)
 {
     vector_push(current_process->node_vec, &node);
+}
+
+static void node_swap(struct node** f_node, struct node** s_node)
+{
+    struct node* tmp_node = *f_node;
+    *f_node = *s_node;
+    *s_node = tmp_node;
 }
 
 static struct node *node_create(struct node *_node)
@@ -99,9 +107,9 @@ void parse_single_token_to_node()
     }
 }
 
-struct node *make_exp_node(struct node *node_left, struct node *node_right, const char *op)
+void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
 {
-    return node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
+    node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
 }
 
 void parse_expressionable();
@@ -113,11 +121,10 @@ void parse_exp()
     const char *op = op_token->sval;
     // We must pop the last node as this will be the left operand
     struct node *node_left = node_pop();
-
     // We must parse the right operand
     parse_expressionable();
     struct node *node_right = node_pop();
-
+    
     make_exp_node(node_left, node_right, op);
 }
 
@@ -152,9 +159,9 @@ int parse_expressionable_single()
 }
 void parse_expressionable()
 {
+    struct node* last_node = NULL;
     while (parse_expressionable_single() == 0)
     {
-        // We will loop until theirs nothing more of an expression
     }
 }
 
@@ -191,7 +198,6 @@ int parse_next()
 
     case TOKEN_TYPE_NUMBER:
     case TOKEN_TYPE_IDENTIFIER:
-    case TOKEN_TYPE_OPERATOR:
         parse_expressionable();
         break;
 

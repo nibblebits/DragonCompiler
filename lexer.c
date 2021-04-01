@@ -51,7 +51,7 @@ static void pushc(char c)
     return compile_process_push_char(current_process, c);
 }
 
-static bool is_keyword(const char* str)
+bool is_keyword(const char* str)
 {
     return 
            S_EQ(str, "unsigned") ||
@@ -64,6 +64,11 @@ static bool is_keyword(const char* str)
            S_EQ(str, "struct") ||
            S_EQ(str, "union") || 
            S_EQ(str, "static");
+}
+
+bool keyword_is_datatype(const char* str)
+{
+
 }
 
 static bool is_single_operator(char op)

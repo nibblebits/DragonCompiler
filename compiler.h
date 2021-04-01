@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <memory.h>
 #include <string.h>
+#include <stdbool.h>
 #include "helpers/vector.h"
 
 // Macro's make life cleaner..
@@ -157,7 +158,9 @@ enum
 {
     NODE_TYPE_EXPRESSION,
     NODE_TYPE_NUMBER,
-    NODE_TYPE_IDENTIFIER
+    NODE_TYPE_IDENTIFIER,
+    NODE_TYPE_VARIABLE,
+    NODE_TYPE_FUNCTION
 };
 
 
@@ -174,6 +177,33 @@ enum
     CODEGEN_GENERAL_ERROR
 };
 
+enum
+{
+    DATATYPE_FLAG_IS_SIGNED = 0b00000001,
+    DATATYPE_FLAG_IS_STATIC = 0b00000010
+};
+
+enum
+{
+    DATA_TYPE_CHAR,
+    DATA_TYPE_SHORT,
+    DATA_TYPE_INTEGER,
+    DATA_TYPE_FLOAT,
+    DATA_TYPE_DOUBLE,
+    DATA_TYPE_LONG,
+    DATA_TYPE_USER_DEFINED
+};
+
+struct datatype
+{
+    int flags;
+    // The type this is i.e float, double, long
+    int type;
+    // The string equivilant for this type. Does not include unsigned or signed keywords.
+    // if the type is "unsigned int" here will be written only "int"
+    const char* type_str;
+};
+
 struct node
 {
     int type;
@@ -186,6 +216,20 @@ struct node
             // Operator for the expression
             const char* op;
         } exp;
+
+        struct function
+        {
+            // The return type of this function.. I.e long, double, int
+            struct datatype rtype;
+
+        } func;
+
+        struct variable
+        {
+            struct datatype type;
+            const char* name;
+            struct node* val;
+        } var;
     };
 
     // Possible literal values for all nodes.
@@ -230,6 +274,8 @@ int parse(struct compile_process *process);
  * Generates the assembly output for the given AST
  */
 int codegen(struct compile_process* process);
+
+bool keyword_is_datatype(const char* str);
 
 /**
  * Compiler process

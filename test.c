@@ -1,1 +1,5 @@
-int abc=50
+char c = 210+10;
+int hello()
+{
+
+}

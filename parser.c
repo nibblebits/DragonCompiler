@@ -12,6 +12,8 @@
 static const char *op_precedence[] = {"*", "/", "%%", "+", "-"};
 static struct compile_process *current_process;
 int parse_next();
+void parse_statement();
+
 #define parse_err(...) \
     compiler_error(current_process, __VA_ARGS__)
 
@@ -24,6 +26,19 @@ static struct token *token_peek_next()
 {
     return vector_peek_no_increment(current_process->token_vec);
 }
+
+static bool token_next_is_operator(const char *op)
+{
+    struct token *token = token_peek_next();
+    return token && token->type == TOKEN_TYPE_OPERATOR && S_EQ(token->sval, op);
+}
+
+static bool token_next_is_symbol(char sym)
+{
+    struct token *token = token_peek_next();
+    return token && token->type == TOKEN_TYPE_SYMBOL && token->cval == sym;
+}
+
 static struct token *token_next_expected(int type)
 {
     struct token *token = token_next();
@@ -118,9 +133,19 @@ void make_exp_node(struct node *node_left, struct node *node_right, const char *
     node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
 }
 
-void make_variable_node(struct datatype* datatype, struct token* name_token, struct node* value_node)
+void make_function_node(struct datatype *ret_type, const char *name, struct vector *arguments, struct node *body)
 {
-    node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type=*datatype, .var.name=name_token->sval, .var.val=value_node});
+    node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body = body});
+}
+
+void make_body_node(struct vector* body_vec)
+{
+    node_create(&(struct node){NODE_TYPE_BODY, .body.statements=body_vec});
+}
+
+void make_variable_node(struct datatype *datatype, struct token *name_token, struct node *value_node)
+{
+    node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type = *datatype, .var.name = name_token->sval, .var.val = value_node});
 }
 
 void parse_expressionable();
@@ -240,38 +265,179 @@ void parse_datatype_type(struct datatype *datatype)
     if (S_EQ(datatype_token->sval, "char"))
     {
         datatype->type = DATA_TYPE_CHAR;
+        datatype->size = 1;
     }
     else if (S_EQ(datatype_token->sval, "short"))
     {
         datatype->type = DATA_TYPE_SHORT;
+        datatype->size = 2;
     }
     else if (S_EQ(datatype_token->sval, "int"))
     {
         datatype->type = DATA_TYPE_INTEGER;
+        datatype->size = 4;
     }
     else if (S_EQ(datatype_token->sval, "long"))
     {
         datatype->type = DATA_TYPE_LONG;
+        datatype->size = 8;
     }
     else if (S_EQ(datatype_token->sval, "float"))
     {
         datatype->type = DATA_TYPE_FLOAT;
+        datatype->size = 4;
     }
     else if (S_EQ(datatype_token->sval, "double"))
     {
         datatype->type = DATA_TYPE_DOUBLE;
+        datatype->size = 8;
     }
 
     datatype->type_str = datatype_token->sval;
 }
 
-void parse_variable(struct datatype* dtype, struct token* name_token)
+void parse_variable(struct datatype *dtype, struct token *name_token)
 {
-    // We have a datatype and a variable name but we still need to parse a value.
+    struct node *value_node = NULL;
+    // We have a datatype and a variable name but we still need to parse a value if their is one
     // Lets do that now
-    parse_expressionable();
-    struct node* value_node = node_pop();
+    if (token_next_is_operator("="))
+    {
+        // Yeah we got an assignment with the variable declaration
+        // so it looks something like this "int a = 50;".
+        // Now we now we are at the "=" lets pop it off the token stack
+        token_next();
+        // Parse the value expression i.e the "50"
+        parse_expressionable();
+        value_node = node_pop();
+    }
+
     make_variable_node(dtype, name_token, value_node);
+}
+
+/**
+ * Unlike the "parse_variable" function this function does not expect you 
+ * to know the datatype or the name of the variable, it parses that for you
+ */
+void parse_variable_full()
+{
+    // Null by default, making this an unsigned non-static variable
+    struct datatype dtype;
+    parse_datatype_modifiers(&dtype);
+    parse_datatype_type(&dtype);
+
+    // Ok great we have a datatype at this point, next comes the variable name
+    // or the function name.. we don't know which one yet ;)
+
+    struct token *name_token = token_next();
+    parse_variable(&dtype, name_token);
+}
+
+void parse_function_argument()
+{
+    parse_variable_full();
+}
+
+/**
+ * Parses the function arguments and returns a vector of function arguments
+ * that were parsed succesfully
+ */
+struct vector *parse_function_arguments()
+{
+    struct vector *arguments_vec = vector_create(sizeof(struct node *));
+    // If we see a right bracket we are at the end of the function arguments i.e (int a, int b)
+    while (!token_next_is_symbol(')'))
+    {
+        parse_variable_full();
+        // Push the parsed argument variable into the arguments vector
+        struct node *argument_node = node_pop();
+        vector_push(arguments_vec, &argument_node);
+
+        // Loop until no more function arguments are present
+        if (!token_next_is_symbol(','))
+        {
+            break;
+        }
+
+        // Skip the comma
+        token_next();
+    }
+
+    return arguments_vec;
+}
+
+void parse_body_single_statement(struct vector *body_vec)
+{
+    struct node *stmt_node = NULL;
+    parse_statement();
+    stmt_node = node_pop();
+    vector_push(body_vec, &stmt_node);
+
+    // Let's make the body node for this one statement.
+    make_body_node(body_vec);
+}
+
+void parse_body_multiple_statements(struct vector *body_vec)
+{
+    struct node *stmt_node = NULL;
+    // Ok we are parsing a full body with many statements.
+    expect_sym('{');
+    while (!token_next_is_symbol('}'))
+    {
+        parse_statement();
+        stmt_node = node_pop();
+        vector_push(body_vec, &stmt_node);
+    }
+    // bodies must end with a right curley bracket!
+    expect_sym('}');
+
+    // Let's make the body node now we have parsed all statements.
+    make_body_node(body_vec);
+}
+
+void parse_body()
+{
+    struct vector *body_vec = vector_create(sizeof(struct node *));
+    // We don't have a left curly? Then this body composes of only one statement
+    if (!token_peek_next('{'))
+    {
+        parse_body_single_statement(body_vec);
+        return;
+    }
+
+    // We got a couple of statements between curly braces {int a; int b;}
+    parse_body_multiple_statements(body_vec);
+}
+
+void parse_function_body()
+{
+    parse_body();
+}
+
+void parse_function(struct datatype *dtype, struct token *name_token)
+{
+    struct vector *arguments_vector = NULL;
+    // We expect a left bracket for functions.
+    // Let us not forget we already have the return type and name of the function i.e int abc
+    expect_sym('(');
+    arguments_vector = parse_function_arguments();
+    expect_sym(')');
+
+    // Do we have a function body or is this a declaration?
+    if (token_next_is_symbol('{'))
+    {
+        // Parse the function body
+        parse_function_body();
+        struct node *body_node = node_pop();
+        // Create the function node
+        make_function_node(dtype, name_token->sval, arguments_vector, body_node);
+        return;
+    }
+
+    // Ok then this is a function declaration wtihout a body, in which case
+    // we expect a semicolon
+    expect_sym(';');
+    make_function_node(dtype, name_token->sval, arguments_vector, NULL);
 }
 /**
  * Parses a variable or function, at this point the parser should be certain
@@ -290,14 +456,30 @@ void parse_variable_or_function()
     // Ok great we have a datatype at this point, next comes the variable name
     // or the function name.. we don't know which one yet ;)
 
-    struct token* name_token = token_next();
-    parse_variable(&dtype, name_token);
+    struct token *name_token = token_next();
 
+    // If we have a left bracket then this must be a function i.e int abc()
+    // Let's handle the function
+    if (token_next_is_symbol('('))
+    {
+        parse_function(&dtype, name_token);
+        return;
+    }
+
+    // Since this is not a function it has to be a variable
+    // Let's handle the variable
+    parse_variable(&dtype, name_token);
+    // We expect variable declarations to end with ";"
+    expect_sym(';');
 }
 
 void parse_keyword()
 {
     struct token *token = token_peek_next();
+    // keyword_is_datatype is temporary because custom types can exist
+    // Therefore variable declarations will be the appropaite action
+    // if all other keywords are not present.
+    // This will be changed soon
     if (is_keyword_variable_modifier(token->sval) || keyword_is_datatype(token->sval))
     {
         parse_variable_or_function();
@@ -305,6 +487,27 @@ void parse_keyword()
     }
 
     parse_err("Unexpected keyword %s\n", token->sval);
+}
+
+/**
+ * Statements are essentially assignments, variable declarations, for loops
+ * if statements and so on. THeir is no node type of statment, there are however
+ * nodes that fit in this statement category and should be parsed as such.
+ */
+void parse_statement()
+{
+    // Statements are composed of keywords or expressions
+    if (token_peek_next()->type == TOKEN_TYPE_KEYWORD)
+    {
+        parse_keyword();
+        return;
+    }
+
+    // This must be an expression as its not a keyword
+    // I.e a = 50;
+    parse_expressionable();
+    // Expression statements must end with a semicolon
+    expect_sym(';');
 }
 
 int parse_next()

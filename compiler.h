@@ -13,53 +13,50 @@
     (strcmp(str, str2) == 0)
 
 #define OPERATOR_CASE_EXCLUDING_DIVISON \
-    case '+': \
-    case '-': \
-    case '*': \
-    case '>': \
-    case '<': \
-    case '^': \
-    case '%': \
-    case '!': \
-    case '=': \
-    case '~': \
-    case '|': \
+    case '+':                           \
+    case '-':                           \
+    case '*':                           \
+    case '>':                           \
+    case '<':                           \
+    case '^':                           \
+    case '%':                           \
+    case '!':                           \
+    case '=':                           \
+    case '~':                           \
+    case '|':                           \
     case '&'
 
 #define NUMERIC_CASE \
-    case '0': \
-    case '1': \
-    case '2': \
-    case '3': \
-    case '4': \
-    case '5': \
-    case '6': \
-    case '7': \
-    case '8': \
-    case '9' \
+    case '0':        \
+    case '1':        \
+    case '2':        \
+    case '3':        \
+    case '4':        \
+    case '5':        \
+    case '6':        \
+    case '7':        \
+    case '8':        \
+    case '9'
 
 #define SYMBOL_CASE \
-    case '{': \
-    case '}': \
-    case '.': \
-    case ':': \
-    case ';': \
-    case '(': \
-    case ')': \
-    case '[': \
-    case ']': \
-    case ',': \
-    case '#': \
+    case '{':       \
+    case '}':       \
+    case '.':       \
+    case ':':       \
+    case ';':       \
+    case '(':       \
+    case ')':       \
+    case '[':       \
+    case ']':       \
+    case ',':       \
+    case '#':       \
     case '\\'
-    
 
 struct pos
 {
     int line;
     int col;
 };
-
-
 
 enum
 {
@@ -89,24 +86,24 @@ struct expression_state
 struct compile_process
 {
     // The current file being compiled
-    FILE* cfile;
+    FILE *cfile;
 
     // Current line position information.
     struct pos pos;
 
     // Stack of tokens that have undergone lexcial analysis.
     // Vector of struct <struct token> individual tokens (not pointers)
-    struct vector* token_vec;
+    struct vector *token_vec;
 
     // Contains pointers to the root of the tree
     // Vector of <struct node*> node pointers
-    struct vector* node_tree_vec;
+    struct vector *node_tree_vec;
 
     // Used to store nodes that can be popped during parsing.
     // All nodes get pushed here, they can be popped to form other bigger nodes such as expressions
     // Vector of <struct node*> node pointers
-    struct vector* node_vec;
-  
+    struct vector *node_vec;
+
     struct generator
     {
         struct states
@@ -116,11 +113,10 @@ struct compile_process
             // Should pop from this vector when an expression ends, push when an expression starts
             // I.e opening brackets starts a new expression (50+20)
             // See enum expression_state for more information
-            struct vector* expr;
+            struct vector *expr;
         } states;
     } generator;
 };
-
 
 enum
 {
@@ -137,7 +133,6 @@ enum
     TOKEN_TYPE_NUMBER,
     TOKEN_TYPE_STRING,
     TOKEN_TYPE_COMMENT,
-    TOKEN_TYPE_NEW_LINE,
 };
 
 struct token
@@ -147,23 +142,12 @@ struct token
     union
     {
         char cval;
-        const char* sval;
+        const char *sval;
         unsigned int inum;
         unsigned long lnum;
         unsigned long long llnum;
-    };    
+    };
 };
-
-enum
-{
-    NODE_TYPE_EXPRESSION,
-    NODE_TYPE_NUMBER,
-    NODE_TYPE_IDENTIFIER,
-    NODE_TYPE_VARIABLE,
-    NODE_TYPE_FUNCTION
-};
-
-
 
 enum
 {
@@ -180,7 +164,8 @@ enum
 enum
 {
     DATATYPE_FLAG_IS_SIGNED = 0b00000001,
-    DATATYPE_FLAG_IS_STATIC = 0b00000010
+    DATATYPE_FLAG_IS_STATIC = 0b00000010,
+    DATATYPE_FLAG_IS_CONST = 0b00000100
 };
 
 enum
@@ -201,7 +186,20 @@ struct datatype
     int type;
     // The string equivilant for this type. Does not include unsigned or signed keywords.
     // if the type is "unsigned int" here will be written only "int"
-    const char* type_str;
+    const char *type_str;
+
+    // The size in bytes of this datatype.
+    size_t size;
+};
+
+enum
+{
+    NODE_TYPE_EXPRESSION,
+    NODE_TYPE_NUMBER,
+    NODE_TYPE_IDENTIFIER,
+    NODE_TYPE_VARIABLE,
+    NODE_TYPE_FUNCTION,
+    NODE_TYPE_BODY
 };
 
 struct node
@@ -211,10 +209,10 @@ struct node
     {
         struct exp
         {
-            struct node* left;
-            struct node* right;
+            struct node *left;
+            struct node *right;
             // Operator for the expression
-            const char* op;
+            const char *op;
         } exp;
 
         struct function
@@ -222,25 +220,44 @@ struct node
             // The return type of this function.. I.e long, double, int
             struct datatype rtype;
 
+            // The name of the function
+            const char *name;
+
+            // a vector of "variable" nodes that represents the function arguments.
+            // I.e int abc(int a, int b) here we have two arguments in the vector a and b.
+            struct vector *argument_vector;
+
+            // The body of this function, everything between the { } brackets.
+            // This is NULL if this function is just a definition and its a pointer
+            // to the body node if this function is declared. and has a full body
+            struct node *body;
         } func;
+
+        struct body
+        {
+            // Body nodes have a vector of nodes that represent statements
+            // vector<struct node*>
+            struct vector *statements;
+        } body;
 
         struct variable
         {
             struct datatype type;
-            const char* name;
-            struct node* val;
+            const char *name;
+            struct node *val;
+
         } var;
     };
 
-    // Possible literal values for all nodes.
+    // Literal values for nodes of generic types. I.e numbers and identifiers
     union
     {
         char cval;
-        const char* sval;
+        const char *sval;
         unsigned int inum;
         unsigned long lnum;
         unsigned long long llnum;
-    };    
+    };
 };
 
 enum
@@ -249,21 +266,19 @@ enum
     COMPILER_FAILED_WITH_ERRORS,
 };
 
-
 /**
  * Called to issue a compiler error and terminate the compiler
  */
-void compiler_error(struct compile_process* compiler, const char *msg, ...);
+void compiler_error(struct compile_process *compiler, const char *msg, ...);
 /**
  * Compiles the file
  */
-int compile_file(const char* filename);
-
+int compile_file(const char *filename);
 
 /**
  * Lexical analysis
  */
-int lex(struct compile_process* process);
+int lex(struct compile_process *process);
 
 /**
  * Parses the tree provided from lexical analysis
@@ -273,9 +288,9 @@ int parse(struct compile_process *process);
 /**
  * Generates the assembly output for the given AST
  */
-int codegen(struct compile_process* process);
+int codegen(struct compile_process *process);
 
-bool keyword_is_datatype(const char* str);
+bool keyword_is_datatype(const char *str);
 
 /**
  * Compiler process
@@ -284,32 +299,29 @@ bool keyword_is_datatype(const char* str);
 /**
  * Creates a new compile process
  */
-struct compile_process* compile_process_create(const char* filename);
+struct compile_process *compile_process_create(const char *filename);
 
 /**
  * Returns the current file thats being processed
  */
-FILE* compile_process_file(struct compile_process* process);
+FILE *compile_process_file(struct compile_process *process);
 
 /**
  * Gets the next character from the current file
  */
-char compile_process_next_char(struct compile_process* process);
+char compile_process_next_char(struct compile_process *process);
 
 /**
  * Peeks in the stream for the next char from the current file.
  * Does not impact the file pointer.
  */
-char compile_process_peek_char(struct compile_process* process);
-
+char compile_process_peek_char(struct compile_process *process);
 
 /**
  * Unsets the given character pushing it back into the end of the input stream.
  * The next time compile_process_next_char or compile_process_peek_char is called
  * the given character provided here will be given
  */
-void compile_process_push_char(struct compile_process* process, char c);
-
-
+void compile_process_push_char(struct compile_process *process, char c);
 
 #endif

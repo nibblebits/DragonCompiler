@@ -68,6 +68,12 @@ bool is_keyword(const char* str)
 
 bool keyword_is_datatype(const char* str)
 {
+    return 
+           S_EQ(str, "char") ||
+           S_EQ(str, "int") ||
+           S_EQ(str, "float") ||
+           S_EQ(str, "double") ||
+           S_EQ(str, "long");
 
 }
 
@@ -172,10 +178,9 @@ static struct token *token_make_string()
     return token_create(&(struct token){TOKEN_TYPE_STRING, .sval = buffer_ptr(buf)});
 }
 
-static struct token *token_make_newline()
+static void *token_ignore_newline()
 {
     assert_next_char('\n');
-    return token_create(&(struct token){TOKEN_TYPE_NEW_LINE});
 }
 
 static const char *read_op()
@@ -396,11 +401,8 @@ static struct token *read_next_token()
         token = token_make_string();
         break;
 
+    // Spaces, new lines and tabs are ignored..
     case '\n':
-        token = token_make_newline();
-        break;
-
-    // Spaces and tabs are ignored..
     case ' ':
     case '\t':
         nextc();

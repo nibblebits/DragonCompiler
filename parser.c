@@ -135,7 +135,7 @@ void make_exp_node(struct node *node_left, struct node *node_right, const char *
 
 void make_function_node(struct datatype *ret_type, const char *name, struct vector *arguments, struct node *body)
 {
-    node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body = body});
+    node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body_node = body});
 }
 
 void make_body_node(struct vector* body_vec)

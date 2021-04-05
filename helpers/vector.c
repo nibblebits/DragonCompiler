@@ -58,6 +58,11 @@ void vector_set_peek_pointer(struct vector* vector, int index)
     vector->pindex = index;
 }
 
+void vector_set_peek_pointer_end(struct vector* vector)
+{
+    vector_set_peek_pointer(vector, vector->rindex-1);
+}
+
 void* vector_peek_no_increment(struct vector* vector)
 {
     if (!vector_in_bounds_for_at(vector, vector->pindex))
@@ -72,9 +77,30 @@ void* vector_peek_no_increment(struct vector* vector)
 void* vector_peek(struct vector* vector)
 {
     void* ptr = vector_peek_no_increment(vector);
-    vector->pindex++;
+    if (vector->flags & VECTOR_FLAG_PEEK_DECREMENT)
+        vector->pindex--;
+    else
+        vector->pindex++;
+        
     return ptr;
 }
+
+void vector_set_flag(struct vector* vector, int flag)
+{
+    vector->flags |= flag;
+}
+
+void* vector_peek_ptr(struct vector* vector)
+{
+    void** ptr = vector_peek(vector);
+    if (!ptr)
+    {
+        return NULL;
+    }
+
+    return *ptr;
+}
+
 
 void vector_push(struct vector* vector, void* elem)
 {

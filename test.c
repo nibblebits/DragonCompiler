@@ -1,5 +1,4 @@
-char c = 210+10;
-int hello()
+int main(int a, int b)
 {
-
+    a = b+20;
 }

@@ -8,6 +8,9 @@
 #include <stdbool.h>
 #include "helpers/vector.h"
 
+// 16 byte alignment for C programs.
+#define C_STACK_ALIGNMENT 16
+
 // Macro's make life cleaner..
 #define S_EQ(str, str2) \
     (strcmp(str, str2) == 0)
@@ -66,6 +69,13 @@ enum
     EXPRESSION_FLAG_RIGHT_NODE = 0b00000001,
 };
 
+enum
+{
+    REGISTER_EAX_IS_USED = 0b00000001,
+    REGISTER_EBX_IS_USED = 0b00000010,
+    REGISTER_ECX_IS_USED = 0b00000100,
+    REGISTER_EDX_IS_USED = 0b00001000,
+};
 /**
  * An expression state describes the state of an individual expression. 
  * These expression states are created when ever we enter a new expression i.e (50+20).
@@ -115,7 +125,18 @@ struct compile_process
             // See enum expression_state for more information
             struct vector *expr;
         } states;
+
+        // This is a bitmask of flags for registers that are in use
+        // if the bit is set the register is currently being used
+        // this helps the system control how to do things.
+        int used_registers;
     } generator;
+
+    struct
+    {
+        struct scope *root;
+        struct scope *current;
+    } scope;
 };
 
 enum
@@ -192,6 +213,19 @@ struct datatype
     size_t size;
 };
 
+/**
+ * Scopes are composed of a hireachy of variable nodes
+ */
+struct scope
+{
+    // These are a vector of scope entities the actual element pushed to the vector
+    // is creator defined, whoever decides to create a scope can push what they like
+    struct vector *entities;
+
+    // The parent scope NULL if we are at the root.
+    struct scope *parent;
+};
+
 enum
 {
     NODE_TYPE_EXPRESSION,
@@ -230,7 +264,7 @@ struct node
             // The body of this function, everything between the { } brackets.
             // This is NULL if this function is just a definition and its a pointer
             // to the body node if this function is declared. and has a full body
-            struct node *body;
+            struct node *body_node;
         } func;
 
         struct body
@@ -245,7 +279,20 @@ struct node
             struct datatype type;
             const char *name;
             struct node *val;
-
+            // If the variable is a constant value i.e it has the "DATATYPE_FLAG_IS_CONST" flag
+            // Then during code generation the "const_val" may be accessed to use a precomputed
+            // value of what it should be
+            struct const_val
+            {
+                union
+                {
+                    char cval;
+                    const char *sval;
+                    unsigned int inum;
+                    unsigned long lnum;
+                    unsigned long long llnum;
+                };
+            } const_val;
         } var;
     };
 
@@ -323,5 +370,24 @@ char compile_process_peek_char(struct compile_process *process);
  * the given character provided here will be given
  */
 void compile_process_push_char(struct compile_process *process, char c);
+
+struct scope *scope_create_root(struct compile_process *process);
+struct scope *scope_new(struct compile_process *process);
+void scope_finish(struct compile_process *process);
+/**
+ * Pushes an element to the current scope
+ */
+void scope_push(struct compile_process *process, void *ptr);
+
+/**
+ * Returns the last element from the given scope. If no element is in this scope
+ * then it will take from the nearest scope that an element has been pushed too.
+ * If still no variable was found NULL is returned.
+ */
+void *scope_last_entity(struct compile_process *process);
+
+void *scope_iterate_back(struct scope *scope);
+void scope_iteration_start(struct scope *scope);
+void scope_iteration_end(struct scope *scope);
 
 #endif

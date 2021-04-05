@@ -1,4 +1,4 @@
-int main(int a, int b)
+int main(int b, unsigned short a)
 {
-    a = b+20;
+    b = 50;
 }

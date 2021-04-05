@@ -243,6 +243,79 @@ struct codegen_scope_entity *codegen_get_variable_for_node(struct node *node)
     return entity;
 }
 
+/**
+ * Finds the correct sub register to use for the original register provided.
+ * 
+ * I.e if the size is one byte and you provide eax as the original register then al will be returned
+ * 
+ * \attention The original register must be a 32-bit wide general purpose register i.e eax, ecx, edx, or ebx
+ */
+const char *codegen_sub_register(const char *original_register, size_t size)
+{
+    const char *reg = NULL;
+    if (S_EQ(original_register, "eax"))
+    {
+        if (size == 1)
+        {
+            reg = "al";
+        }
+        else if (size == 2)
+        {
+            reg = "ax";
+        }
+        else if (size == 4)
+        {
+            reg = "eax";
+        }
+    }
+    else if (S_EQ(original_register, "ebx"))
+    {
+        if (size == 1)
+        {
+            reg = "bl";
+        }
+        else if (size == 2)
+        {
+            reg = "bx";
+        }
+        else if (size == 4)
+        {
+            reg = "ebx";
+        }
+    }
+    else if (S_EQ(original_register, "ecx"))
+    {
+        if (size == 1)
+        {
+            reg = "cl";
+        }
+        else if (size == 2)
+        {
+            reg = "cx";
+        }
+        else if (size == 4)
+        {
+            reg = "ecx";
+        }
+    }
+    else if (S_EQ(original_register, "edx"))
+    {
+        if (size == 1)
+        {
+            reg = "dl";
+        }
+        else if (size == 2)
+        {
+            reg = "dx";
+        }
+        else if (size == 4)
+        {
+            reg = "edx";
+        }
+    }
+    return reg;
+}
+
 void codegen_generate_assignment_expression(struct node *node)
 {
     codegen_new_expression_state();
@@ -255,11 +328,11 @@ void codegen_generate_assignment_expression(struct node *node)
 
     if (assignment_operand->stack_offset < 0)
     {
-        asm_push("mov [ebp%i], eax", assignment_operand->stack_offset);
+        asm_push("mov [ebp%i], %s", assignment_operand->stack_offset, codegen_sub_register("eax", assignment_operand->node->var.type.size));
     }
     else
     {
-        asm_push("mov [ebp%i], eax", assignment_operand->stack_offset);
+        asm_push("mov [ebp%i], %s", assignment_operand->stack_offset, codegen_sub_register("eax", assignment_operand->node->var.type.size));
     }
     codegen_end_expression_state();
 }
@@ -329,13 +402,13 @@ void codegen_release_register(const char *reg)
     }
 }
 
-void codegen_scope_entity_to_asm_address(struct codegen_scope_entity* entity, char* out)
+void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, char *out)
 {
-    
+
     if (entity->flags & CODEGEN_SCOPE_FLAG_VARIABLE_IS_GLOBAL)
     {
         // global variables not supported yet;
-        assert(1==0);
+        assert(1 == 0);
         return;
     }
 
@@ -344,9 +417,8 @@ void codegen_scope_entity_to_asm_address(struct codegen_scope_entity* entity, ch
         sprintf(out, "ebp%i", entity->stack_offset);
         return;
     }
-    
-    sprintf(out, "ebp+%i", entity->stack_offset);
 
+    sprintf(out, "ebp+%i", entity->stack_offset);
 }
 void codegen_generate_address_of_variable(struct node *node, const char **reg_out)
 {
@@ -369,8 +441,7 @@ void codegen_generate_address_of_variable(struct node *node, const char **reg_ou
     *reg_out = reg;
 }
 
-
-void codegen_generate_identifier(struct node* node)
+void codegen_generate_identifier(struct node *node)
 {
     struct codegen_scope_entity *assignment_operand = codegen_get_variable_for_node(node);
     assert(assignment_operand);

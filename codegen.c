@@ -190,7 +190,6 @@ void codegen_generate_expressionable(struct node *node);
 void codegen_generate_new_expressionable(struct node *node)
 {
     codegen_generate_expressionable(node);
-    register_unset_flag(REGISTER_EAX_IS_USED);
 }
 const char *op;
 
@@ -206,6 +205,7 @@ void codegen_generate_number_node(struct node *node)
         return;
     }
 
+    // If EAX is used then we should add to it, as we are forming an expression.
     asm_push("add eax, %lld", node->llnum);
 }
 /**
@@ -335,6 +335,9 @@ void codegen_generate_assignment_expression(struct node *node)
         asm_push("mov [ebp%i], %s", assignment_operand->stack_offset, codegen_sub_register("eax", assignment_operand->node->var.type.size));
     }
     codegen_end_expression_state();
+
+    // We are done with EAX we have stored the result.
+    register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
 void codegen_generate_exp_node(struct node *node)
@@ -571,7 +574,7 @@ void codegen_generate_statement(struct node *node)
     switch (node->type)
     {
     case NODE_TYPE_EXPRESSION:
-        codegen_generate_new_expressionable(node);
+        codegen_generate_exp_node(node);
         break;
 
     case NODE_TYPE_VARIABLE:
@@ -639,7 +642,7 @@ void codegen_generate_function(struct node *node)
     codegen_stack_sub(stack_size);
     codegen_generate_scope_no_new_scope(node->func.argument_vector);
     // Generate the function body
-    codegen_generate_scope(node->func.body_node->body.statements);
+    codegen_generate_function_body(node->func.body_node);
     codegen_stack_add(stack_size);
     // End scope for function arguments
     codegen_scope_finish();

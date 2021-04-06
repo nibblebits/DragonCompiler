@@ -23,11 +23,13 @@ static void vector_assert_bounds_for_pop(struct vector* vector, int index)
 
 struct vector* vector_create(size_t esize)
 {
-    struct vector* vector = malloc(sizeof(struct vector));
+    struct vector* vector = calloc(sizeof(struct vector), 1);
     vector->data = malloc(esize * VECTOR_ELEMENT_INCREMENT);
     vector->mindex = VECTOR_ELEMENT_INCREMENT;
     vector->rindex = 0;
+    vector->pindex = 0;
     vector->esize = esize;
+    vector->count = 0;
 }
 
 void vector_free(struct vector* vector)
@@ -81,7 +83,7 @@ void* vector_peek(struct vector* vector)
         vector->pindex--;
     else
         vector->pindex++;
-        
+
     return ptr;
 }
 

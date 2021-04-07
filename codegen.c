@@ -198,15 +198,9 @@ const char *op;
  */
 void codegen_generate_number_node(struct node *node)
 {
-    if (!register_is_used("eax"))
-    {
-        register_set_flag(REGISTER_EAX_IS_USED);
-        asm_push("mov eax, %i", node->llnum);
-        return;
-    }
-
-    // If EAX is used then we should add to it, as we are forming an expression.
-    asm_push("add eax, %lld", node->llnum);
+    assert(!register_is_used("eax"));
+    register_set_flag(REGISTER_EAX_IS_USED);
+    asm_push("mov eax, %i", node->llnum);
 }
 /**
  * Hopefully we can find a better way of doing this.
@@ -230,15 +224,21 @@ static bool is_node_assignment(struct node *node)
  * Iterates through the node until a codegen_scope_entity can be found, otherwise returns NULL.
  * This function does not work for structure pointers as its impossible to complete this action
  * at compile time. If the node ends up at any point pointing to a structure pointer, then this function
- * will return the closest entity it can that can be done at compile time
+ * will return the closest entity it can that can be done at compile time and the position_known_at_compile_time will be set to false signifying some runtime code will be required to complete
+ * positioning.
+ * 
+ * \param position_known_at_compile_time The pointer here is set to true by this function if the exact location of the variable is known. Otherwise its false. 
  */
-struct codegen_scope_entity *codegen_get_variable_for_node(struct node *node)
+struct codegen_scope_entity *codegen_get_variable_for_node(struct node *node, bool *position_known_at_compile_time)
 {
+    *position_known_at_compile_time = false;
     // Structures and arrays are not supported yet
     if (node->type != NODE_TYPE_IDENTIFIER)
     {
         return NULL;
     }
+
+    *position_known_at_compile_time = true;
     struct codegen_scope_entity *entity = codegen_get_variable(node->sval);
     return entity;
 }
@@ -319,11 +319,13 @@ const char *codegen_sub_register(const char *original_register, size_t size)
 void codegen_generate_assignment_expression(struct node *node)
 {
     codegen_new_expression_state();
+
     // Process the right node first as this is an expression
     codegen_generate_expressionable(node->exp.right);
 
     // Now lets find the stack offset
-    struct codegen_scope_entity *assignment_operand = codegen_get_variable_for_node(node->exp.left);
+    bool position_known = false;
+    struct codegen_scope_entity *assignment_operand = codegen_get_variable_for_node(node->exp.left, &position_known);
     assert(assignment_operand);
 
     if (assignment_operand->stack_offset < 0)
@@ -335,9 +337,6 @@ void codegen_generate_assignment_expression(struct node *node)
         asm_push("mov [ebp%i], %s", assignment_operand->stack_offset, codegen_sub_register("eax", assignment_operand->node->var.type.size));
     }
     codegen_end_expression_state();
-
-    // We are done with EAX we have stored the result.
-    register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
 void codegen_generate_exp_node(struct node *node)
@@ -348,18 +347,37 @@ void codegen_generate_exp_node(struct node *node)
         return;
     }
 
-    codegen_new_expression_state();
     codegen_generate_expressionable(node->exp.left);
+    asm_push("push eax");
+    // EAX has been saved, and its free to be used again
+    register_unset_flag(REGISTER_EAX_IS_USED);
     codegen_generate_expressionable(node->exp.right);
+    asm_push("pop ecx");
+    // We are done with EAX we have stored the result.
+    register_unset_flag(REGISTER_EAX_IS_USED);
 
-    if (is_node_mul_or_div(node))
+    // We have the left node in ECX and the right node in EAX, we should flip them 
+    // so they are in the original order
+    asm_push("xchg ecx, eax");
+
+    // We now have left expression result in eax, and right expression result in ecx
+    // Let's now deal with it
+    if (S_EQ(node->exp.op, "*"))
     {
-        if (S_EQ(node->exp.op, "*"))
-            asm_push("mul ecx");
-        else if (S_EQ(node->exp.op, "/"))
-            asm_push("div ecx");
+        asm_push("mul ecx");
     }
-    codegen_end_expression_state();
+    else if (S_EQ(node->exp.op, "/"))
+    {
+        asm_push("div ecx");
+    }
+    else if(S_EQ(node->exp.op, "+"))
+    {
+        asm_push("add eax, ecx");
+    }
+    else if(S_EQ(node->exp.op, "-"))
+    {
+        asm_push("sub eax, ecx");
+    }
 }
 
 /**
@@ -446,19 +464,15 @@ void codegen_generate_address_of_variable(struct node *node, const char **reg_ou
 
 void codegen_generate_identifier(struct node *node)
 {
-    struct codegen_scope_entity *assignment_operand = codegen_get_variable_for_node(node);
+    bool position_known = false;
+    struct codegen_scope_entity *assignment_operand = codegen_get_variable_for_node(node, &position_known);
     assert(assignment_operand);
+    assert(!register_is_used("eax"));
 
-    if (!register_is_used("eax"))
-    {
-        register_set_flag(REGISTER_EAX_IS_USED);
-        char tmp[256];
-        codegen_scope_entity_to_asm_address(assignment_operand, tmp);
-        asm_push("mov eax, [%s]", tmp);
-        return;
-    }
-
-    asm_push("add eax, %lld", node->llnum);
+    register_set_flag(REGISTER_EAX_IS_USED);
+    char tmp[256];
+    codegen_scope_entity_to_asm_address(assignment_operand, tmp);
+    asm_push("mov eax, [%s]", tmp);
 }
 void codegen_generate_expressionable(struct node *node)
 {

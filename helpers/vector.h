@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 // We want at least 20 vector element spaces in reserve before having
 // to reallocate memory again
@@ -45,5 +46,8 @@ void vector_set_peek_pointer_end(struct vector* vector);
 void vector_push(struct vector* vector, void* elem);
 void vector_pop(struct vector* vector);
 void* vector_back(struct vector* vector);
+void* vector_back_ptr(struct vector* vector);
+bool vector_empty(struct vector* vector);
+
 int vector_count(struct vector* vector);
 #endif

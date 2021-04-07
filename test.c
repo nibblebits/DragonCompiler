@@ -1,4 +1,6 @@
-int main(unsigned short b, unsigned short a, unsigned short c)
+int main()
 {
-    b = 90*50+20;
+    int b;
+    
+    b= 90*50+20;
 }

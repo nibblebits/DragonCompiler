@@ -103,6 +103,16 @@ void* vector_peek_ptr(struct vector* vector)
     return *ptr;
 }
 
+void* vector_back_ptr(struct vector* vector)
+{
+    void** ptr = vector_back(vector);
+    if (!ptr)
+    {
+        return NULL;
+    }
+
+    return *ptr;
+}
 
 void vector_push(struct vector* vector, void* elem)
 {
@@ -121,6 +131,7 @@ void vector_push(struct vector* vector, void* elem)
 
 void vector_pop(struct vector* vector)
 {
+
     // Popping from the vector will just decrement the index, no need to free memory
     // the next push will overwrite it.
     vector->rindex -=1;
@@ -129,9 +140,14 @@ void vector_pop(struct vector* vector)
     vector_assert_bounds_for_pop(vector, vector->rindex);
 }
 
+bool vector_empty(struct vector* vector)
+{
+    return vector_count(vector) == 0;
+}
+
 void* vector_back(struct vector* vector)
 {
-    vector_assert_bounds_for_pop(vector, vector->rindex);
+    vector_assert_bounds_for_pop(vector, vector->rindex-1);
 
     return vector_at(vector, vector->rindex-1);
 }

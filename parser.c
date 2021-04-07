@@ -68,8 +68,8 @@ static struct node *node_peek()
  */
 static struct node *node_pop()
 {
-    struct node *last_node = *((struct node **)(vector_back(current_process->node_vec)));
-    struct node *last_node_root = *((struct node **)(vector_back(current_process->node_tree_vec)));
+    struct node *last_node = vector_back_ptr(current_process->node_vec);
+    struct node *last_node_root = vector_empty(current_process->node_tree_vec) ? NULL : vector_back_ptr(current_process->node_tree_vec);
 
     vector_pop(current_process->node_vec);
 
@@ -80,6 +80,15 @@ static struct node *node_pop()
     }
 
     return last_node;
+}
+
+/**
+ * Peeks at the node on the node_tree_vec, root of the tree basically.
+ * returns the next node the peek pointer is at then moves to the next node
+ */
+static struct node* node_next()
+{
+    return vector_peek_ptr(current_process->node_tree_vec);
 }
 
 static void node_push(struct node *node)
@@ -138,9 +147,9 @@ void make_function_node(struct datatype *ret_type, const char *name, struct vect
     node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body_node = body});
 }
 
-void make_body_node(struct vector* body_vec)
+void make_body_node(struct vector *body_vec)
 {
-    node_create(&(struct node){NODE_TYPE_BODY, .body.statements=body_vec});
+    node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec});
 }
 
 void make_variable_node(struct datatype *datatype, struct token *name_token, struct node *value_node)
@@ -541,6 +550,99 @@ int parse_next()
     return res;
 }
 
+bool parser_should_allowed_for_search(int type, int node_type, bool ignore_childtypes_for_type)
+{
+    return type != node_type || !ignore_childtypes_for_type;
+}
+
+void parser_get_all_nodes_of_type_single(struct vector *vector, struct node *node, int type, bool ignore_childtypes_for_type);
+
+void parser_get_all_nodes_of_type_for_vector(struct vector* vector_out, struct vector* vector_in, int type, bool ignore_childtypes_for_type)
+{
+    vector_set_peek_pointer(vector_in, 0);
+    struct node *node = vector_peek_ptr(vector_in);
+    while (node)
+    {
+        parser_get_all_nodes_of_type_single(vector_out, node, type, ignore_childtypes_for_type);
+        node = vector_peek_ptr(vector_in);
+    }
+}
+
+void parser_get_all_nodes_of_type_for_function(struct vector* vector, struct node* node, int type, bool ignore_childtypes_for_type)
+{
+    struct vector* func_args = node->func.argument_vector;
+    parser_get_all_nodes_of_type_for_vector(vector, node->func.argument_vector, type, ignore_childtypes_for_type);
+    parser_get_all_nodes_of_type_for_vector(vector, node->func.body_node->body.statements, type, ignore_childtypes_for_type);
+}
+
+void parser_get_all_nodes_of_type_single(struct vector *vector, struct node *node, int type, bool ignore_childtypes_for_type)
+{
+    if (!node)
+    {
+        // Node is NULL then what can we do, leave
+        return;
+    }
+    
+    if (node->type == type)
+    {
+        vector_push(vector, &node);
+        if (!parser_should_allowed_for_search(type, node->type, ignore_childtypes_for_type))
+        {
+            // We are not allowed to search further, ignore this
+            return;
+        }
+    }
+
+    switch (node->type)
+    {
+    case NODE_TYPE_EXPRESSION:
+        parser_get_all_nodes_of_type_single(vector, node->exp.left, type, ignore_childtypes_for_type);
+        parser_get_all_nodes_of_type_single(vector, node->exp.right, type, ignore_childtypes_for_type);
+        break;
+
+    case NODE_TYPE_VARIABLE:
+        parser_get_all_nodes_of_type_single(vector, node->var.val, type, ignore_childtypes_for_type);
+        break;
+
+    case NODE_TYPE_FUNCTION:
+        parser_get_all_nodes_of_type_for_function(vector, node, type, ignore_childtypes_for_type);
+        break;
+    }
+}
+
+/**
+ * Returns all the nodes parsed in the parser that are of a given type.
+ * iterates through all the child nodes not just the root of the tree.
+ * 
+ * If you ask for nodes of variable types every variable node will be returned in the
+ * entire parse process
+ * 
+ * \param ignore_childtypes_for_type If this is true then when a given node type is found it will not look for children in that node.
+ */
+struct vector *parser_get_all_nodes_of_type(struct compile_process *process, int type, bool ignore_childtypes_for_type)
+{
+    struct vector *vector = vector_create(sizeof(struct node *));
+    vector_set_peek_pointer(process->node_tree_vec, 0);
+    struct node *node = NULL;
+    while ((node = node_next()) != NULL)
+    {
+        parser_get_all_nodes_of_type_single(vector, node, type, ignore_childtypes_for_type);
+    }
+
+    return vector;
+}
+
+void parser_reorder_expressions(struct compile_process *process)
+{
+    struct vector *exp_nodes = parser_get_all_nodes_of_type(process, NODE_TYPE_EXPRESSION, true);
+    struct node* node = NULL;
+    while(!vector_empty(exp_nodes))
+    {
+        node = vector_back_ptr(exp_nodes);
+        vector_pop(exp_nodes);
+    }
+    vector_free(exp_nodes);
+}
 int parse(struct compile_process *process)
 {
     current_process = process;
@@ -557,5 +659,7 @@ int parse(struct compile_process *process)
         node_push(node);
     }
 
+    // Now that we have all we need lets loop through the nodes and we will reavaluate the expressions
+    parser_reorder_expressions(process);
     return PARSE_ALL_OK;
 }

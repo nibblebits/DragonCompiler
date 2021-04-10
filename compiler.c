@@ -12,6 +12,15 @@ void compiler_error(struct compile_process *compiler, const char *msg, ...)
     exit(-1);
 }
 
+void test(struct node* node);
+void test_vec(struct vector* vec)
+{
+    for (int i = 0; i < vector_count(vec); i++)
+    {
+        struct node* node = *((struct node **)(vector_at(vec, i)));
+        test(node);
+    }
+}
 void test(struct node* node)
 {
     if (node->type == NODE_TYPE_NUMBER)
@@ -20,11 +29,18 @@ void test(struct node* node)
     }
     else if (node->type == NODE_TYPE_EXPRESSION)
     {
+        printf("(");
         test(node->exp.left);
         printf("%s", node->exp.op);
         test(node->exp.right);
-
+        printf(")");
     }
+    else if(node->type == NODE_TYPE_FUNCTION)
+    {
+        test_vec(node->func.argument_vector);
+        test_vec(node->func.body_node->body.statements);
+    }
+    
 }
 int compile_file(const char *filename)
 {
@@ -38,10 +54,10 @@ int compile_file(const char *filename)
     if (parse(process) != PARSE_ALL_OK)
         return COMPILER_FAILED_WITH_ERRORS;
 
-    for (int i = 0; i < vector_count(process->node_vec); i++)
+    for (int i = 0; i < vector_count(process->node_tree_vec); i++)
     {
         struct node *ptr;
-        ptr = *((struct node **)(vector_at(process->node_vec, i)));
+        ptr = *((struct node **)(vector_at(process->node_tree_vec, i)));
         test(ptr);
     }
     printf("\n");

@@ -115,7 +115,7 @@ void* vector_back_ptr(struct vector* vector)
 }
 
 void vector_push(struct vector* vector, void* elem)
-{
+{   
     if (vector->rindex >= vector->mindex)
     {
         vector_resize(vector);

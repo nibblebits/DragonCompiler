@@ -13,14 +13,33 @@
 // This array is special, its essentially a group of arrays
 // Format goes as follow
 
-#define MAX_OPERATORS_IN_GROUP 5
+#define TOTAL_OPERATOR_GROUPS 13
+#define MAX_OPERATORS_IN_GROUP 12
 /**
  * Format: 
  * {operator1, operator2, operator3, NULL}
  * 
  * end each group with NULL.
+ * 
+ * Also end the collection of groups with a NULL pointer
  */
-static  char *op_precedence[][MAX_OPERATORS_IN_GROUP] = {{"*", "/"}, {"+", "-"}};
+
+
+static  char *op_precedence[TOTAL_OPERATOR_GROUPS][MAX_OPERATORS_IN_GROUP] = {
+    {"++", "--", "()", "[]", ".", "->", NULL},
+    {"*", "/", "%%", NULL},
+    {"+", "-", NULL},
+    {"<<", ">>", NULL},
+    {"<","<=", ">", ">=", NULL},
+    {"==", "!=", NULL},
+    {"&", NULL},
+    {"^", NULL},
+    {"|", NULL},
+    {"&&", NULL},
+    {"||", NULL},
+    {"?", ":", NULL},
+    {"=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|=", NULL}
+    };
 
 static struct compile_process *current_process;
 int parse_next();
@@ -31,8 +50,7 @@ void parse_statement();
 
 static int parser_get_precedence_for_operator(const char *op)
 {
-    int total_operators_groups = sizeof(op_precedence) / sizeof(const char **);
-    for (int i = 0; i < total_operators_groups; i++)
+    for (int i = 0; i < TOTAL_OPERATOR_GROUPS; i++)
     {
         for (int b = 0; op_precedence[i][b]; b++)
         {

@@ -18,17 +18,17 @@
  * char c = peekc();
  * LEX_GETC_IF(buffer, c, c >= '0' && c <= '9');
  */
-#define LEX_GETC_IF(buffer, c, EXP) \
+#define LEX_GETC_IF(buffer, c, EXP)     \
     for (c = peekc(); EXP; c = peekc()) \
-    {                                          \
-        buffer_write(buffer, c);            \
-        nextc();                             \
-    }\
-    
+    {                                   \
+        buffer_write(buffer, c);        \
+        nextc();                        \
+    }
+
 static struct token tmp_token;
 static struct compile_process *current_process;
 
-void error(const char* fmt, ...)
+void error(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -51,10 +51,9 @@ static void pushc(char c)
     return compile_process_push_char(current_process, c);
 }
 
-bool is_keyword(const char* str)
+bool is_keyword(const char *str)
 {
-    return 
-           S_EQ(str, "unsigned") ||
+    return S_EQ(str, "unsigned") ||
            S_EQ(str, "signed") ||
            S_EQ(str, "char") ||
            S_EQ(str, "int") ||
@@ -62,19 +61,17 @@ bool is_keyword(const char* str)
            S_EQ(str, "long") ||
            S_EQ(str, "void") ||
            S_EQ(str, "struct") ||
-           S_EQ(str, "union") || 
+           S_EQ(str, "union") ||
            S_EQ(str, "static");
 }
 
-bool keyword_is_datatype(const char* str)
+bool keyword_is_datatype(const char *str)
 {
-    return 
-           S_EQ(str, "char") ||
+    return S_EQ(str, "char") ||
            S_EQ(str, "int") ||
            S_EQ(str, "float") ||
            S_EQ(str, "double") ||
            S_EQ(str, "long");
-
 }
 
 static bool is_single_operator(char op)
@@ -91,18 +88,23 @@ static bool is_single_operator(char op)
            op == '^' ||
            op == '%' ||
            op == '~' ||
-           op == '!';
+           op == '!' ||
+           op == '(';
 }
 
-static bool op_valid(const char* op)
+static bool op_treated_as_one(char op)
 {
-    return 
-           S_EQ(op, "+") ||
+    return op == '(';
+}
+
+static bool op_valid(const char *op)
+{
+    return S_EQ(op, "+") ||
            S_EQ(op, "-") ||
            S_EQ(op, "*") ||
            S_EQ(op, "/") ||
            S_EQ(op, "!") ||
-           S_EQ(op , "^") ||
+           S_EQ(op, "^") ||
            S_EQ(op, "+=") ||
            S_EQ(op, "-=") ||
            S_EQ(op, "*=") ||
@@ -118,15 +120,16 @@ static bool op_valid(const char* op)
            S_EQ(op, "|") ||
            S_EQ(op, "&") ||
            S_EQ(op, "++") ||
-           S_EQ(op, "--")||
+           S_EQ(op, "--") ||
            S_EQ(op, "=") ||
            S_EQ(op, "/=") ||
            S_EQ(op, "*=") ||
-           S_EQ(op, "^=") || 
-           S_EQ(op, "==") || 
+           S_EQ(op, "^=") ||
+           S_EQ(op, "==") ||
            S_EQ(op, "!=") ||
            S_EQ(op, "->") ||
-           S_EQ(op, "**");
+           S_EQ(op, "**") ||
+           S_EQ(op, "(");
 }
 
 static struct compile_process *compiler_process()
@@ -188,13 +191,17 @@ static const char *read_op()
     char op = nextc();
     struct buffer *buffer = buffer_create();
     buffer_write(buffer, op);
-    op = peekc();
-    if (is_single_operator(op))
-    {
-        buffer_write(buffer, op);
-        nextc();
-    }
 
+    if (!op_treated_as_one(op))
+    {
+        op = peekc();
+        if (is_single_operator(op))
+        {
+            buffer_write(buffer, op);
+            nextc();
+        }
+    }
+    
     // Null terminator.
     buffer_write(buffer, 0x00);
 
@@ -206,20 +213,20 @@ static const char *read_op()
     return buf_ptr;
 }
 
-static struct token *token_make_operator_for_value(const char* val)
+static struct token *token_make_operator_for_value(const char *val)
 {
-    return token_create(&(struct token){TOKEN_TYPE_OPERATOR, .sval=val});
+    return token_create(&(struct token){TOKEN_TYPE_OPERATOR, .sval = val});
 }
 
 static struct token *token_make_operator()
 {
-    return token_create(&(struct token){TOKEN_TYPE_OPERATOR, .sval=read_op()});
+    return token_create(&(struct token){TOKEN_TYPE_OPERATOR, .sval = read_op()});
 }
 
-const char* read_number_str()
+const char *read_number_str()
 {
-    const char* num = NULL;
-    struct buffer* buffer = buffer_create();
+    const char *num = NULL;
+    struct buffer *buffer = buffer_create();
     char c = peekc();
     LEX_GETC_IF(buffer, c, c >= '0' && c <= '9');
 
@@ -231,18 +238,18 @@ const char* read_number_str()
 
 unsigned long long read_number()
 {
-    const char* s = read_number_str();
+    const char *s = read_number_str();
     return atoll(s);
 }
 
-static struct token* token_make_number()
+static struct token *token_make_number()
 {
-    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .llnum=read_number()});
+    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .llnum = read_number()});
 }
 
-static struct token* token_make_identifier_or_keyword()
+static struct token *token_make_identifier_or_keyword()
 {
-    struct buffer* buffer = buffer_create();
+    struct buffer *buffer = buffer_create();
     char c = peekc();
     LEX_GETC_IF(buffer, c, (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_');
     // Null terminator.
@@ -250,18 +257,18 @@ static struct token* token_make_identifier_or_keyword()
 
     if (is_keyword(buffer_ptr(buffer)))
     {
-        return token_create(&(struct token){TOKEN_TYPE_KEYWORD, .sval=buffer_ptr(buffer)});
+        return token_create(&(struct token){TOKEN_TYPE_KEYWORD, .sval = buffer_ptr(buffer)});
     }
-    
-    return token_create(&(struct token){TOKEN_TYPE_IDENTIFIER, .sval=buffer_ptr(buffer)});
+
+    return token_create(&(struct token){TOKEN_TYPE_IDENTIFIER, .sval = buffer_ptr(buffer)});
 }
 
-static struct token* token_make_symbol()
+static struct token *token_make_symbol()
 {
     char c = nextc();
-    return token_create(&(struct token){TOKEN_TYPE_SYMBOL, .cval=c});
+    return token_create(&(struct token){TOKEN_TYPE_SYMBOL, .cval = c});
 }
-static struct token* read_token_special()
+static struct token *read_token_special()
 {
     char c = peekc();
     if (isalpha(c) || c == '_')
@@ -270,34 +277,32 @@ static struct token* read_token_special()
     }
 
     return NULL;
-
 }
 
 /**
  * This function expects for the input stream to be already on the comment line
  * For example: Hello world. Rather than //Hello world.
  */
-static struct token* token_make_one_line_comment()
+static struct token *token_make_one_line_comment()
 {
     // We must read the whole comment, we know when we are done as we will
     // have a new line terminator
 
-    struct buffer* buffer = buffer_create();
+    struct buffer *buffer = buffer_create();
     char c = 0;
-    LEX_GETC_IF(buffer, c,  c != '\n' && c != EOF);
-    return token_create(&(struct token){TOKEN_TYPE_COMMENT, .sval=buffer_ptr(buffer)});
+    LEX_GETC_IF(buffer, c, c != '\n' && c != EOF);
+    return token_create(&(struct token){TOKEN_TYPE_COMMENT, .sval = buffer_ptr(buffer)});
 }
-
 
 /**
  * Note: this function expects the file pointer to be pointing at the comment body.
  * For example we expect the input stream to be: "Hello world" rather than "/*hello world"
  */
-static struct token* token_make_multiline_comment()
+static struct token *token_make_multiline_comment()
 {
-    struct buffer* buffer = buffer_create();
+    struct buffer *buffer = buffer_create();
     char c = 0;
-    while(1)
+    while (1)
     {
         LEX_GETC_IF(buffer, c, c != '*' && c != EOF);
         if (c == EOF)
@@ -322,9 +327,9 @@ static struct token* token_make_multiline_comment()
         }
     }
 
-    return token_create(&(struct token){TOKEN_TYPE_COMMENT, .sval=buffer_ptr(buffer)});
+    return token_create(&(struct token){TOKEN_TYPE_COMMENT, .sval = buffer_ptr(buffer)});
 }
-static struct token* handle_comment()
+static struct token *handle_comment()
 {
     char c = peekc();
     if (c == '/')
@@ -336,7 +341,7 @@ static struct token* handle_comment()
             // This is a comment token.
             return token_make_one_line_comment();
         }
-        else if(peekc() == '*')
+        else if (peekc() == '*')
         {
             nextc();
             return token_make_multiline_comment();
@@ -353,7 +358,7 @@ static struct token* handle_comment()
     return NULL;
 }
 
-static struct token* token_make_quote()
+static struct token *token_make_quote()
 {
     assert_next_char('\'');
     char c = nextc();
@@ -365,7 +370,7 @@ static struct token* token_make_quote()
     }
 
     // Characters are basically just small numbers. Treat it as such.
-    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .cval=c});
+    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .cval = c});
 }
 
 static struct token *read_next_token()
@@ -396,7 +401,7 @@ static struct token *read_next_token()
 
     case '\'':
         token = token_make_quote();
-    break;
+        break;
     case '"':
         token = token_make_string();
         break;
@@ -408,7 +413,7 @@ static struct token *read_next_token()
         nextc();
         token = read_next_token();
         break;
-    
+
     case EOF:
         // aha we are done!
         break;

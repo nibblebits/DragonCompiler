@@ -15,6 +15,10 @@
 #define S_EQ(str, str2) \
     (strcmp(str, str2) == 0)
 
+
+/**
+ * Note: we do not include ")" as an operator only "(". ")" is classed as a symbol.
+ */
 #define OPERATOR_CASE_EXCLUDING_DIVISON \
     case '+':                           \
     case '-':                           \
@@ -27,7 +31,10 @@
     case '=':                           \
     case '~':                           \
     case '|':                           \
-    case '&'
+    case '&':                           \
+    case '(':                           \
+    case '[':                           \
+    case ']'
 
 #define NUMERIC_CASE \
     case '0':        \
@@ -41,19 +48,23 @@
     case '8':        \
     case '9'
 
+
+/**
+ * Cases for symbols, currently we don't treat ")" as an operator because
+ * it is used to end an expression. "(" is used as an operator however but its special
+ * the resulting operator will become "()" when parsing an expression, however
+ * this change is done during parsing not lexing.
+ */
 #define SYMBOL_CASE \
     case '{':       \
     case '}':       \
     case '.':       \
     case ':':       \
     case ';':       \
-    case '(':       \
-    case ')':       \
-    case '[':       \
-    case ']':       \
     case ',':       \
     case '#':       \
-    case '\\'
+    case '\\':      \
+    case ')'        
 
 struct pos
 {
@@ -114,6 +125,10 @@ struct compile_process
     // Vector of <struct node*> node pointers
     struct vector *node_vec;
 
+    // The symbol table that holds things like function names, global variables
+    // data can point to the node in question, along with other relevant information
+    struct vector* symbol_tbl;
+
     struct generator
     {
         struct states
@@ -168,6 +183,20 @@ struct token
         unsigned long lnum;
         unsigned long long llnum;
     };
+};
+
+
+enum
+{
+    SYMBOL_TYPE_NODE,
+    SYMBOL_TYPE_UNKNOWN
+};
+
+struct symbol
+{
+    const char* name;
+    int type;
+    void* data;
 };
 
 enum
@@ -333,9 +362,16 @@ int lex(struct compile_process *process);
 int parse(struct compile_process *process);
 
 /**
+ * Builds the in memory symbol table for the given tree
+ */
+int symresolver_build(struct compile_process* process);
+
+/**
  * Generates the assembly output for the given AST
  */
 int codegen(struct compile_process *process);
+
+
 
 bool keyword_is_datatype(const char *str);
 
@@ -390,4 +426,12 @@ void *scope_iterate_back(struct scope *scope);
 void scope_iteration_start(struct scope *scope);
 void scope_iteration_end(struct scope *scope);
 
+/**
+ * Registers a symbol to the symbol table
+ */
+struct symbol* symresolver_register_symbol(struct compile_process* process, const char* sym_name, int type, void* data);
+/**
+ * Gets the registered symbol from the symbol table for the given name
+ */
+struct symbol* symresolver_get_symbol(struct compile_process* process, const char* name);
 #endif

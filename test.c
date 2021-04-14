@@ -1,4 +1,5 @@
-int main(int a)
+int a = 50;
+int main(int argc)
 {
-    a = 50*20;
+    a = 50;
 }

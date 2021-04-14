@@ -27,13 +27,19 @@ void test(struct node* node)
     {
         printf("%i", node->inum);
     }
+    else if(node->type == NODE_TYPE_IDENTIFIER)
+    {
+        printf("%s", node->sval);
+    }
     else if (node->type == NODE_TYPE_EXPRESSION)
     {
-        printf("(");
+        printf("%c", '[');
         test(node->exp.left);
         printf("%s", node->exp.op);
-        test(node->exp.right);
-        printf(")");
+        if (node->exp.right)
+            test(node->exp.right);
+        printf("%c", ']');
+
     }
     else if(node->type == NODE_TYPE_FUNCTION)
     {
@@ -52,6 +58,9 @@ int compile_file(const char *filename)
         return COMPILER_FAILED_WITH_ERRORS;
 
     if (parse(process) != PARSE_ALL_OK)
+        return COMPILER_FAILED_WITH_ERRORS;
+
+    if (symresolver_build(process) != PARSE_ALL_OK)
         return COMPILER_FAILED_WITH_ERRORS;
 
     for (int i = 0; i < vector_count(process->node_tree_vec); i++)

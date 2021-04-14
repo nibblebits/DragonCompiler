@@ -4,12 +4,6 @@
 #include <stdbool.h>
 #include <assert.h>
 
-enum
-{
-    // This flag is set if this is a global variable.
-    CODEGEN_SCOPE_FLAG_VARIABLE_IS_GLOBAL = 0b00000001
-};
-
 static struct compile_process *current_process;
 
 #define codegen_err(...) \
@@ -27,6 +21,10 @@ static struct compile_process *current_process;
 #define codegen_scope_last_entity() \
     scope_last_entity(current_process)
 
+
+
+struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *node, bool *position_known_at_compile_time);
+
 struct codegen_scope_entity
 {
     // The flags for this scope entity
@@ -40,6 +38,35 @@ struct codegen_scope_entity
 
     // A node to a variable declaration.
     struct node *node;
+};
+
+
+
+
+enum
+{
+    CODEGEN_ENTITY_TYPE_STACK,
+    CODEGEN_ENTITY_TYPE_SYMBOL
+};
+
+/**
+ * Codegen entities are addressable areas of memory known at compile time.
+ * For example they can represent scope variables, functions or global variables
+ */
+struct codegen_entity
+{
+    int type;
+    // The node of the entity
+    struct node *node;
+    // The address that can be addressed in assembly. I.e [ebp-4] [name]
+    char address[60];
+    bool is_scope_entity;
+
+    union
+    {
+        struct codegen_scope_entity *scope_entity;
+        struct symbol *global_symbol;
+    };
 };
 
 struct codegen_scope_entity *codegen_new_scope_entity(struct node *node, int stack_offset, int flags)
@@ -80,6 +107,62 @@ struct codegen_scope_entity *codegen_get_variable(const char *name)
 
     return NULL;
 }
+
+struct node *codegen_get_entity_node(struct codegen_entity *entity)
+{
+    struct node *node = NULL;
+    switch (entity->type)
+    {
+    case CODEGEN_ENTITY_TYPE_STACK:
+        node = entity->scope_entity->node;
+        break;
+
+    case CODEGEN_ENTITY_TYPE_SYMBOL:
+        node = entity->global_symbol->data;
+        assert(entity->global_symbol->type == SYMBOL_TYPE_NODE);
+        break;
+
+    default:
+        // TODO: Create a function to do this kind of thing..
+        assert(0 == 1 && "Unknown entity");
+    }
+
+    return node;
+}
+
+int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity_out)
+{
+    memset(entity_out, 0, sizeof(struct codegen_entity));
+    bool position_known_at_compile_time;
+    struct codegen_scope_entity *scope_entity = codegen_get_scope_variable_for_node(node, &position_known_at_compile_time);
+    if (scope_entity)
+    {
+        entity_out->type = CODEGEN_ENTITY_TYPE_STACK;
+        entity_out->scope_entity = scope_entity;
+        entity_out->is_scope_entity = true;
+        sprintf(entity_out->address, "ebp%i", scope_entity->stack_offset);
+        entity_out->node = codegen_get_entity_node(entity_out);
+
+        return 0;
+    }
+
+    struct symbol *sym = symresolver_get_symbol(current_process, node->sval);
+    // Assertion because its a compile bug if we still cant find this symbol
+    // validation should have peacefully temrinated the compiler way back...
+    assert(sym);
+
+    entity_out->type = CODEGEN_ENTITY_TYPE_SYMBOL;
+    entity_out->global_symbol = sym;
+    entity_out->is_scope_entity = false;
+    entity_out->node = codegen_get_entity_node(entity_out);
+    sprintf(entity_out->address, "%s", node->sval);
+
+    // We only deal with node symbols right now.
+    assert(sym->type == SYMBOL_TYPE_NODE);
+
+    return 0;
+}
+
 
 static bool register_is_used(const char *reg)
 {
@@ -229,7 +312,7 @@ static bool is_node_assignment(struct node *node)
  * 
  * \param position_known_at_compile_time The pointer here is set to true by this function if the exact location of the variable is known. Otherwise its false. 
  */
-struct codegen_scope_entity *codegen_get_variable_for_node(struct node *node, bool *position_known_at_compile_time)
+struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *node, bool *position_known_at_compile_time)
 {
     *position_known_at_compile_time = false;
     // Structures and arrays are not supported yet
@@ -318,25 +401,24 @@ const char *codegen_sub_register(const char *original_register, size_t size)
 
 void codegen_generate_assignment_expression(struct node *node)
 {
+    struct codegen_entity assignment_operand_entity;
+
     codegen_new_expression_state();
 
     // Process the right node first as this is an expression
     codegen_generate_expressionable(node->exp.right);
-
     // Now lets find the stack offset
-    bool position_known = false;
-    struct codegen_scope_entity *assignment_operand = codegen_get_variable_for_node(node->exp.left, &position_known);
-    assert(assignment_operand);
+    assert(codegen_get_entity_for_node(node->exp.left, &assignment_operand_entity) == 0);
 
-    if (assignment_operand->stack_offset < 0)
-    {
-        asm_push("mov [ebp%i], %s", assignment_operand->stack_offset, codegen_sub_register("eax", assignment_operand->node->var.type.size));
-    }
-    else
-    {
-        asm_push("mov [ebp%i], %s", assignment_operand->stack_offset, codegen_sub_register("eax", assignment_operand->node->var.type.size));
-    }
     codegen_end_expression_state();
+
+    // Mark the EAX register as no longer used.
+    register_unset_flag(REGISTER_EAX_IS_USED);
+
+    // Write the move. Only intergers supported at the moment as you can see
+    // this will be improved.
+    asm_push("mov [%s], eax", assignment_operand_entity.address);
+
 }
 
 void codegen_generate_exp_node(struct node *node)
@@ -356,7 +438,7 @@ void codegen_generate_exp_node(struct node *node)
     // We are done with EAX we have stored the result.
     register_unset_flag(REGISTER_EAX_IS_USED);
 
-    // We have the left node in ECX and the right node in EAX, we should flip them 
+    // We have the left node in ECX and the right node in EAX, we should flip them
     // so they are in the original order
     asm_push("xchg ecx, eax");
 
@@ -370,11 +452,11 @@ void codegen_generate_exp_node(struct node *node)
     {
         asm_push("div ecx");
     }
-    else if(S_EQ(node->exp.op, "+"))
+    else if (S_EQ(node->exp.op, "+"))
     {
         asm_push("add eax, ecx");
     }
-    else if(S_EQ(node->exp.op, "-"))
+    else if (S_EQ(node->exp.op, "-"))
     {
         asm_push("sub eax, ecx");
     }
@@ -425,14 +507,6 @@ void codegen_release_register(const char *reg)
 
 void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, char *out)
 {
-
-    if (entity->flags & CODEGEN_SCOPE_FLAG_VARIABLE_IS_GLOBAL)
-    {
-        // global variables not supported yet;
-        assert(1 == 0);
-        return;
-    }
-
     if (entity->stack_offset < 0)
     {
         sprintf(out, "ebp%i", entity->stack_offset);
@@ -462,17 +536,37 @@ void codegen_generate_address_of_variable(struct node *node, const char **reg_ou
     *reg_out = reg;
 }
 
+void codegen_generate_for_symbol(struct node *node)
+{
+    struct symbol *sym = symresolver_get_symbol(current_process, node->sval);
+
+    // We only handle symbol types of node for now..
+    assert(sym->type == SYMBOL_TYPE_NODE);
+
+    struct node *sym_node = sym->data;
+    switch (sym_node->type)
+    {
+    case NODE_TYPE_VARIABLE:
+
+        break;
+    }
+}
+
 void codegen_generate_identifier(struct node *node)
 {
     bool position_known = false;
-    struct codegen_scope_entity *assignment_operand = codegen_get_variable_for_node(node, &position_known);
-    assert(assignment_operand);
-    assert(!register_is_used("eax"));
+    struct codegen_scope_entity *assignment_operand = codegen_get_scope_variable_for_node(node, &position_known);
+    if (assignment_operand)
+    {
+        assert(!register_is_used("eax"));
+        register_set_flag(REGISTER_EAX_IS_USED);
+        char tmp[256];
+        codegen_scope_entity_to_asm_address(assignment_operand, tmp);
+        asm_push("mov eax, [%s]", tmp);
+        return;
+    }
 
-    register_set_flag(REGISTER_EAX_IS_USED);
-    char tmp[256];
-    codegen_scope_entity_to_asm_address(assignment_operand, tmp);
-    asm_push("mov eax, [%s]", tmp);
+    codegen_generate_for_symbol(node);
 }
 void codegen_generate_expressionable(struct node *node)
 {
@@ -522,14 +616,12 @@ void codegen_generate_global_variable_without_value(struct node *node)
 
 void codegen_generate_global_variable(struct node *node)
 {
-    codegen_scope_push(codegen_new_scope_entity(node, 0, CODEGEN_SCOPE_FLAG_VARIABLE_IS_GLOBAL));
     asm_push("; %s %s", node->var.type.type_str, node->var.name);
     if (node->var.val)
     {
         codegen_generate_global_variable_with_value(node);
         return;
     }
-    codegen_generate_global_variable_without_value(node);
 }
 
 size_t codegen_compute_stack_size(struct vector *vec)

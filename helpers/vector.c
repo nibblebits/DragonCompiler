@@ -145,6 +145,29 @@ bool vector_empty(struct vector* vector)
     return vector_count(vector) == 0;
 }
 
+void* vector_back_or_null(struct vector* vector)
+{
+    // We can't go back or we will access an invalid element
+    // out of bounds...
+    if (!vector_in_bounds_for_at(vector, vector->rindex-1))
+    {
+        return NULL;
+    }
+
+    return vector_at(vector, vector->rindex-1);
+}
+
+void* vector_back_ptr_or_null(struct vector* vector)
+{
+    void** ptr = vector_back_or_null(vector);
+    if (ptr)
+    {
+        return *ptr;
+    }
+
+    return NULL;
+}
+
 void* vector_back(struct vector* vector)
 {
     vector_assert_bounds_for_pop(vector, vector->rindex-1);

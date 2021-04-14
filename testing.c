@@ -1,7 +1,11 @@
 #include <stdio.h>
 
+void test(int a)
+{
+
+}
+
 int main(int argc, char** argv)
 {
-    char c = 'a';
-    c = argv[0];
+    test(50);
 }

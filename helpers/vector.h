@@ -47,6 +47,8 @@ void vector_push(struct vector* vector, void* elem);
 void vector_pop(struct vector* vector);
 void* vector_back(struct vector* vector);
 void* vector_back_ptr(struct vector* vector);
+void* vector_back_ptr_or_null(struct vector* vector);
+
 bool vector_empty(struct vector* vector);
 
 int vector_count(struct vector* vector);

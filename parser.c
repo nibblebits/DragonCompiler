@@ -8,7 +8,6 @@
 #include <string.h>
 #include <ctype.h>
 
-
 // First in the array = higher priority
 // This array is special, its essentially a group of arrays
 // Format goes as follow
@@ -24,13 +23,12 @@
  * Also end the collection of groups with a NULL pointer
  */
 
-
-static  char *op_precedence[TOTAL_OPERATOR_GROUPS][MAX_OPERATORS_IN_GROUP] = {
-    {"++", "--", "()", "[]", ".", "->", NULL},
+static char *op_precedence[TOTAL_OPERATOR_GROUPS][MAX_OPERATORS_IN_GROUP] = {
+    {"++", "--", "()", "[", "]", ".", "->", NULL},
     {"*", "/", "%%", NULL},
     {"+", "-", NULL},
     {"<<", ">>", NULL},
-    {"<","<=", ">", ">=", NULL},
+    {"<", "<=", ">", ">=", NULL},
     {"==", "!=", NULL},
     {"&", NULL},
     {"^", NULL},
@@ -38,8 +36,7 @@ static  char *op_precedence[TOTAL_OPERATOR_GROUPS][MAX_OPERATORS_IN_GROUP] = {
     {"&&", NULL},
     {"||", NULL},
     {"?", ":", NULL},
-    {"=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|=", NULL}
-    };
+    {"=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|=", NULL}};
 
 static struct compile_process *current_process;
 int parse_next();
@@ -69,7 +66,7 @@ static bool parser_left_op_has_priority(const char *op_left, const char *op_righ
 {
     int precedence_left = parser_get_precedence_for_operator(op_left);
     int precedence_right = parser_get_precedence_for_operator(op_right);
-    return precedence_left < precedence_right;
+    return precedence_left <= precedence_right;
 }
 
 static struct token *token_next()
@@ -108,6 +105,18 @@ static void expect_sym(char c)
     struct token *next_token = token_next();
     if (next_token == NULL || next_token->type != TOKEN_TYPE_SYMBOL || next_token->cval != c)
         parse_err("Expecting the symbol %c but something else was provided", c);
+}
+
+static void expect_op(const char *op)
+{
+    struct token *next_token = token_next();
+    if (next_token == NULL || next_token->type != TOKEN_TYPE_OPERATOR || !S_EQ(next_token->sval, op))
+        parse_err("Expecting the operator %s but something else was provided", op);
+}
+
+static struct node *node_peek_or_null()
+{
+    return vector_back_ptr_or_null(current_process->node_vec);
 }
 
 /**
@@ -217,6 +226,13 @@ void parse_for_parentheses();
 
 void parse_exp()
 {
+    if (S_EQ(token_peek_next()->sval, "("))
+    {
+        parse_for_parentheses();
+        
+        return;
+    }
+
     struct token *op_token = token_next();
     const char *op = op_token->sval;
     // We must pop the last node as this will be the left operand
@@ -238,6 +254,9 @@ int parse_expressionable_single()
     switch (token->type)
     {
     case TOKEN_TYPE_NUMBER:
+        parse_single_token_to_node();
+        res = 0;
+        break;
     case TOKEN_TYPE_IDENTIFIER:
         parse_single_token_to_node();
         res = 0;
@@ -245,14 +264,6 @@ int parse_expressionable_single()
     case TOKEN_TYPE_OPERATOR:
         parse_exp();
         res = 0;
-        break;
-
-    case TOKEN_TYPE_SYMBOL:
-        if (token->cval == '(')
-        {
-            parse_for_parentheses();
-            res = 0;
-        }
         break;
     }
     return res;
@@ -267,22 +278,28 @@ void parse_expressionable()
 
 void parse_for_parentheses()
 {
-    expect_sym('(');
+    expect_op("(");
     parse_expressionable();
     expect_sym(')');
+
+    struct node* left_node = node_pop();
+    struct node* right_node = NULL;
+    
+    // DO we have another node? If we do its the left node 
+    struct node* onode = node_peek_or_null();
+    if (onode)
+    {
+        node_pop();
+        right_node = left_node;
+        left_node = onode;
+    }
+    make_exp_node(left_node, right_node, "()");
 }
 
 void parse_for_symbol()
 {
     struct token *token = token_peek_next();
-    switch (token->cval)
-    {
-    case '(':
-        parse_for_parentheses();
-        break;
-    default:
-        parse_err("Unexpected symbol %c\n", token->cval);
-    }
+    parse_err("not supported yet");
 }
 
 /**
@@ -483,7 +500,7 @@ void parse_function(struct datatype *dtype, struct token *name_token)
     struct vector *arguments_vector = NULL;
     // We expect a left bracket for functions.
     // Let us not forget we already have the return type and name of the function i.e int abc
-    expect_sym('(');
+    expect_op("(");
     arguments_vector = parse_function_arguments();
     expect_sym(')');
 
@@ -524,7 +541,7 @@ void parse_variable_or_function()
 
     // If we have a left bracket then this must be a function i.e int abc()
     // Let's handle the function
-    if (token_next_is_symbol('('))
+    if (token_next_is_operator("("))
     {
         parse_function(&dtype, name_token);
         return;
@@ -587,6 +604,7 @@ int parse_next()
 
     case TOKEN_TYPE_NUMBER:
     case TOKEN_TYPE_IDENTIFIER:
+    case TOKEN_TYPE_OPERATOR:
         parse_expressionable();
         break;
 
@@ -664,6 +682,12 @@ void parser_get_all_nodes_of_type_single(struct vector *vector, struct node **no
         parser_get_all_nodes_of_type_for_function(vector, node, type, ignore_childtypes_for_type);
         break;
 
+    // Numbers and identifiers have no children
+    case NODE_TYPE_NUMBER:
+    case NODE_TYPE_IDENTIFIER:
+
+    break;
+
     default:
         assert(0 == 1 && "Compiler bug");
     }
@@ -706,7 +730,7 @@ void parser_reorder_expression(struct node **node_out)
         parser_reorder_expression(&node->exp.left);
     }
 
-    if (node->exp.right->type == NODE_TYPE_EXPRESSION)
+    if (node->exp.right && node->exp.right->type == NODE_TYPE_EXPRESSION)
     {
         // Don't forget to reorder the right node first
         parser_reorder_expression(&node->exp.right);

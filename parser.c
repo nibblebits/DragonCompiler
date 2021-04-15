@@ -792,6 +792,6 @@ int parse(struct compile_process *process)
     }
 
     // Now that we have all we need lets loop through the nodes and we will reavaluate the expressions
-    parser_reorder_expressions(process);
+  //  parser_reorder_expressions(process);
     return PARSE_ALL_OK;
 }

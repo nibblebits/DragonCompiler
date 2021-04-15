@@ -1,5 +1,9 @@
-int a = 50;
+int test(int a)
+{
+
+}
+
 int main(int argc)
 {
-    a = 50;
+    test(50);
 }

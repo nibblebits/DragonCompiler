@@ -15,7 +15,6 @@
 #define S_EQ(str, str2) \
     (strcmp(str, str2) == 0)
 
-
 /**
  * Note: we do not include ")" as an operator only "(". ")" is classed as a symbol.
  */
@@ -48,7 +47,6 @@
     case '8':        \
     case '9'
 
-
 /**
  * Cases for symbols, currently we don't treat ")" as an operator because
  * it is used to end an expression. "(" is used as an operator however but its special
@@ -64,7 +62,7 @@
     case ',':       \
     case '#':       \
     case '\\':      \
-    case ')'        
+    case ')'
 
 struct pos
 {
@@ -78,6 +76,13 @@ enum
     // I.e (50+20+40+96). 20 is the right node and so is 96.
     // This flag will be set in the event the right node of an expression part is being processed
     EXPRESSION_FLAG_RIGHT_NODE = 0b00000001,
+
+    // This flag is set if the current expression is representing function arguments
+    // seperated by a comma.
+    EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS = 0b00000010,
+    // This flag is set if the current function call expression is on the left operand
+    // for example test(50). Whilst we generate left node "test" this flag will be set.
+    EXPRESSION_IN_FUNCTION_CALL_LEFT_OPERAND = 0b00000100,
 };
 
 enum
@@ -96,9 +101,24 @@ enum
  * The last thing we need is a corrupted assembly output that has unexpected behaviour
  * expression states help ensure we can avoid this problem by obaying rules we set our program.
  */
+
+// 4 bytes for a stack push and pop on 32 bit arch.
+#define STACK_PUSH_SIZE 4
+#define FUNCTION_CALL_ARGUMENTS_GET_STACK_SIZE(total_args) total_args * STACK_PUSH_SIZE
+
 struct expression_state
 {
     int flags;
+    union
+    {
+
+        // Should be used when EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS flag is set.
+        struct function_call_argument
+        {
+            // Total arguments in the current function call expression i.e (50, 20, 40) = 3 args
+            size_t total_args;
+        } fca;
+    };
 };
 
 /**
@@ -127,7 +147,7 @@ struct compile_process
 
     // The symbol table that holds things like function names, global variables
     // data can point to the node in question, along with other relevant information
-    struct vector* symbol_tbl;
+    struct vector *symbol_tbl;
 
     struct generator
     {
@@ -185,7 +205,6 @@ struct token
     };
 };
 
-
 enum
 {
     SYMBOL_TYPE_NODE,
@@ -194,9 +213,9 @@ enum
 
 struct symbol
 {
-    const char* name;
+    const char *name;
     int type;
-    void* data;
+    void *data;
 };
 
 enum
@@ -364,14 +383,12 @@ int parse(struct compile_process *process);
 /**
  * Builds the in memory symbol table for the given tree
  */
-int symresolver_build(struct compile_process* process);
+int symresolver_build(struct compile_process *process);
 
 /**
  * Generates the assembly output for the given AST
  */
 int codegen(struct compile_process *process);
-
-
 
 bool keyword_is_datatype(const char *str);
 
@@ -429,9 +446,9 @@ void scope_iteration_end(struct scope *scope);
 /**
  * Registers a symbol to the symbol table
  */
-struct symbol* symresolver_register_symbol(struct compile_process* process, const char* sym_name, int type, void* data);
+struct symbol *symresolver_register_symbol(struct compile_process *process, const char *sym_name, int type, void *data);
 /**
  * Gets the registered symbol from the symbol table for the given name
  */
-struct symbol* symresolver_get_symbol(struct compile_process* process, const char* name);
+struct symbol *symresolver_get_symbol(struct compile_process *process, const char *name);
 #endif

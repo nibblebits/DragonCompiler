@@ -8,7 +8,7 @@ static void symresolver_push_symbol(struct compile_process* process, struct symb
 }
 
 struct symbol* symresolver_get_symbol(struct compile_process* process, const char* name)
-{
+{    
     vector_set_peek_pointer(process->symbol_tbl, 0);
 
     struct symbol* symbol = vector_peek_ptr(process->symbol_tbl);

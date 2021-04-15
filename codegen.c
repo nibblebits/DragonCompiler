@@ -6,6 +6,9 @@
 
 static struct compile_process *current_process;
 
+// Returned when we have no expression state.
+static struct expression_state blank_state = {};
+
 #define codegen_err(...) \
     compiler_error(current_process, __VA_ARGS__)
 
@@ -21,9 +24,8 @@ static struct compile_process *current_process;
 #define codegen_scope_last_entity() \
     scope_last_entity(current_process)
 
-
-
 struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *node, bool *position_known_at_compile_time);
+void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, char *out);
 
 struct codegen_scope_entity
 {
@@ -39,9 +41,6 @@ struct codegen_scope_entity
     // A node to a variable declaration.
     struct node *node;
 };
-
-
-
 
 enum
 {
@@ -133,6 +132,13 @@ struct node *codegen_get_entity_node(struct codegen_entity *entity)
 int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity_out)
 {
     memset(entity_out, 0, sizeof(struct codegen_entity));
+
+    // We currently do not deal with expressions.. not today
+    if (node->type != NODE_TYPE_IDENTIFIER)
+    {
+        return -1;
+    }
+
     bool position_known_at_compile_time;
     struct codegen_scope_entity *scope_entity = codegen_get_scope_variable_for_node(node, &position_known_at_compile_time);
     if (scope_entity)
@@ -140,7 +146,7 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
         entity_out->type = CODEGEN_ENTITY_TYPE_STACK;
         entity_out->scope_entity = scope_entity;
         entity_out->is_scope_entity = true;
-        sprintf(entity_out->address, "ebp%i", scope_entity->stack_offset);
+        codegen_scope_entity_to_asm_address(entity_out->scope_entity, entity_out->address);
         entity_out->node = codegen_get_entity_node(entity_out);
 
         return 0;
@@ -149,7 +155,10 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
     struct symbol *sym = symresolver_get_symbol(current_process, node->sval);
     // Assertion because its a compile bug if we still cant find this symbol
     // validation should have peacefully temrinated the compiler way back...
-    assert(sym);
+    if (!sym)
+    {
+        return -1;
+    }
 
     entity_out->type = CODEGEN_ENTITY_TYPE_SYMBOL;
     entity_out->global_symbol = sym;
@@ -162,7 +171,6 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
 
     return 0;
 }
-
 
 static bool register_is_used(const char *reg)
 {
@@ -243,7 +251,13 @@ void codegen_new_expression_state()
 
 struct expression_state *codegen_current_exp_state()
 {
-    return *(struct expression_state **)(vector_back(current_process->generator.states.expr));
+    struct expression_state* state = vector_back_ptr_or_null(current_process->generator.states.expr);
+    if (!state)
+    {
+        return &blank_state;
+    }
+
+    return state;
 }
 
 void codegen_end_expression_state()
@@ -261,11 +275,37 @@ bool codegen_expression_on_right_operand()
 
 void codegen_expression_flags_set_right_operand(bool is_right_operand)
 {
+    assert(codegen_current_exp_state() != &blank_state);
     codegen_current_exp_state()->flags &= ~EXPRESSION_FLAG_RIGHT_NODE;
     if (is_right_operand)
     {
         codegen_current_exp_state()->flags |= EXPRESSION_FLAG_RIGHT_NODE;
     }
+}
+
+void codegen_expression_flags_set_in_function_call_arguments(bool in_function_arguments)
+{
+    assert(codegen_current_exp_state() != &blank_state);
+    if (in_function_arguments)
+    {
+        codegen_current_exp_state()->flags |= EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS;
+        return;
+    }
+
+    codegen_current_exp_state()->flags &= ~EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS;
+    memset(&codegen_current_exp_state()->fca, 0, sizeof(codegen_current_exp_state()->fca));
+}
+
+void codegen_expression_flags_set_in_function_call_left_operand_flag(bool in_function_call_left_operand)
+{
+     assert(codegen_current_exp_state() != &blank_state);
+    if (in_function_call_left_operand)
+    {
+        codegen_current_exp_state()->flags |= EXPRESSION_IN_FUNCTION_CALL_LEFT_OPERAND;
+        return;
+    }
+
+    codegen_current_exp_state()->flags &= ~EXPRESSION_IN_FUNCTION_CALL_LEFT_OPERAND;
 }
 
 void codegen_generate_node(struct node *node);
@@ -418,6 +458,50 @@ void codegen_generate_assignment_expression(struct node *node)
     // Write the move. Only intergers supported at the moment as you can see
     // this will be improved.
     asm_push("mov [%s], eax", assignment_operand_entity.address);
+}
+
+
+void codegen_generate_expressionable_function_arguments(struct codegen_entity* func_entity, struct node* func_call_args_exp_node, size_t* total_arguments_out)
+{
+    codegen_new_expression_state();
+    codegen_expression_flags_set_in_function_call_arguments(true);
+    codegen_generate_expressionable(func_call_args_exp_node);
+    *total_arguments_out = codegen_current_exp_state()->fca.total_args;
+    codegen_expression_flags_set_in_function_call_arguments(false);
+    codegen_end_expression_state();
+
+}
+
+void codegen_generate_pop(const char* reg, size_t times)
+{
+    for (size_t i = 0; i < times; i++)
+    {
+        asm_push("pop %s", reg);
+    }
+}
+
+void codegen_generate_function_call_for_exp_node(struct codegen_entity *func_entity, struct node *node)
+{
+    // Generate expression for left node. EBX should contain the address we care about
+    codegen_new_expression_state();
+    codegen_expression_flags_set_in_function_call_left_operand_flag(true);
+    codegen_generate_expressionable(node->exp.left);
+    codegen_expression_flags_set_in_function_call_left_operand_flag(false);
+    codegen_end_expression_state();
+
+    size_t total_args = 0;
+
+    // Code generate the function arguments
+    codegen_generate_expressionable_function_arguments(func_entity, node->exp.right, &total_args);
+
+    // Call the function
+    asm_push("call [ebx]");
+
+    // We don't need EBX anymore
+    register_unset_flag(REGISTER_EBX_IS_USED);
+
+    // Now lets restore the stack to its original state before this function call
+    asm_push("add esp, %i", FUNCTION_CALL_ARGUMENTS_GET_STACK_SIZE(total_args));
 
 }
 
@@ -426,6 +510,19 @@ void codegen_generate_exp_node(struct node *node)
     if (is_node_assignment(node))
     {
         codegen_generate_assignment_expression(node);
+        return;
+    }
+
+    struct codegen_entity entity;
+    if (codegen_get_entity_for_node(node->exp.left, &entity) == 0)
+    {
+        switch (entity.node->type)
+        {
+        case NODE_TYPE_FUNCTION:
+            codegen_generate_function_call_for_exp_node(&entity, node);
+            break;
+        }
+
         return;
     }
 
@@ -515,59 +612,44 @@ void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, ch
 
     sprintf(out, "ebp+%i", entity->stack_offset);
 }
-void codegen_generate_address_of_variable(struct node *node, const char **reg_out)
+
+void codegen_handle_variable_access(struct codegen_entity *entity)
 {
-    // When we have an identifier this typically represents a variable
-    // lets treat it as such. We are accessing a variable here.
-    char tmp[256];
-    struct codegen_scope_entity *var_entity = codegen_get_variable(node->sval);
-    assert(var_entity && "Expected a variable, validation is not done here, validator should have picked up this variable does not exist. Compiler bug");
-    const char *reg = codegen_choose_ebx_or_edx();
-
-    codegen_scope_entity_to_asm_address(var_entity, tmp);
-    if (var_entity->stack_offset < 0)
-    {
-        asm_push("lea %s, [%s]", reg, var_entity->stack_offset, tmp);
-        *reg_out = reg;
-        return;
-    }
-
-    asm_push("lea %s, [%s]", reg, var_entity->stack_offset, tmp);
-    *reg_out = reg;
+    assert(!register_is_used("eax"));
+    // We accessing a variable? Then grab its value put it in EAX!
+    register_set_flag(REGISTER_EAX_IS_USED);
+    asm_push("mov eax, [%s]", entity->address);
 }
 
-void codegen_generate_for_symbol(struct node *node)
+void codegen_handle_function_access(struct codegen_entity* entity)
 {
-    struct symbol *sym = symresolver_get_symbol(current_process, node->sval);
-
-    // We only handle symbol types of node for now..
-    assert(sym->type == SYMBOL_TYPE_NODE);
-
-    struct node *sym_node = sym->data;
-    switch (sym_node->type)
-    {
-    case NODE_TYPE_VARIABLE:
-
-        break;
-    }
+    register_set_flag(REGISTER_EBX_IS_USED);
+    asm_push("lea ebx, [%s]", entity->address);
 }
 
 void codegen_generate_identifier(struct node *node)
 {
-    bool position_known = false;
-    struct codegen_scope_entity *assignment_operand = codegen_get_scope_variable_for_node(node, &position_known);
-    if (assignment_operand)
-    {
-        assert(!register_is_used("eax"));
-        register_set_flag(REGISTER_EAX_IS_USED);
-        char tmp[256];
-        codegen_scope_entity_to_asm_address(assignment_operand, tmp);
-        asm_push("mov eax, [%s]", tmp);
-        return;
-    }
+    struct codegen_entity entity;
+    assert(codegen_get_entity_for_node(node, &entity) == 0);
 
-    codegen_generate_for_symbol(node);
+
+    // WHat is the type that we are referencing? A variable, a function? WHat is it...
+    switch(entity.node->type)
+    {
+        case NODE_TYPE_VARIABLE:
+          codegen_handle_variable_access(&entity);
+        break;
+
+        case NODE_TYPE_FUNCTION:
+          codegen_handle_function_access(&entity);
+        break;
+
+        default:
+            // Get a function for this thing..
+            assert(1 == 0 && "Compiler bug");
+    }
 }
+
 void codegen_generate_expressionable(struct node *node)
 {
     switch (node->type)
@@ -584,6 +666,18 @@ void codegen_generate_expressionable(struct node *node)
         codegen_generate_identifier(node);
         break;
     }
+
+    if (codegen_current_exp_state()->flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS)
+    {
+        // We are currently in function arguments i.e (50, 20, 40)
+        // because of this we have to push the EAX register once its been handled
+        // so that the function call will have access to the stack.
+        asm_push("push eax");
+
+        // Let's remember the arguments for later.
+        codegen_current_exp_state()->fca.total_args += 1;
+    }
+
 }
 
 void codegen_generate_global_variable_with_value(struct node *node)

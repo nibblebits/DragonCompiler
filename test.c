@@ -1,9 +1,1 @@
-int test(int a)
-{
-
-}
-
-int main(int argc)
-{
-    test(50);
-}
+test(50*100, 20)

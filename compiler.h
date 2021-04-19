@@ -33,7 +33,8 @@
     case '&':                           \
     case '(':                           \
     case '[':                           \
-    case ']'
+    case ']':                           \
+    case ','                            
 
 #define NUMERIC_CASE \
     case '0':        \
@@ -59,7 +60,6 @@
     case '.':       \
     case ':':       \
     case ';':       \
-    case ',':       \
     case '#':       \
     case '\\':      \
     case ')'
@@ -276,6 +276,15 @@ struct scope
 
 enum
 {
+    // Terrible name for this enum think of another
+    // if this flag is set in any expression node then this means that it should be
+    // treated as a unique expression such as ((50+20)+90) the (50+20) is a unique expression
+    // that is what this flag means...
+    EXPRESSION_FLAG_TREAT_UNIQUE = 0b00000001
+};
+
+enum
+{
     NODE_TYPE_EXPRESSION,
     NODE_TYPE_NUMBER,
     NODE_TYPE_IDENTIFIER,
@@ -283,6 +292,7 @@ enum
     NODE_TYPE_FUNCTION,
     NODE_TYPE_BODY
 };
+
 
 struct node
 {
@@ -295,6 +305,8 @@ struct node
             struct node *right;
             // Operator for the expression
             const char *op;
+            // Special flags that determine how this expression should be treated.
+            int flags;
         } exp;
 
         struct function

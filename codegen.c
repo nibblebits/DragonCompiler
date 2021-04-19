@@ -251,7 +251,7 @@ void codegen_new_expression_state()
 
 struct expression_state *codegen_current_exp_state()
 {
-    struct expression_state* state = vector_back_ptr_or_null(current_process->generator.states.expr);
+    struct expression_state *state = vector_back_ptr_or_null(current_process->generator.states.expr);
     if (!state)
     {
         return &blank_state;
@@ -298,7 +298,7 @@ void codegen_expression_flags_set_in_function_call_arguments(bool in_function_ar
 
 void codegen_expression_flags_set_in_function_call_left_operand_flag(bool in_function_call_left_operand)
 {
-     assert(codegen_current_exp_state() != &blank_state);
+    assert(codegen_current_exp_state() != &blank_state);
     if (in_function_call_left_operand)
     {
         codegen_current_exp_state()->flags |= EXPRESSION_IN_FUNCTION_CALL_LEFT_OPERAND;
@@ -460,19 +460,41 @@ void codegen_generate_assignment_expression(struct node *node)
     asm_push("mov [%s], eax", assignment_operand_entity.address);
 }
 
-
-void codegen_generate_expressionable_function_arguments(struct codegen_entity* func_entity, struct node* func_call_args_exp_node, size_t* total_arguments_out)
+void codegen_generate_expressionable_for_function_argument(struct node *node, size_t *total_arguments_out)
 {
-    codegen_new_expression_state();
-    codegen_expression_flags_set_in_function_call_arguments(true);
-    codegen_generate_expressionable(func_call_args_exp_node);
-    *total_arguments_out = codegen_current_exp_state()->fca.total_args;
-    codegen_expression_flags_set_in_function_call_arguments(false);
-    codegen_end_expression_state();
 
+    if (node->type == NODE_TYPE_EXPRESSION && S_EQ(node->exp.op, ","))
+    {
+        codegen_generate_expressionable_for_function_argument(node->exp.left, total_arguments_out);
+        codegen_generate_expressionable_for_function_argument(node->exp.right, total_arguments_out);
+        return;
+    }
+
+    codegen_generate_expressionable(node);
+
+    // We are currently in function arguments i.e (50, 20, 40)
+    // because of this we have to push the EAX register once its been handled
+    // so that the function call will have access to the stack.
+    asm_push("PUSH eax");
+
+    // We stored EAX release it.
+    register_unset_flag(REGISTER_EAX_IS_USED);
+
+    // We have an argument!
+    *total_arguments_out += 1;
 }
 
-void codegen_generate_pop(const char* reg, size_t times)
+void codegen_generate_expressionable_function_arguments(struct codegen_entity *func_entity, struct node *func_call_args_exp_node, size_t *total_arguments_out)
+{
+    *total_arguments_out = 0;
+    codegen_new_expression_state();
+    codegen_expression_flags_set_in_function_call_arguments(true);
+    codegen_generate_expressionable_for_function_argument(func_call_args_exp_node, total_arguments_out);
+    codegen_expression_flags_set_in_function_call_arguments(false);
+    codegen_end_expression_state();
+}
+
+void codegen_generate_pop(const char *reg, size_t times)
 {
     for (size_t i = 0; i < times; i++)
     {
@@ -502,7 +524,6 @@ void codegen_generate_function_call_for_exp_node(struct codegen_entity *func_ent
 
     // Now lets restore the stack to its original state before this function call
     asm_push("add esp, %i", FUNCTION_CALL_ARGUMENTS_GET_STACK_SIZE(total_args));
-
 }
 
 void codegen_generate_exp_node(struct node *node)
@@ -621,7 +642,7 @@ void codegen_handle_variable_access(struct codegen_entity *entity)
     asm_push("mov eax, [%s]", entity->address);
 }
 
-void codegen_handle_function_access(struct codegen_entity* entity)
+void codegen_handle_function_access(struct codegen_entity *entity)
 {
     register_set_flag(REGISTER_EBX_IS_USED);
     asm_push("lea ebx, [%s]", entity->address);
@@ -632,22 +653,26 @@ void codegen_generate_identifier(struct node *node)
     struct codegen_entity entity;
     assert(codegen_get_entity_for_node(node, &entity) == 0);
 
-
     // WHat is the type that we are referencing? A variable, a function? WHat is it...
-    switch(entity.node->type)
+    switch (entity.node->type)
     {
-        case NODE_TYPE_VARIABLE:
-          codegen_handle_variable_access(&entity);
+    case NODE_TYPE_VARIABLE:
+        codegen_handle_variable_access(&entity);
         break;
 
-        case NODE_TYPE_FUNCTION:
-          codegen_handle_function_access(&entity);
+    case NODE_TYPE_FUNCTION:
+        codegen_handle_function_access(&entity);
         break;
 
-        default:
-            // Get a function for this thing..
-            assert(1 == 0 && "Compiler bug");
+    default:
+        // Get a function for this thing..
+        assert(1 == 0 && "Compiler bug");
     }
+}
+
+static bool is_comma_operator(struct node *node)
+{
+    return S_EQ(node->exp.op, ",");
 }
 
 void codegen_generate_expressionable(struct node *node)
@@ -666,18 +691,6 @@ void codegen_generate_expressionable(struct node *node)
         codegen_generate_identifier(node);
         break;
     }
-
-    if (codegen_current_exp_state()->flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS)
-    {
-        // We are currently in function arguments i.e (50, 20, 40)
-        // because of this we have to push the EAX register once its been handled
-        // so that the function call will have access to the stack.
-        asm_push("push eax");
-
-        // Let's remember the arguments for later.
-        codegen_current_exp_state()->fca.total_args += 1;
-    }
-
 }
 
 void codegen_generate_global_variable_with_value(struct node *node)

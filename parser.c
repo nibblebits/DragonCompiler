@@ -24,8 +24,8 @@
  */
 
 static char *op_precedence[TOTAL_OPERATOR_GROUPS][MAX_OPERATORS_IN_GROUP] = {
-    {"++", "--", "()", "[", "]", ".", "->", NULL},
-    {"*", "/", "%%", NULL},
+    {"++", "--", "()", "[", "]", ",", ".", "->", NULL},
+    {"*", "/", "%%", NULL}, // Division should go here.
     {"+", "-", NULL},
     {"<<", ">>", NULL},
     {"<", "<=", ">", ">=", NULL},
@@ -224,12 +224,69 @@ void make_variable_node(struct datatype *datatype, struct token *name_token, str
 void parse_expressionable();
 void parse_for_parentheses();
 
+/**
+ * Reorders the given expression and its children, based on operator priority. I.e 
+ * multiplication takes priority over addition.
+ */
+void parser_reorder_expression(struct node **node_out)
+{
+    struct node *node = *node_out;
+    // We must first reorder the children
+
+    if (node->exp.left->type == NODE_TYPE_EXPRESSION)
+    {
+        parser_reorder_expression(&node->exp.left);
+    }
+
+    if (node->exp.right && node->exp.right->type == NODE_TYPE_EXPRESSION)
+    {
+        // Don't forget to reorder the right node first
+        parser_reorder_expression(&node->exp.right);
+
+        struct node *right_node = node->exp.right;
+        // We only reorder expressions that are not unique or alone.
+        if (!(right_node->exp.flags & EXPRESSION_FLAG_TREAT_UNIQUE) &&
+            parser_left_op_has_priority(node->exp.op, right_node->exp.op))
+        {
+            // Left has priority so we must take the left node of the right node.
+            // and reorder the expression
+            make_exp_node(node->exp.left, right_node->exp.left, node->exp.op);
+            struct node *new_root_exp_node = node_pop();
+            right_node->exp.left = new_root_exp_node;
+            node = right_node;
+            *node_out = node;
+        }
+        else if(!parser_left_op_has_priority(node->exp.op, right_node->exp.op))
+        {   
+            make_exp_node(node->exp.left, right_node->exp.left, node->exp.op);
+            struct node* new_root_exp_node = node_pop();
+            node->exp.left = new_root_exp_node;
+            node->exp.right = right_node->exp.right;
+            node->exp.op = right_node->exp.op;
+            *node_out = node;
+        }
+
+    }
+}
+/*
+void parser_reorder_expressions(struct compile_process *process)
+{
+    struct vector *exp_nodes = parser_get_all_nodes_of_type(process, NODE_TYPE_EXPRESSION, true);
+    struct node **node_out = NULL;
+    while (!vector_empty(exp_nodes))
+    {
+        node_out = vector_back_ptr(exp_nodes);
+        parser_reorder_expression(node_out);
+        vector_pop(exp_nodes);
+    }
+    vector_free(exp_nodes);
+}*/
+
 void parse_exp()
 {
     if (S_EQ(token_peek_next()->sval, "("))
     {
         parse_for_parentheses();
-        
         return;
     }
 
@@ -242,6 +299,10 @@ void parse_exp()
     struct node *node_right = node_pop();
 
     make_exp_node(node_left, node_right, op);
+    struct node *exp_node = node_pop();
+    // We must reorder the expression if possible
+    parser_reorder_expression(&exp_node);
+    node_push(exp_node);
 }
 
 int parse_expressionable_single()
@@ -282,11 +343,14 @@ void parse_for_parentheses()
     parse_expressionable();
     expect_sym(')');
 
-    struct node* left_node = node_pop();
-    struct node* right_node = NULL;
-    
-    // DO we have another node? If we do its the left node 
-    struct node* onode = node_peek_or_null();
+    struct node *left_node = node_pop();
+    // This is a unique expression as parentheses is present. I.e (50*20)+90
+    // (50*20) is a unique expression ().
+    left_node->exp.flags = EXPRESSION_FLAG_TREAT_UNIQUE;
+    struct node *right_node = NULL;
+
+    // DO we have another node? If we do its the left node
+    struct node *onode = node_peek_or_null();
     if (onode)
     {
         node_pop();
@@ -294,6 +358,11 @@ void parse_for_parentheses()
         left_node = onode;
     }
     make_exp_node(left_node, right_node, "()");
+
+    struct node *exp_node = node_pop();
+    // We must reorder the expression if possible
+    parser_reorder_expression(&exp_node);
+    node_push(exp_node);
 }
 
 void parse_for_symbol()
@@ -686,7 +755,7 @@ void parser_get_all_nodes_of_type_single(struct vector *vector, struct node **no
     case NODE_TYPE_NUMBER:
     case NODE_TYPE_IDENTIFIER:
 
-    break;
+        break;
 
     default:
         assert(0 == 1 && "Compiler bug");
@@ -716,50 +785,6 @@ struct vector *parser_get_all_nodes_of_type(struct compile_process *process, int
     return vector;
 }
 
-/**
- * Reorders the given expression and its children, based on operator priority. I.e 
- * multiplication takes priority over addition.
- */
-void parser_reorder_expression(struct node **node_out)
-{
-    struct node *node = *node_out;
-    // We must first reorder the children
-
-    if (node->exp.left->type == NODE_TYPE_EXPRESSION)
-    {
-        parser_reorder_expression(&node->exp.left);
-    }
-
-    if (node->exp.right && node->exp.right->type == NODE_TYPE_EXPRESSION)
-    {
-        // Don't forget to reorder the right node first
-        parser_reorder_expression(&node->exp.right);
-
-        struct node *right_node = node->exp.right;
-        if (parser_left_op_has_priority(node->exp.op, right_node->exp.op))
-        {
-            // Left has priority so we must take the left node of the right node.
-            // and reorder the expression
-            make_exp_node(node->exp.left, right_node->exp.left, node->exp.op);
-            struct node *new_root_exp_node = node_pop();
-            right_node->exp.left = new_root_exp_node;
-            node = right_node;
-            *node_out = node;
-        }
-    }
-}
-void parser_reorder_expressions(struct compile_process *process)
-{
-    struct vector *exp_nodes = parser_get_all_nodes_of_type(process, NODE_TYPE_EXPRESSION, true);
-    struct node **node_out = NULL;
-    while (!vector_empty(exp_nodes))
-    {
-        node_out = vector_back_ptr(exp_nodes);
-        parser_reorder_expression(node_out);
-        vector_pop(exp_nodes);
-    }
-    vector_free(exp_nodes);
-}
 int parse(struct compile_process *process)
 {
 
@@ -792,6 +817,6 @@ int parse(struct compile_process *process)
     }
 
     // Now that we have all we need lets loop through the nodes and we will reavaluate the expressions
-  //  parser_reorder_expressions(process);
+    //parser_reorder_expressions(process);
     return PARSE_ALL_OK;
 }

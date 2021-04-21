@@ -62,7 +62,8 @@ bool is_keyword(const char *str)
            S_EQ(str, "void") ||
            S_EQ(str, "struct") ||
            S_EQ(str, "union") ||
-           S_EQ(str, "static");
+           S_EQ(str, "static") || 
+           S_EQ(str, "return");
 }
 
 bool keyword_is_datatype(const char *str)

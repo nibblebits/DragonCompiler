@@ -1,14 +1,30 @@
+global _start
+
 section .data
-; int a
-a: dd 50
 section .text
+_start:
+    jmp main
+    
+; test function
+test:
+push ebp
+mov ebp, esp
+mov eax, [ebp+8]
+pop ebp
+ret
+pop ebp
+ret
 ; main function
 main:
 push ebp
 mov ebp, esp
-sub esp, 16
+lea ebx, [test]
 mov eax, 50
-mov [a], eax
-add esp, 16
+PUSH eax
+mov eax, 60
+PUSH eax
+call [ebx]
+add esp, 8
 pop ebp
 ret
+

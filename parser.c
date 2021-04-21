@@ -114,6 +114,17 @@ static void expect_op(const char *op)
         parse_err("Expecting the operator %s but something else was provided", op);
 }
 
+static void expect_keyword(const char* keyword)
+{
+    struct token* next_token = token_next();
+    assert(next_token);
+    assert(next_token->type == TOKEN_TYPE_KEYWORD);
+    assert(S_EQ(next_token->sval, keyword));
+
+    if (next_token == NULL || next_token->type != TOKEN_TYPE_KEYWORD || !S_EQ(next_token->sval, keyword))
+        parse_err("Expecting keyword %s however something else was provided", keyword);
+}
+
 static struct node *node_peek_or_null()
 {
     return vector_back_ptr_or_null(current_process->node_vec);
@@ -204,6 +215,11 @@ void parse_single_token_to_node()
 void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
 {
     node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
+}
+
+void make_return_node(struct node* exp_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_RETURN, .stmt.ret.exp=exp_node });
 }
 
 void make_function_node(struct datatype *ret_type, const char *name, struct vector *arguments, struct node *body)
@@ -504,7 +520,7 @@ struct vector *parse_function_arguments()
         vector_push(arguments_vec, &argument_node);
 
         // Loop until no more function arguments are present
-        if (!token_next_is_symbol(','))
+        if (!token_next_is_operator(","))
         {
             break;
         }
@@ -623,6 +639,24 @@ void parse_variable_or_function()
     expect_sym(';');
 }
 
+
+void parse_keyword_return()
+{
+    expect_keyword("return");
+
+    // Ok we parsed the return keyword, lets now parse the expression of the return
+    // keyword and then we expect a semicolon ;)
+
+    parse_expressionable();
+
+    struct node* ret_expr = node_pop();
+    make_return_node(ret_expr);
+
+    // We expect a semicolon all the time when it comes to return keywords
+    expect_sym(';');
+}
+
+
 void parse_keyword()
 {
     struct token *token = token_peek_next();
@@ -633,6 +667,12 @@ void parse_keyword()
     if (is_keyword_variable_modifier(token->sval) || keyword_is_datatype(token->sval))
     {
         parse_variable_or_function();
+        return;
+    }
+
+    if(S_EQ(token->sval, "return"))
+    {
+        parse_keyword_return();
         return;
     }
 

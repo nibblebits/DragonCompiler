@@ -13,19 +13,30 @@ static struct expression_state blank_state = {};
     compiler_error(current_process, __VA_ARGS__)
 
 #define codegen_scope_new() \
-    scope_new(current_process)
+    scope_new(current_process, 0)
 
 #define codegen_scope_finish() \
     scope_finish(current_process)
 
-#define codegen_scope_push(value) \
-    scope_push(current_process, value)
+#define codegen_scope_push(value, elem_size) \
+    scope_push(current_process, value, elem_size)
 
 #define codegen_scope_last_entity() \
     scope_last_entity(current_process)
 
+#define codegen_scope_current() \
+    scope_current(current_process)
+
 struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *node, bool *position_known_at_compile_time);
 void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, char *out);
+
+
+// Simple bitmask for scope entity rules.
+enum
+{
+    CODEGEN_SCOPE_ENTITY_LOCAL_STACK = 0b00000001
+};
+
 
 struct codegen_scope_entity
 {
@@ -68,6 +79,14 @@ struct codegen_entity
     };
 };
 
+size_t codegen_align(size_t size)
+{
+    if (size % C_STACK_ALIGNMENT)
+        size += C_STACK_ALIGNMENT - (size % C_STACK_ALIGNMENT);
+
+    return size;
+}
+
 struct codegen_scope_entity *codegen_new_scope_entity(struct node *node, int stack_offset, int flags)
 {
     struct codegen_scope_entity *entity = calloc(sizeof(struct codegen_scope_entity), 1);
@@ -84,7 +103,7 @@ void codegen_free_scope_entity(struct codegen_scope_entity *entity)
 
 struct codegen_scope_entity *codegen_get_variable(const char *name)
 {
-    struct scope *current = current_process->scope.current;
+    struct scope *current = codegen_scope_current();
     while (current)
     {
         scope_iteration_start(current);
@@ -212,6 +231,22 @@ void asm_push(const char *ins, ...)
     vfprintf(stdout, ins, args);
     fprintf(stdout, "\n");
     va_end(args);
+}
+
+void codegen_stack_sub(size_t stack_size)
+{
+    if (stack_size != 0)
+    {
+        asm_push("sub esp, %lld", stack_size);
+    }
+}
+
+void codegen_stack_add(size_t stack_size)
+{
+    if (stack_size != 0)
+    {
+        asm_push("add esp, %lld", stack_size);
+    }
 }
 
 static const char *asm_keyword_for_size(size_t size)
@@ -526,26 +561,28 @@ void codegen_generate_function_call_for_exp_node(struct codegen_entity *func_ent
     asm_push("add esp, %i", FUNCTION_CALL_ARGUMENTS_GET_STACK_SIZE(total_args));
 }
 
-void codegen_generate_exp_node(struct node *node)
+bool codegen_handle_codegen_entity_for_expression(struct codegen_entity* entity_out, struct node* node)
 {
-    if (is_node_assignment(node))
+    assert(node->type == NODE_TYPE_EXPRESSION);
+    bool done = false;
+    if (codegen_get_entity_for_node(node->exp.left, entity_out) == 0)
     {
-        codegen_generate_assignment_expression(node);
-        return;
-    }
-
-    struct codegen_entity entity;
-    if (codegen_get_entity_for_node(node->exp.left, &entity) == 0)
-    {
-        switch (entity.node->type)
+        switch (entity_out->node->type)
         {
         case NODE_TYPE_FUNCTION:
-            codegen_generate_function_call_for_exp_node(&entity, node);
+            codegen_generate_function_call_for_exp_node(entity_out, node);
+            done = true;
             break;
         }
 
-        return;
     }
+
+    return done;
+}
+
+void codegen_generate_exp_node_for_arithmetic(struct node* node)
+{
+    assert(node->type == NODE_TYPE_EXPRESSION);
 
     codegen_generate_expressionable(node->exp.left);
     asm_push("push eax");
@@ -578,6 +615,25 @@ void codegen_generate_exp_node(struct node *node)
     {
         asm_push("sub eax, ecx");
     }
+}
+
+void codegen_generate_exp_node(struct node *node)
+{
+    if (is_node_assignment(node))
+    {
+        codegen_generate_assignment_expression(node);
+        return;
+    }
+
+    struct codegen_entity entity;
+    if (codegen_handle_codegen_entity_for_expression(&entity, node))
+    {
+        // We handled a codegen entity for a given expression.
+        // Terefore we have done the job
+        return;
+    }
+
+    codegen_generate_exp_node_for_arithmetic(node);
 }
 
 /**
@@ -763,12 +819,34 @@ size_t codegen_compute_stack_size(struct vector *vec)
     return stack_size;
 }
 
-int codegen_stack_offset(struct node *node)
+int codegen_stack_offset(struct node *node, int flags)
 {
-    int offset = -node->var.type.size;
+    int offset = node->var.type.size;
+
+    // If the stack is local then we must grow downwards
+    // as we want to access our local function arguments in our given scope
+    // You would not provide this flag for things such as function arguments whose stack
+    // is created by the function caller.
+    if (flags & CODEGEN_SCOPE_ENTITY_LOCAL_STACK)
+    {
+        offset = -offset;    
+    }
+    
     struct codegen_scope_entity *last_entity = codegen_scope_last_entity();
     if (last_entity)
     {
+
+        // If this entity is not on a local stack but we want to get an offset
+        // for an element on a stack then their is an incompatability
+        // we should just return the current offset and make no effort to include it
+        // in the calculation at all.
+        if ((flags & CODEGEN_SCOPE_ENTITY_LOCAL_STACK) 
+                && !(last_entity->flags & CODEGEN_SCOPE_ENTITY_LOCAL_STACK))
+        {
+            return offset;
+        }
+
+
         // We use += because if the stack_offset is negative then this will do a negative
         // if its positive then it will do a positive. += is the best operator for both cases
         offset += last_entity->stack_offset;
@@ -779,7 +857,38 @@ int codegen_stack_offset(struct node *node)
 
 void codegen_generate_scope_variable(struct node *node)
 {
-    codegen_scope_push(codegen_new_scope_entity(node, codegen_stack_offset(node), 0));
+    codegen_scope_push(codegen_new_scope_entity(node, codegen_stack_offset(node, CODEGEN_SCOPE_ENTITY_LOCAL_STACK), CODEGEN_SCOPE_ENTITY_LOCAL_STACK), node->var.type.size);
+}
+
+void codegen_generate_scope_variable_for_first_function_argument(struct node* node)
+{
+    // The first function argument is also +8 from the base pointer
+    // this is because of the base pointer stored on the stack and the return address
+    // Naturally once the first function argument has been stored in its scope with the +8 offset
+    // any additional generated function arguments will take the previous
+    // scope variable into account. So we only need to +8 here for the first argument
+    codegen_scope_push(codegen_new_scope_entity(node, C_OFFSET_FROM_FIRST_FUNCTION_ARGUMENT, 0), node->var.type.size);
+}
+
+void codegen_generate_scope_variable_for_function_argument(struct node* node)
+{
+    codegen_scope_push(codegen_new_scope_entity(node, codegen_stack_offset(node, 0), 0), node->var.type.size);
+}
+
+void codegen_generate_statement_return(struct node *node)
+{
+    // Let's generate the expression of the return statement
+    codegen_generate_expressionable(node->stmt.ret.exp);
+
+    // Generate the stack subtraction.
+    codegen_stack_add(codegen_align(codegen_scope_current()->size));
+
+    // Now we must leave the function
+    asm_push("pop ebp");
+    asm_push("ret");
+
+    // EAX is available now
+    register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
 void codegen_generate_statement(struct node *node)
@@ -793,21 +902,10 @@ void codegen_generate_statement(struct node *node)
     case NODE_TYPE_VARIABLE:
         codegen_generate_scope_variable(node);
         break;
-    }
-}
-void codegen_stack_sub(size_t stack_size)
-{
-    if (stack_size != 0)
-    {
-        asm_push("sub esp, %lld", stack_size);
-    }
-}
 
-void codegen_stack_add(size_t stack_size)
-{
-    if (stack_size != 0)
-    {
-        asm_push("add esp, %lld", stack_size);
+    case NODE_TYPE_STATEMENT_RETURN:
+        codegen_generate_statement_return(node);
+        break;
     }
 }
 
@@ -839,6 +937,41 @@ void codegen_generate_function_body(struct node *node)
 {
     codegen_generate_scope(node->body.statements);
 }
+
+void codegen_generate_function_argument(struct node *node)
+{
+    // Check for compiler bug. Arguments must be variables.
+    // No if statements allowed in a function argument lol
+    assert(node->type == NODE_TYPE_VARIABLE);
+
+    codegen_generate_scope_variable_for_function_argument(node);
+}
+
+void codegen_generate_first_function_argument(struct node* node)
+{
+    assert(node->type == NODE_TYPE_VARIABLE);
+    codegen_generate_scope_variable_for_first_function_argument(node);
+}
+
+void codegen_generate_function_arguments(struct vector *arguments)
+{
+    vector_set_peek_pointer(arguments, 0);
+    struct node *argument_node = vector_peek_ptr(arguments);
+
+    // First argument must be generated differently..
+    if (argument_node)
+    {
+        codegen_generate_first_function_argument(argument_node);
+        argument_node = vector_peek_ptr(arguments);
+    }
+
+    // Process the rest of the arguments
+    while (argument_node)
+    {
+        codegen_generate_function_argument(argument_node);
+        argument_node = vector_peek_ptr(arguments);
+    }
+}
 void codegen_generate_function(struct node *node)
 {
     asm_push("; %s function", node->func.name);
@@ -850,14 +983,12 @@ void codegen_generate_function(struct node *node)
 
     // Generate scope for functon arguments
     codegen_scope_new();
-    // We got to compute the stack size we need for our statements
-    size_t stack_size = codegen_compute_stack_size(node->func.argument_vector);
-    codegen_stack_sub(stack_size);
-    codegen_generate_scope_no_new_scope(node->func.argument_vector);
+    codegen_generate_function_arguments(node->func.argument_vector);
+
     // Generate the function body
     codegen_generate_function_body(node->func.body_node);
-    codegen_stack_add(stack_size);
-    // End scope for function arguments
+
+    // End function argument scope
     codegen_scope_finish();
 
     asm_push("pop ebp");

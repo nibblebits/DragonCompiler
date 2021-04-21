@@ -11,6 +11,10 @@
 // 16 byte alignment for C programs.
 #define C_STACK_ALIGNMENT 16
 
+// Have to skip the pushed base pointer and the return address
+// when accessing function arguments passed to us and looking up the stack
+#define C_OFFSET_FROM_FIRST_FUNCTION_ARGUMENT 8
+
 // Macro's make life cleaner..
 #define S_EQ(str, str2) \
     (strcmp(str, str2) == 0)
@@ -34,7 +38,7 @@
     case '(':                           \
     case '[':                           \
     case ']':                           \
-    case ','                            
+    case ','
 
 #define NUMERIC_CASE \
     case '0':        \
@@ -104,7 +108,7 @@ enum
 
 // 4 bytes for a stack push and pop on 32 bit arch.
 #define STACK_PUSH_SIZE 4
-#define FUNCTION_CALL_ARGUMENTS_GET_STACK_SIZE(total_args) total_args * STACK_PUSH_SIZE
+#define FUNCTION_CALL_ARGUMENTS_GET_STACK_SIZE(total_args) total_args *STACK_PUSH_SIZE
 
 struct expression_state
 {
@@ -261,14 +265,25 @@ struct datatype
     size_t size;
 };
 
+
 /**
  * Scopes are composed of a hireachy of variable nodes
  */
 struct scope
 {
+    /**
+     * Flags of the scope that describe how it should be treated during certain operations
+     * such as iteration
+     */
+    int flags;
+
     // These are a vector of scope entities the actual element pushed to the vector
     // is creator defined, whoever decides to create a scope can push what they like
     struct vector *entities;
+
+    // The total size in bytes for the scope including all parent scopes
+    // at this point in time. 16-byte aligned as required by C standard
+    size_t size;
 
     // The parent scope NULL if we are at the root.
     struct scope *parent;
@@ -290,9 +305,9 @@ enum
     NODE_TYPE_IDENTIFIER,
     NODE_TYPE_VARIABLE,
     NODE_TYPE_FUNCTION,
-    NODE_TYPE_BODY
+    NODE_TYPE_BODY,
+    NODE_TYPE_STATEMENT_RETURN
 };
-
 
 struct node
 {
@@ -354,6 +369,16 @@ struct node
                 };
             } const_val;
         } var;
+
+        union statement
+        {
+            // Represents a return statement.
+            struct return_stmt
+            {
+                // The expresion of the return statement.
+                struct node *exp;
+            } ret;
+        } stmt;
     };
 
     // Literal values for nodes of generic types. I.e numbers and identifiers
@@ -437,12 +462,12 @@ char compile_process_peek_char(struct compile_process *process);
 void compile_process_push_char(struct compile_process *process, char c);
 
 struct scope *scope_create_root(struct compile_process *process);
-struct scope *scope_new(struct compile_process *process);
+struct scope *scope_new(struct compile_process *process, int flags);
 void scope_finish(struct compile_process *process);
 /**
  * Pushes an element to the current scope
  */
-void scope_push(struct compile_process *process, void *ptr);
+void scope_push(struct compile_process *process, void *ptr, size_t elem_size);
 
 /**
  * Returns the last element from the given scope. If no element is in this scope
@@ -454,6 +479,11 @@ void *scope_last_entity(struct compile_process *process);
 void *scope_iterate_back(struct scope *scope);
 void scope_iteration_start(struct scope *scope);
 void scope_iteration_end(struct scope *scope);
+
+/**
+ * Returns the current scope for the code generator
+ */
+struct scope* scope_current(struct compile_process* process);
 
 /**
  * Registers a symbol to the symbol table

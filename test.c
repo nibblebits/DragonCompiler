@@ -1,10 +1,8 @@
 
 int test(int z, int e)
 {
-    return z+e;
+    int d = 90;
+
+    return d+e;
 }
 
-int main(int argc)
-{
-    test(50, 60);
-}

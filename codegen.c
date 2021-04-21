@@ -858,6 +858,14 @@ int codegen_stack_offset(struct node *node, int flags)
 void codegen_generate_scope_variable(struct node *node)
 {
     codegen_scope_push(codegen_new_scope_entity(node, codegen_stack_offset(node, CODEGEN_SCOPE_ENTITY_LOCAL_STACK), CODEGEN_SCOPE_ENTITY_LOCAL_STACK), node->var.type.size);
+
+    // Scope variables have values, lets compute that
+    if (node->var.val)
+    {
+        codegen_generate_expressionable(node->var.val);
+    }
+
+    register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
 void codegen_generate_scope_variable_for_first_function_argument(struct node* node)

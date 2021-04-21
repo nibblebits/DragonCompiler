@@ -1,11 +1,7 @@
 #include <stdio.h>
-
-void test(int a)
-{
-
-}
-
+int test(int z, int e);
 int main(int argc, char** argv)
 {
-    test(50);
+    printf("%i\n", test(50, 60));
+    return 0;
 }

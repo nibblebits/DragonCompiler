@@ -1,30 +1,21 @@
-global _start
+global test
 
-section .data
-section .text
-_start:
-    jmp main
-    
 ; test function
 test:
 push ebp
 mov ebp, esp
-mov eax, [ebp+8]
+sub esp, 16
+mov eax, 90
+mov [ebp-4], eax
+mov eax, [ebp-4]
+push eax
+mov eax, [ebp+12]
+pop ecx
+xchg ecx, eax
+add eax, ecx
+add esp, 16
 pop ebp
 ret
+add esp, 16
 pop ebp
 ret
-; main function
-main:
-push ebp
-mov ebp, esp
-lea ebx, [test]
-mov eax, 50
-PUSH eax
-mov eax, 60
-PUSH eax
-call [ebx]
-add esp, 8
-pop ebp
-ret
-

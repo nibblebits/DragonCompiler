@@ -857,12 +857,25 @@ int codegen_stack_offset(struct node *node, int flags)
 
 void codegen_generate_scope_variable(struct node *node)
 {
-    codegen_scope_push(codegen_new_scope_entity(node, codegen_stack_offset(node, CODEGEN_SCOPE_ENTITY_LOCAL_STACK), CODEGEN_SCOPE_ENTITY_LOCAL_STACK), node->var.type.size);
+    struct codegen_scope_entity* entity = codegen_new_scope_entity(node, codegen_stack_offset(node, CODEGEN_SCOPE_ENTITY_LOCAL_STACK), CODEGEN_SCOPE_ENTITY_LOCAL_STACK);
+    codegen_scope_push(entity, node->var.type.size);
 
     // Scope variables have values, lets compute that
     if (node->var.val)
     {
+        codegen_new_expression_state();
+
+        // Process the right node first as this is an expression
         codegen_generate_expressionable(node->var.val);
+
+        codegen_end_expression_state();
+
+        // Mark the EAX register as no longer used.
+        register_unset_flag(REGISTER_EAX_IS_USED);
+
+        // Write the move. Only intergers supported at the moment as you can see
+        // this will be improved.
+        asm_push("mov [ebp%i], eax", entity->stack_offset);
     }
 
     register_unset_flag(REGISTER_EAX_IS_USED);

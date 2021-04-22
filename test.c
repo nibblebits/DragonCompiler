@@ -1,8 +1,5 @@
-
-int test(int z, int e)
+int test()
 {
-    int d = 90;
-
-    return d+e;
+    int a = 30;
+    a = -100000;
 }
-

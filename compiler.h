@@ -306,7 +306,8 @@ enum
     NODE_TYPE_VARIABLE,
     NODE_TYPE_FUNCTION,
     NODE_TYPE_BODY,
-    NODE_TYPE_STATEMENT_RETURN
+    NODE_TYPE_STATEMENT_RETURN,
+    NODE_TYPE_UNARY
 };
 
 struct node
@@ -324,6 +325,13 @@ struct node
             int flags;
         } exp;
 
+        // Represents unary expressions i.e "~abc", "-a", "-90"
+        struct unary
+        {
+            const char* op;
+            struct node* operand;
+        } unary;
+        
         struct function
         {
             // The return type of this function.. I.e long, double, int

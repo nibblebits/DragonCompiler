@@ -69,6 +69,11 @@ static bool parser_left_op_has_priority(const char *op_left, const char *op_righ
     return precedence_left <= precedence_right;
 }
 
+static bool parser_is_unary_operator(const char* op)
+{
+    return S_EQ(op, "-") || S_EQ(op, "!") || S_EQ(op, "~");
+}
+
 static struct token *token_next()
 {
     return vector_peek(current_process->token_vec);
@@ -84,6 +89,7 @@ static bool token_next_is_operator(const char *op)
     struct token *token = token_peek_next();
     return token && token->type == TOKEN_TYPE_OPERATOR && S_EQ(token->sval, op);
 }
+
 
 static bool token_next_is_symbol(char sym)
 {
@@ -217,6 +223,11 @@ void make_exp_node(struct node *node_left, struct node *node_right, const char *
     node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
 }
 
+void make_unary_node(const char* unary_op, struct node* operand_node)
+{
+    node_create(&(struct node){NODE_TYPE_UNARY, .unary.op = unary_op, .unary.operand = operand_node});
+}
+
 void make_return_node(struct node* exp_node)
 {
     node_create(&(struct node){NODE_TYPE_STATEMENT_RETURN, .stmt.ret.exp=exp_node });
@@ -284,25 +295,30 @@ void parser_reorder_expression(struct node **node_out)
 
     }
 }
-/*
-void parser_reorder_expressions(struct compile_process *process)
+
+void parse_for_unary()
 {
-    struct vector *exp_nodes = parser_get_all_nodes_of_type(process, NODE_TYPE_EXPRESSION, true);
-    struct node **node_out = NULL;
-    while (!vector_empty(exp_nodes))
-    {
-        node_out = vector_back_ptr(exp_nodes);
-        parser_reorder_expression(node_out);
-        vector_pop(exp_nodes);
-    }
-    vector_free(exp_nodes);
-}*/
+    // Let's get the unary operator
+    const char* unary_op = token_next()->sval;
+
+    // Now lets parse the expression after this unary operator
+    parse_expressionable();
+
+    struct node* unary_operand_node = node_pop();
+    make_unary_node(unary_op, unary_operand_node);
+}
 
 void parse_exp()
 {
     if (S_EQ(token_peek_next()->sval, "("))
     {
         parse_for_parentheses();
+        return;
+    }
+
+    if (parser_is_unary_operator(token_peek_next()->sval))
+    {
+        parse_for_unary();
         return;
     }
 

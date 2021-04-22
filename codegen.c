@@ -601,11 +601,11 @@ void codegen_generate_exp_node_for_arithmetic(struct node* node)
     // Let's now deal with it
     if (S_EQ(node->exp.op, "*"))
     {
-        asm_push("mul ecx");
+        asm_push("imul ecx");
     }
     else if (S_EQ(node->exp.op, "/"))
     {
-        asm_push("div ecx");
+        asm_push("idiv ecx");
     }
     else if (S_EQ(node->exp.op, "+"))
     {
@@ -731,6 +731,17 @@ static bool is_comma_operator(struct node *node)
     return S_EQ(node->exp.op, ",");
 }
 
+void codegen_generate_unary(struct node* node)
+{
+    codegen_generate_expressionable(node->unary.operand);
+    // We have generated the value for the operand
+    // Let's now decide what to do with the result based on the operator
+    if(S_EQ(node->unary.op, "-"))
+    {
+        // We have negation operator, so negate.
+        asm_push("neg eax");
+    }
+}
 void codegen_generate_expressionable(struct node *node)
 {
     switch (node->type)
@@ -745,6 +756,10 @@ void codegen_generate_expressionable(struct node *node)
 
     case NODE_TYPE_IDENTIFIER:
         codegen_generate_identifier(node);
+        break;
+
+    case NODE_TYPE_UNARY:
+        codegen_generate_unary(node);
         break;
     }
 }

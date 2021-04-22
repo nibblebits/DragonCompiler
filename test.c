@@ -1,5 +1,10 @@
+struct abc
+{
+    int a;
+    int b;
+    int c;
+};
 int test()
 {
-    int a = 30;
-    a = -100000;
+    struct abc a;
 }

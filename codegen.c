@@ -1022,7 +1022,7 @@ void codegen_generate_function(struct node *node)
     codegen_generate_function_arguments(node->func.argument_vector);
 
     // Generate the function body
-    codegen_generate_function_body(node->func.body_node);
+    codegen_generate_function_body(node->func.body_n);
 
     // End function argument scope
     codegen_scope_finish();

@@ -46,6 +46,11 @@ void symresolver_build_for_function_node(struct compile_process* process, struct
     symresolver_register_symbol(process, node->func.name, SYMBOL_TYPE_NODE, node);
 }
 
+void symresolver_build_for_structure_node(struct compile_process* process, struct node* node)
+{
+    symresolver_register_symbol(process, node->_struct.name, SYMBOL_TYPE_NODE, node);
+}
+
 void symresolver_build_for_node(struct compile_process* process, struct node* node)
 {
     switch(node->type)
@@ -57,20 +62,11 @@ void symresolver_build_for_node(struct compile_process* process, struct node* no
         case NODE_TYPE_FUNCTION:
             symresolver_build_for_function_node(process, node);
         break;
+
+        case NODE_TYPE_STRUCT:
+            symresolver_build_for_structure_node(process, node);
+        break;
     
         // Ignore all other nodes they are not able to become symbols..
     }
-}
-
-int symresolver_build(struct compile_process* process)
-{
-    vector_set_peek_pointer(process->node_tree_vec, 0);
-    struct node* node = vector_peek_ptr(process->node_tree_vec);
-    while(node)
-    {
-        symresolver_build_for_node(process, node);
-        node = vector_peek_ptr(process->node_tree_vec);
-    }
-
-    return 0;
 }

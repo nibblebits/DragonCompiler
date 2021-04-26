@@ -44,7 +44,7 @@ void test(struct node* node)
     else if(node->type == NODE_TYPE_FUNCTION)
     {
         test_vec(node->func.argument_vector);
-        test_vec(node->func.body_node->body.statements);
+        test_vec(node->func.body_n->body.statements);
     }
     
 }
@@ -57,10 +57,8 @@ int compile_file(const char *filename)
     if (lex(process) != LEXICAL_ANALYSIS_ALL_OK)
         return COMPILER_FAILED_WITH_ERRORS;
 
+    // Symbol resolution is now done during parsing..
     if (parse(process) != PARSE_ALL_OK)
-        return COMPILER_FAILED_WITH_ERRORS;
-
-    if (symresolver_build(process) != PARSE_ALL_OK)
         return COMPILER_FAILED_WITH_ERRORS;
 
     for (int i = 0; i < vector_count(process->node_tree_vec); i++)

@@ -209,6 +209,13 @@ struct token
     };
 };
 
+
+struct sizeable_node
+{
+    size_t size;
+    struct node* node;
+};
+
 enum
 {
     SYMBOL_TYPE_NODE,
@@ -249,7 +256,8 @@ enum
     DATA_TYPE_FLOAT,
     DATA_TYPE_DOUBLE,
     DATA_TYPE_LONG,
-    DATA_TYPE_USER_DEFINED
+    DATA_TYPE_STRUCT,
+    DATA_TYPE_UNION
 };
 
 struct datatype
@@ -307,7 +315,8 @@ enum
     NODE_TYPE_FUNCTION,
     NODE_TYPE_BODY,
     NODE_TYPE_STATEMENT_RETURN,
-    NODE_TYPE_UNARY
+    NODE_TYPE_UNARY,
+    NODE_TYPE_STRUCT
 };
 
 struct node
@@ -332,6 +341,13 @@ struct node
             struct node* operand;
         } unary;
         
+        // Represents a C structure in the tree.
+        struct _struct
+        {
+            const char* name;
+            struct node* body_n;
+        } _struct;
+
         struct function
         {
             // The return type of this function.. I.e long, double, int
@@ -347,7 +363,7 @@ struct node
             // The body of this function, everything between the { } brackets.
             // This is NULL if this function is just a definition and its a pointer
             // to the body node if this function is declared. and has a full body
-            struct node *body_node;
+            struct node *body_n;
         } func;
 
         struct body
@@ -355,6 +371,11 @@ struct node
             // Body nodes have a vector of nodes that represent statements
             // vector<struct node*>
             struct vector *statements;
+
+            // The size of the combined variables in this body.
+            // Useful for accessing the bodies of structures and unions
+            // where you need to know the size.
+            size_t variable_size;
         } body;
 
         struct variable
@@ -424,11 +445,6 @@ int lex(struct compile_process *process);
  * Parses the tree provided from lexical analysis
  */
 int parse(struct compile_process *process);
-
-/**
- * Builds the in memory symbol table for the given tree
- */
-int symresolver_build(struct compile_process *process);
 
 /**
  * Generates the assembly output for the given AST
@@ -501,4 +517,10 @@ struct symbol *symresolver_register_symbol(struct compile_process *process, cons
  * Gets the registered symbol from the symbol table for the given name
  */
 struct symbol *symresolver_get_symbol(struct compile_process *process, const char *name);
+
+/**
+ * Builds a symbol for the given node.
+ * Note: The node must be fully parsed and initialized
+ */
+void symresolver_build_for_node(struct compile_process* process, struct node* node);
 #endif

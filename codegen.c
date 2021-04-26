@@ -30,13 +30,11 @@ static struct expression_state blank_state = {};
 struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *node, bool *position_known_at_compile_time);
 void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, char *out);
 
-
 // Simple bitmask for scope entity rules.
 enum
 {
     CODEGEN_SCOPE_ENTITY_LOCAL_STACK = 0b00000001
 };
-
 
 struct codegen_scope_entity
 {
@@ -101,7 +99,7 @@ void codegen_free_scope_entity(struct codegen_scope_entity *entity)
     free(entity);
 }
 
-struct codegen_scope_entity *codegen_get_variable(const char *name)
+struct codegen_scope_entity *codegen_get_scope_variable(const char *name)
 {
     struct scope *current = codegen_scope_current();
     while (current)
@@ -152,11 +150,6 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
 {
     memset(entity_out, 0, sizeof(struct codegen_entity));
 
-    // We currently do not deal with expressions.. not today
-    if (node->type != NODE_TYPE_IDENTIFIER)
-    {
-        return -1;
-    }
 
     bool position_known_at_compile_time;
     struct codegen_scope_entity *scope_entity = codegen_get_scope_variable_for_node(node, &position_known_at_compile_time);
@@ -379,6 +372,65 @@ static bool is_node_assignment(struct node *node)
 }
 
 /**
+ * Finds the given structure offset for the node provided. If the node represents
+ * an expression such as: "a.b.c.d.f" then each operand will be processed and the structure
+ * will be found and offset will be understood.
+ * 
+ * This is in the code generator but it should be moved to helper.c.
+ * Reason its in code generator is because we depend on some other functions that should be in helper.c
+ * but are in the code generator.
+ * 
+ * 
+ * struct test
+ * {
+ *  int a;
+ *  int b;
+ * };
+ * var_node_out will be set to the final variable in an expression i.e for the expression "test.b" var_node_out
+ * will contain the variable node for variable "b" in this case our test structures variable "b"
+ * 
+ * \param var_node_out After calculating an offset for the structure the final structure variable in the sequence is outputted to vaR_node_out
+ */
+int struct_offset_for_node(struct compile_process *compile_proc, struct node *node, struct node** var_node_out) 
+{
+    // We only want to deal with expressions i.e "a.b.c"
+    assert(node->type == NODE_TYPE_EXPRESSION);
+    assert(is_access_operator(node->exp.op));
+
+    // Left operand = structure variable
+    // right operand = variable (possibly structure variable) or expression
+
+    struct node *left_operand = node->exp.left;
+    struct node *right_operand = node->exp.right;
+
+    // Represents the offset for the current expression's left and right operands
+    // ignoring any further expressions on the right operand.
+    // For example: "a.b.c". This offset is the offset of variable "b" in structure "a".
+    // The ".c" is not computed. We will compute that in a moment.
+
+    struct codegen_entity left_variable_entity;
+    assert(codegen_get_entity_for_node(left_operand, &left_variable_entity) == 0);
+
+    int offset = struct_offset(current_process,
+                               left_variable_entity.node->var.type.type_str,
+                               first_node_of_type(right_operand, NODE_TYPE_IDENTIFIER)->sval, var_node_out);
+
+    // Is the right operand an expression too?
+    if (is_access_operator_node(right_operand))
+    {
+        // Great then we need to deal with this. Recursion ;)
+      //  offset += struct_offset_for_node(current_process, right_operand);
+      assert(0==1 && "Not implemented yet. No structure in structure allowed");
+    }
+
+    // We should now have a computed offset for the entire structure access
+    // We do not care for pointers yet which will need to be considered
+    // We cant compute addresses we can't know until run time ;)
+
+    return offset;
+}
+
+/**
  * Iterates through the node until a codegen_scope_entity can be found, otherwise returns NULL.
  * This function does not work for structure pointers as its impossible to complete this action
  * at compile time. If the node ends up at any point pointing to a structure pointer, then this function
@@ -390,14 +442,33 @@ static bool is_node_assignment(struct node *node)
 struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *node, bool *position_known_at_compile_time)
 {
     *position_known_at_compile_time = false;
-    // Structures and arrays are not supported yet
-    if (node->type != NODE_TYPE_IDENTIFIER)
+    struct node *left_node = node;
+
+    if (node->type == NODE_TYPE_EXPRESSION)
     {
-        return NULL;
+        left_node = node->exp.left;
+    }
+
+    struct codegen_scope_entity *entity = codegen_get_scope_variable(left_node->sval);
+
+    if (is_access_operator_node(node))
+    {
+        struct node* var_node = NULL;
+        int offset = struct_offset_for_node(current_process, node, &var_node);
+        // We must create a new scope entity to represent this structure
+        // We will then add the stack offset for the root entity to the offset
+        // giving an absolute address for a compile time-known structure address.
+        // Pointers not yet supported.
+        
+        // Our given entity will represent the resolved structure variable
+        // its offset should be the structure variable sstack offset + the absolute offset
+        // from zero in the structure.
+        entity = codegen_new_scope_entity(var_node, entity->stack_offset+offset, 0);
+
     }
 
     *position_known_at_compile_time = true;
-    struct codegen_scope_entity *entity = codegen_get_variable(node->sval);
+
     return entity;
 }
 
@@ -561,11 +632,17 @@ void codegen_generate_function_call_for_exp_node(struct codegen_entity *func_ent
     asm_push("add esp, %i", FUNCTION_CALL_ARGUMENTS_GET_STACK_SIZE(total_args));
 }
 
-bool codegen_handle_codegen_entity_for_expression(struct codegen_entity* entity_out, struct node* node)
+void codegen_generate_structure_or_union_access(struct codegen_entity *entity_out, struct node *node)
+{
+
+
+}
+
+bool codegen_handle_codegen_entity_for_expression(struct codegen_entity *entity_out, struct node *node)
 {
     assert(node->type == NODE_TYPE_EXPRESSION);
     bool done = false;
-    if (codegen_get_entity_for_node(node->exp.left, entity_out) == 0)
+    if (codegen_get_entity_for_node(node, entity_out) == 0)
     {
         switch (entity_out->node->type)
         {
@@ -574,13 +651,12 @@ bool codegen_handle_codegen_entity_for_expression(struct codegen_entity* entity_
             done = true;
             break;
         }
-
     }
 
     return done;
 }
 
-void codegen_generate_exp_node_for_arithmetic(struct node* node)
+void codegen_generate_exp_node_for_arithmetic(struct node *node)
 {
     assert(node->type == NODE_TYPE_EXPRESSION);
 
@@ -629,7 +705,7 @@ void codegen_generate_exp_node(struct node *node)
     if (codegen_handle_codegen_entity_for_expression(&entity, node))
     {
         // We handled a codegen entity for a given expression.
-        // Terefore we have done the job
+        // Therefore we have done the job
         return;
     }
 
@@ -731,12 +807,12 @@ static bool is_comma_operator(struct node *node)
     return S_EQ(node->exp.op, ",");
 }
 
-void codegen_generate_unary(struct node* node)
+void codegen_generate_unary(struct node *node)
 {
     codegen_generate_expressionable(node->unary.operand);
     // We have generated the value for the operand
     // Let's now decide what to do with the result based on the operator
-    if(S_EQ(node->unary.op, "-"))
+    if (S_EQ(node->unary.op, "-"))
     {
         // We have negation operator, so negate.
         asm_push("neg eax");
@@ -844,9 +920,9 @@ int codegen_stack_offset(struct node *node, int flags)
     // is created by the function caller.
     if (flags & CODEGEN_SCOPE_ENTITY_LOCAL_STACK)
     {
-        offset = -offset;    
+        offset = -offset;
     }
-    
+
     struct codegen_scope_entity *last_entity = codegen_scope_last_entity();
     if (last_entity)
     {
@@ -855,12 +931,10 @@ int codegen_stack_offset(struct node *node, int flags)
         // for an element on a stack then their is an incompatability
         // we should just return the current offset and make no effort to include it
         // in the calculation at all.
-        if ((flags & CODEGEN_SCOPE_ENTITY_LOCAL_STACK) 
-                && !(last_entity->flags & CODEGEN_SCOPE_ENTITY_LOCAL_STACK))
+        if ((flags & CODEGEN_SCOPE_ENTITY_LOCAL_STACK) && !(last_entity->flags & CODEGEN_SCOPE_ENTITY_LOCAL_STACK))
         {
             return offset;
         }
-
 
         // We use += because if the stack_offset is negative then this will do a negative
         // if its positive then it will do a positive. += is the best operator for both cases
@@ -872,7 +946,7 @@ int codegen_stack_offset(struct node *node, int flags)
 
 void codegen_generate_scope_variable(struct node *node)
 {
-    struct codegen_scope_entity* entity = codegen_new_scope_entity(node, codegen_stack_offset(node, CODEGEN_SCOPE_ENTITY_LOCAL_STACK), CODEGEN_SCOPE_ENTITY_LOCAL_STACK);
+    struct codegen_scope_entity *entity = codegen_new_scope_entity(node, codegen_stack_offset(node, CODEGEN_SCOPE_ENTITY_LOCAL_STACK), CODEGEN_SCOPE_ENTITY_LOCAL_STACK);
     codegen_scope_push(entity, node->var.type.size);
 
     // Scope variables have values, lets compute that
@@ -896,7 +970,7 @@ void codegen_generate_scope_variable(struct node *node)
     register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
-void codegen_generate_scope_variable_for_first_function_argument(struct node* node)
+void codegen_generate_scope_variable_for_first_function_argument(struct node *node)
 {
     // The first function argument is also +8 from the base pointer
     // this is because of the base pointer stored on the stack and the return address
@@ -906,7 +980,7 @@ void codegen_generate_scope_variable_for_first_function_argument(struct node* no
     codegen_scope_push(codegen_new_scope_entity(node, C_OFFSET_FROM_FIRST_FUNCTION_ARGUMENT, 0), node->var.type.size);
 }
 
-void codegen_generate_scope_variable_for_function_argument(struct node* node)
+void codegen_generate_scope_variable_for_function_argument(struct node *node)
 {
     codegen_scope_push(codegen_new_scope_entity(node, codegen_stack_offset(node, 0), 0), node->var.type.size);
 }
@@ -983,7 +1057,7 @@ void codegen_generate_function_argument(struct node *node)
     codegen_generate_scope_variable_for_function_argument(node);
 }
 
-void codegen_generate_first_function_argument(struct node* node)
+void codegen_generate_first_function_argument(struct node *node)
 {
     assert(node->type == NODE_TYPE_VARIABLE);
     codegen_generate_scope_variable_for_first_function_argument(node);

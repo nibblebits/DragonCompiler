@@ -1,5 +1,5 @@
 INCLUDES= -I ./ -I ./helpers
-OBJECTS= ./build/misc.o ./build/lexer.o ./build/parser.o ./build/symresolver.o ./build/scope.o ./build/codegen.o ./build/helpers/vector.o ./build/helpers/buffer.o ./build/compiler.o ./build/cprocess.o
+OBJECTS= ./build/misc.o ./build/lexer.o ./build/parser.o ./build/symresolver.o ./build/scope.o ./build/helper.o ./build/codegen.o ./build/helpers/vector.o ./build/helpers/buffer.o ./build/compiler.o ./build/cprocess.o
 all: ${OBJECTS}
 	gcc main.c -o main ${OBJECTS} -g
 
@@ -21,6 +21,8 @@ all: ${OBJECTS}
 ./build/scope.o: ./scope.c
 	gcc scope.c ${INCLUDES} -o ./build/scope.o -g -c
 
+./build/helper.o: ./helper.c
+	gcc helper.c ${INCLUDES} -o ./build/helper.o -g -c
 
 ./build/compiler.o: ./compiler.c
 	gcc compiler.c ${INCLUDES} -o ./build/compiler.o -g -c

@@ -38,7 +38,8 @@
     case '(':                           \
     case '[':                           \
     case ']':                           \
-    case ','
+    case ',':                            \
+    case '.'                           \
 
 #define NUMERIC_CASE \
     case '0':        \
@@ -61,7 +62,6 @@
 #define SYMBOL_CASE \
     case '{':       \
     case '}':       \
-    case '.':       \
     case ':':       \
     case ';':       \
     case '#':       \
@@ -523,4 +523,57 @@ struct symbol *symresolver_get_symbol(struct compile_process *process, const cha
  * Note: The node must be fully parsed and initialized
  */
 void symresolver_build_for_node(struct compile_process* process, struct node* node);
+
+
+/**
+ * Helper routines helper.c
+ */
+
+/**
+ * Gets the offset from the given structure stored in the "compile_proc".
+ * Looks for the given variable specified named by "var"
+ * Returns the absolute position starting from 0 upwards.
+ * 
+ * I.e
+ * 
+ * struct abc
+ * {
+ *    int a;
+ *    int b;
+ * };
+ * 
+ * If we did abc.a then 0 would be returned. If we did abc.b then 4 would be returned. because
+ * int is 4 bytes long. 
+ * 
+ * \param compile_proc The compiler process to peek for a structure for
+ * \param struct_name The name of the given structure we must peek into
+ * \param var_name The variable in the structure that we want the offset for.
+ */
+int struct_offset(struct compile_process* compile_proc, const char* struct_name, const char* var_name, struct node** var_node_out);
+
+/**
+ * Finds the first node of the given type.
+ * 
+ * For example lets imagine the expression "a.b.e.f"
+ * if you called this function with NODE_TYPE_IDENTIFIER as the type and you passed in 
+ * the right operand of the expression i.e a.E then you would find that the node of "b"
+ * would be returned
+ */
+struct node* first_node_of_type(struct node* node, int type);
+
+
+/**
+ * Returns true if the given operator is an access operator.
+ * 
+ * I.e a.b.c
+ * 
+ * a->b.k
+ */
+bool is_access_operator(const char *op);
+
+
+/**
+ * Just like is_access_operator except it checks on a node basis rather than operator
+ */
+bool is_access_operator_node(struct node* node);
 #endif

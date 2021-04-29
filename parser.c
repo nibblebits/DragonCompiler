@@ -14,6 +14,18 @@
 
 #define TOTAL_OPERATOR_GROUPS 13
 #define MAX_OPERATORS_IN_GROUP 12
+
+enum
+{
+    ASSOCIATIVITY_LEFT_TO_RIGHT,
+    ASSOCIATIVITY_RIGHT_TO_LEFT
+};
+struct op_precedence_group
+{
+    char *operators[MAX_OPERATORS_IN_GROUP];
+    int associativity;
+};
+
 /**
  * Format: 
  * {operator1, operator2, operator3, NULL}
@@ -22,21 +34,22 @@
  * 
  * Also end the collection of groups with a NULL pointer
  */
+static struct op_precedence_group op_precedence[TOTAL_OPERATOR_GROUPS] = {
+    {.operators = {"++", "--", "()", "[", "]", ",", ".", "->", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"*", "/", "%%", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"+", "-", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"<<", ">>", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"<", "<=", ">", ">=", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"==", "!=", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"&", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"^", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"|", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"&&", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"||", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"?", ":", NULL}, .associativity = ASSOCIATIVITY_RIGHT_TO_LEFT},
+    {.operators = {"=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|=", NULL}, .associativity = ASSOCIATIVITY_RIGHT_TO_LEFT}
 
-static char *op_precedence[TOTAL_OPERATOR_GROUPS][MAX_OPERATORS_IN_GROUP] = {
-    {"++", "--", "()", "[", "]", ",", ".", "->", NULL},
-    {"*", "/", "%%", NULL}, // Division should go here.
-    {"+", "-", NULL},
-    {"<<", ">>", NULL},
-    {"<", "<=", ">", ">=", NULL},
-    {"==", "!=", NULL},
-    {"&", NULL},
-    {"^", NULL},
-    {"|", NULL},
-    {"&&", NULL},
-    {"||", NULL},
-    {"?", ":", NULL},
-    {"=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|=", NULL}};
+};
 
 static struct compile_process *current_process;
 int parse_next();
@@ -45,15 +58,17 @@ void parse_statement();
 #define parse_err(...) \
     compiler_error(current_process, __VA_ARGS__)
 
-static int parser_get_precedence_for_operator(const char *op)
+static int parser_get_precedence_for_operator(const char *op, struct op_precedence_group **group_out)
 {
+    *group_out = NULL;
     for (int i = 0; i < TOTAL_OPERATOR_GROUPS; i++)
     {
-        for (int b = 0; op_precedence[i][b]; b++)
+        for (int b = 0; op_precedence[i].operators[b]; b++)
         {
-            const char *_op = op_precedence[i][b];
+            const char *_op = op_precedence[i].operators[b];
             if (S_EQ(op, _op))
             {
+                *group_out = &op_precedence[i];
                 return i;
             }
         }
@@ -64,8 +79,23 @@ static int parser_get_precedence_for_operator(const char *op)
 
 static bool parser_left_op_has_priority(const char *op_left, const char *op_right)
 {
-    int precedence_left = parser_get_precedence_for_operator(op_left);
-    int precedence_right = parser_get_precedence_for_operator(op_right);
+    struct op_precedence_group *group_left = NULL;
+    struct op_precedence_group *group_right = NULL;
+
+    // Same operator? Then they have equal priority!
+    if (S_EQ(op_left, op_right))
+        return false;
+    
+
+    int precedence_left = parser_get_precedence_for_operator(op_left, &group_left);
+    int precedence_right = parser_get_precedence_for_operator(op_right, &group_right);
+    if (group_left->associativity == ASSOCIATIVITY_RIGHT_TO_LEFT)
+    {
+        // Right to left associativity in the left group? and right group left_to_right?
+        // Then right group takes priority
+        return false;
+    }
+
     return precedence_left <= precedence_right;
 }
 
@@ -250,7 +280,7 @@ void make_function_node(struct datatype *ret_type, const char *name, struct vect
 
 void make_body_node(struct vector *body_vec, size_t variable_size)
 {
-    node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.variable_size=variable_size});
+    node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.variable_size = variable_size});
 }
 
 void make_variable_node(struct datatype *datatype, struct token *name_token, struct node *value_node)
@@ -285,10 +315,8 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec)
     // Incrementing it by the size of our variable
     parser_append_size_for_node(variable_size, stmt_node);
 
-
     // Let's make the body node for this one statement.
     make_body_node(body_vec, *variable_size);
-
 }
 
 /**
@@ -309,7 +337,6 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
         // Change the variable_size if this statement is a variable.
         // Incrementing it by the size of our variable
         parser_append_size_for_node(variable_size, stmt_node);
-    
     }
     // bodies must end with a right curley bracket!
     expect_sym('}');
@@ -333,7 +360,7 @@ void parse_body(size_t *variable_size)
     if (!variable_size)
     {
         variable_size = &tmp_size;
-    }   
+    }
 
     struct vector *body_vec = vector_create(sizeof(struct node *));
     // We don't have a left curly? Then this body composes of only one statement
@@ -354,39 +381,44 @@ void parse_body(size_t *variable_size)
 void parser_reorder_expression(struct node **node_out)
 {
     struct node *node = *node_out;
-    // We must first reorder the children
-
-    if (node->exp.left->type == NODE_TYPE_EXPRESSION)
+    // The node passed to us has to be an expression
+    if (node->type != NODE_TYPE_EXPRESSION)
     {
-        parser_reorder_expression(&node->exp.left);
+        return;
     }
 
-    if (node->exp.right && node->exp.right->type == NODE_TYPE_EXPRESSION)
+    // No expressions nothing to do
+    if (node->exp.left->type != NODE_TYPE_EXPRESSION &&
+        node->exp.right->type != NODE_TYPE_EXPRESSION)
     {
-        // Don't forget to reorder the right node first
-        parser_reorder_expression(&node->exp.right);
+        return;
+    }
 
-        struct node *right_node = node->exp.right;
-        // We only reorder expressions that are not unique or alone.
-        if (!(right_node->exp.flags & EXPRESSION_FLAG_TREAT_UNIQUE) &&
-            parser_left_op_has_priority(node->exp.op, right_node->exp.op))
+    // If we have a right expression but left is not an expression
+    // then some reordering may be needed
+    if (node->exp.left->type != NODE_TYPE_EXPRESSION &&
+        node->exp.right->type == NODE_TYPE_EXPRESSION)
+    {
+        const char* right_op = node->exp.right->exp.op;
+        // We have something like 50+E(20+90)
+        // We must find the priority operator
+        if (parser_left_op_has_priority(node->exp.op, right_op))
         {
-            // Left has priority so we must take the left node of the right node.
-            // and reorder the expression
-            make_exp_node(node->exp.left, right_node->exp.left, node->exp.op);
-            struct node *new_root_exp_node = node_pop();
-            right_node->exp.left = new_root_exp_node;
-            node = right_node;
-            *node_out = node;
-        }
-        else if (!parser_left_op_has_priority(node->exp.op, right_node->exp.op))
-        {
-            make_exp_node(node->exp.left, right_node->exp.left, node->exp.op);
-            struct node *new_root_exp_node = node_pop();
-            node->exp.left = new_root_exp_node;
-            node->exp.right = right_node->exp.right;
-            node->exp.op = right_node->exp.op;
-            *node_out = node;
+            // We have something like 50*E(20+120)
+            // We must produce the result E(50*20)+120
+            struct node* new_exp_left_node = node->exp.left;
+            struct node* new_exp_right_node = node->exp.right->exp.left;
+            // Make the new left operand 
+            make_exp_node(new_exp_left_node, new_exp_right_node, node->exp.op); 
+
+            struct node* new_left_operand = node_pop();
+            struct node* new_right_operand = node->exp.right->exp.right;
+            node->exp.left = new_left_operand;
+            node->exp.right = new_right_operand;
+            node->exp.op = right_op;
+
+            parser_reorder_expression(&node->exp.left);
+            parser_reorder_expression(&node->exp.right);
         }
     }
 }
@@ -556,7 +588,7 @@ static int size_of_struct(const char *struct_name)
     // We must pull the structure symbol for the given structure name
     // then we will know what the size is.
 
-    struct symbol* sym = symresolver_get_symbol(current_process, struct_name);
+    struct symbol *sym = symresolver_get_symbol(current_process, struct_name);
     if (!sym)
     {
         return 0;
@@ -564,13 +596,13 @@ static int size_of_struct(const char *struct_name)
 
     assert(sym->type == SYMBOL_TYPE_NODE);
 
-    struct node* node = sym->data;
+    struct node *node = sym->data;
     assert(node->type == NODE_TYPE_STRUCT);
-    
+
     return node->_struct.body_n->body.variable_size;
 }
 
-void parser_datatype_init(struct token *datatype_token, struct datatype *datatype_out)
+void parser_datatype_init(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth)
 {
     // consider changing to an array that we can just map index too ;)
     // too many ifs...
@@ -612,7 +644,21 @@ void parser_datatype_init(struct token *datatype_token, struct datatype *datatyp
         datatype_out->size = size_of_struct(datatype_token->sval);
     }
 
+    datatype_out->flags |= DATATYPE_FLAG_IS_POINTER;
+    datatype_out->pointer_depth = pointer_depth;
     datatype_out->type_str = datatype_token->sval;
+}
+
+int parser_get_pointer_depth()
+{
+    int depth = 0;
+    while (token_next_is_operator("*"))
+    {
+        depth += 1;
+        token_next();
+    }
+
+    return depth;
 }
 
 /**
@@ -629,7 +675,12 @@ void parse_datatype_type(struct datatype *datatype)
         // Since we parased a "struct" keyword the actual data type will be the next token.
         datatype_token = token_next();
     }
-    parser_datatype_init(datatype_token, datatype);
+
+    // Get the pointer depth i.e "int*** abc;" would have a pointer depth of 3.
+    // If this is a normal variable i.e "int abc" then pointer_depth will equal zero
+    int pointer_depth = parser_get_pointer_depth();
+
+    parser_datatype_init(datatype_token, datatype, pointer_depth);
 }
 
 void parse_variable(struct datatype *dtype, struct token *name_token)

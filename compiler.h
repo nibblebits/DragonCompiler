@@ -243,9 +243,10 @@ enum
 
 enum
 {
-    DATATYPE_FLAG_IS_SIGNED = 0b00000001,
-    DATATYPE_FLAG_IS_STATIC = 0b00000010,
-    DATATYPE_FLAG_IS_CONST = 0b00000100
+    DATATYPE_FLAG_IS_SIGNED =  0b00000001,
+    DATATYPE_FLAG_IS_STATIC =  0b00000010,
+    DATATYPE_FLAG_IS_CONST  =  0b00000100,
+    DATATYPE_FLAG_IS_POINTER = 0b00001000,
 };
 
 enum
@@ -271,6 +272,9 @@ struct datatype
 
     // The size in bytes of this datatype.
     size_t size;
+
+    // The pointer depth of this datatype
+    int pointer_depth;
 };
 
 
@@ -337,8 +341,21 @@ struct node
         // Represents unary expressions i.e "~abc", "-a", "-90"
         struct unary
         {
+            // In the case of indirection the "op" variable will only equal to one "*"
+            // you can find the depth in the indirection structure within.
             const char* op;
             struct node* operand;
+
+            union
+            {
+                // Represents a pointer access unary. i.e "***dog"
+                struct indirection
+                {
+                    // The depth of the "indrection" i.e "***dog" has a depth of 3
+                    int depth;
+
+                } indirection;
+            };
         } unary;
         
         // Represents a C structure in the tree.

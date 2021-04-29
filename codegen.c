@@ -164,6 +164,13 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
         return 0;
     }
 
+    if (node->type != NODE_TYPE_IDENTIFIER)
+    {
+        // Nothing more we can do at the moment
+        // We expect an identifier node.
+        return -1;
+    }
+    
     struct symbol *sym = symresolver_get_symbol(current_process, node->sval);
     // Assertion because its a compile bug if we still cant find this symbol
     // validation should have peacefully temrinated the compiler way back...
@@ -441,12 +448,22 @@ int struct_offset_for_node(struct compile_process *compile_proc, struct node *no
  */
 struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *node, bool *position_known_at_compile_time)
 {
+    assert(node);
+
     *position_known_at_compile_time = false;
     struct node *left_node = node;
 
     if (node->type == NODE_TYPE_EXPRESSION)
     {
         left_node = node->exp.left;
+    }
+
+    if (left_node->type != NODE_TYPE_IDENTIFIER)
+    {
+        // Hmm we need an identifier here if we are looking up a scope variable
+        // as identifiers represent variable names.
+        // Since we don't have an identifier we should return NULL as this lookup is impossible
+        return NULL;
     }
 
     struct codegen_scope_entity *entity = codegen_get_scope_variable(left_node->sval);
@@ -709,6 +726,8 @@ void codegen_generate_exp_node(struct node *node)
         return;
     }
 
+    // Still not done? Then its probably an arithmetic expression of some kind. 
+    // I.e a+b+50
     codegen_generate_exp_node_for_arithmetic(node);
 }
 

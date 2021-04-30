@@ -164,14 +164,15 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
         return 0;
     }
 
-    if (node->type != NODE_TYPE_IDENTIFIER)
+    struct node* identifier_node = first_node_of_type_from_left(node, NODE_TYPE_IDENTIFIER, 1);
+    if (!identifier_node)
     {
         // Nothing more we can do at the moment
         // We expect an identifier node.
         return -1;
     }
-    
-    struct symbol *sym = symresolver_get_symbol(current_process, node->sval);
+
+    struct symbol *sym = symresolver_get_symbol(current_process, identifier_node->sval);
     // Assertion because its a compile bug if we still cant find this symbol
     // validation should have peacefully temrinated the compiler way back...
     if (!sym)
@@ -183,7 +184,7 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
     entity_out->global_symbol = sym;
     entity_out->is_scope_entity = false;
     entity_out->node = codegen_get_entity_node(entity_out);
-    sprintf(entity_out->address, "%s", node->sval);
+    sprintf(entity_out->address, "%s", identifier_node->sval);
 
     // We only deal with node symbols right now.
     assert(sym->type == SYMBOL_TYPE_NODE);
@@ -303,6 +304,13 @@ void codegen_end_expression_state()
     vector_pop(current_process->generator.states.expr);
 }
 
+
+static bool exp_flag_set(int flag)
+{
+    return codegen_current_exp_state()->flags & flag;
+}
+
+
 bool codegen_expression_on_right_operand()
 {
     return codegen_current_exp_state()->flags & EXPRESSION_FLAG_RIGHT_NODE;
@@ -331,17 +339,6 @@ void codegen_expression_flags_set_in_function_call_arguments(bool in_function_ar
     memset(&codegen_current_exp_state()->fca, 0, sizeof(codegen_current_exp_state()->fca));
 }
 
-void codegen_expression_flags_set_in_function_call_left_operand_flag(bool in_function_call_left_operand)
-{
-    assert(codegen_current_exp_state() != &blank_state);
-    if (in_function_call_left_operand)
-    {
-        codegen_current_exp_state()->flags |= EXPRESSION_IN_FUNCTION_CALL_LEFT_OPERAND;
-        return;
-    }
-
-    codegen_current_exp_state()->flags &= ~EXPRESSION_IN_FUNCTION_CALL_LEFT_OPERAND;
-}
 
 void codegen_generate_node(struct node *node);
 void codegen_generate_expressionable(struct node *node);
@@ -356,6 +353,19 @@ const char *op;
  */
 void codegen_generate_number_node(struct node *node)
 {
+    // Do we have only a number node or was it apart of an expression
+    // If we have just a number node and we are currently in a function call argument
+    // then let's just push it to the stack so that the result is passed to the function we are 
+    // calling :) 
+    if (exp_flag_set(EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS) 
+        && !node_in_expression(node))
+    {
+        // This node represents a function call argument
+        // let's just push the number
+        asm_push("push %lld", node->llnum);
+        return;
+    }
+
     assert(!register_is_used("eax"));
     register_set_flag(REGISTER_EAX_IS_USED);
     asm_push("mov eax, %i", node->llnum);
@@ -583,38 +593,19 @@ void codegen_generate_assignment_expression(struct node *node)
     asm_push("mov [%s], eax", assignment_operand_entity.address);
 }
 
-void codegen_generate_expressionable_for_function_argument(struct node *node, size_t *total_arguments_out)
-{
-
-    if (node->type == NODE_TYPE_EXPRESSION && S_EQ(node->exp.op, ","))
-    {
-        codegen_generate_expressionable_for_function_argument(node->exp.left, total_arguments_out);
-        codegen_generate_expressionable_for_function_argument(node->exp.right, total_arguments_out);
-        return;
-    }
-
-    codegen_generate_expressionable(node);
-
-    // We are currently in function arguments i.e (50, 20, 40)
-    // because of this we have to push the EAX register once its been handled
-    // so that the function call will have access to the stack.
-    asm_push("PUSH eax");
-
-    // We stored EAX release it.
-    register_unset_flag(REGISTER_EAX_IS_USED);
-
-    // We have an argument!
-    *total_arguments_out += 1;
-}
 
 void codegen_generate_expressionable_function_arguments(struct codegen_entity *func_entity, struct node *func_call_args_exp_node, size_t *total_arguments_out)
 {
     *total_arguments_out = 0;
+    assert(func_call_args_exp_node->type == NODE_TYPE_EXPRESSION_PARENTHESIS);
+
+        // Code generate the function arguments
     codegen_new_expression_state();
     codegen_expression_flags_set_in_function_call_arguments(true);
-    codegen_generate_expressionable_for_function_argument(func_call_args_exp_node, total_arguments_out);
+    codegen_generate_expressionable(func_call_args_exp_node);
     codegen_expression_flags_set_in_function_call_arguments(false);
     codegen_end_expression_state();
+
 }
 
 void codegen_generate_pop(const char *reg, size_t times)
@@ -629,14 +620,12 @@ void codegen_generate_function_call_for_exp_node(struct codegen_entity *func_ent
 {
     // Generate expression for left node. EBX should contain the address we care about
     codegen_new_expression_state();
-    codegen_expression_flags_set_in_function_call_left_operand_flag(true);
     codegen_generate_expressionable(node->exp.left);
-    codegen_expression_flags_set_in_function_call_left_operand_flag(false);
     codegen_end_expression_state();
 
     size_t total_args = 0;
 
-    // Code generate the function arguments
+    // Generate the function arguments i.e (50, 40, 30)
     codegen_generate_expressionable_function_arguments(func_entity, node->exp.right, &total_args);
 
     // Call the function
@@ -710,7 +699,7 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node)
     }
 }
 
-void codegen_generate_exp_node(struct node *node)
+void _codegen_generate_exp_node(struct node *node)
 {
     if (is_node_assignment(node))
     {
@@ -729,6 +718,21 @@ void codegen_generate_exp_node(struct node *node)
     // Still not done? Then its probably an arithmetic expression of some kind. 
     // I.e a+b+50
     codegen_generate_exp_node_for_arithmetic(node);
+}
+
+void codegen_generate_exp_node(struct node* node)
+{
+    _codegen_generate_exp_node(node);
+
+    // If we are in the function call arguments and this is the root expression
+    // of the given function argument then we are ready to push the result
+    // to the stack which should be stored in the EAX register.
+    if(exp_flag_set(EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS) && 
+        node->flags & NODE_FLAG_IS_ROOT_EXPRESSION)
+    {
+        asm_push("PUSH eax");
+        register_unset_flag(REGISTER_EAX_IS_USED);
+    }  
 }
 
 /**
@@ -837,6 +841,12 @@ void codegen_generate_unary(struct node *node)
         asm_push("neg eax");
     }
 }
+
+void codegen_generate_exp_parenthesis_node(struct node* node)
+{
+    codegen_generate_expressionable(node->parenthesis.exp);
+}
+
 void codegen_generate_expressionable(struct node *node)
 {
     switch (node->type)
@@ -849,6 +859,9 @@ void codegen_generate_expressionable(struct node *node)
         codegen_generate_exp_node(node);
         break;
 
+    case NODE_TYPE_EXPRESSION_PARENTHESIS:
+        codegen_generate_exp_parenthesis_node(node);
+        break;
     case NODE_TYPE_IDENTIFIER:
         codegen_generate_identifier(node);
         break;
@@ -857,6 +870,7 @@ void codegen_generate_expressionable(struct node *node)
         codegen_generate_unary(node);
         break;
     }
+
 }
 
 void codegen_generate_global_variable_with_value(struct node *node)

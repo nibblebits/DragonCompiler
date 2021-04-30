@@ -41,6 +41,10 @@ void test(struct node* node)
         printf("%c", ']');
 
     }
+    else if(node->type == NODE_TYPE_EXPRESSION_PARENTHESIS)
+    {
+        test(node->parenthesis.exp);
+    }
     else if(node->type == NODE_TYPE_FUNCTION)
     {
         test_vec(node->func.argument_vector);

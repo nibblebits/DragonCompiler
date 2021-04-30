@@ -10,10 +10,18 @@
 
 // First in the array = higher priority
 // This array is special, its essentially a group of arrays
-// Format goes as follow
 
-#define TOTAL_OPERATOR_GROUPS 13
+#define TOTAL_OPERATOR_GROUPS 14
 #define MAX_OPERATORS_IN_GROUP 12
+
+// Expression flags
+enum
+{
+    // Signifies the root of an expression i.e ((50*20)+40)
+    // The root is ((E)+40) [E+40], this flag would be set
+    // for that parse_expression call..
+    PARSER_EXPRESSION_IS_ROOT = 0b00000001
+};
 
 enum
 {
@@ -35,7 +43,7 @@ struct op_precedence_group
  * Also end the collection of groups with a NULL pointer
  */
 static struct op_precedence_group op_precedence[TOTAL_OPERATOR_GROUPS] = {
-    {.operators = {"++", "--", "()", "[", "]", ",", ".", "->", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"++", "--", "()","(", "[", "]", ".", "->", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
     {.operators = {"*", "/", "%%", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
     {.operators = {"+", "-", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
     {.operators = {"<<", ">>", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
@@ -47,8 +55,8 @@ static struct op_precedence_group op_precedence[TOTAL_OPERATOR_GROUPS] = {
     {.operators = {"&&", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
     {.operators = {"||", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
     {.operators = {"?", ":", NULL}, .associativity = ASSOCIATIVITY_RIGHT_TO_LEFT},
-    {.operators = {"=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|=", NULL}, .associativity = ASSOCIATIVITY_RIGHT_TO_LEFT}
-
+    {.operators = {"=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|=", NULL}, .associativity = ASSOCIATIVITY_RIGHT_TO_LEFT},
+    {.operators = {",", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
 };
 
 static struct compile_process *current_process;
@@ -258,6 +266,11 @@ void make_exp_node(struct node *node_left, struct node *node_right, const char *
     node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
 }
 
+void make_exp_parentheses_node(struct node *exp_node)
+{
+    node_create(&(struct node){NODE_TYPE_EXPRESSION_PARENTHESIS, .parenthesis.exp=exp_node});
+}
+
 void make_struct_node(const char *struct_name, struct node *body_node)
 {
     node_create(&(struct node){NODE_TYPE_STRUCT, ._struct.name = struct_name, ._struct.body_n = body_node});
@@ -288,7 +301,7 @@ void make_variable_node(struct datatype *datatype, struct token *name_token, str
     node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type = *datatype, .var.name = name_token->sval, .var.val = value_node});
 }
 
-void parse_expressionable();
+void parse_expressionable(int flags);
 void parse_for_parentheses();
 
 static void parser_append_size_for_node(size_t *variable_size, struct node *node)
@@ -380,6 +393,9 @@ void parse_body(size_t *variable_size)
  */
 void parser_reorder_expression(struct node **node_out)
 {
+    // No reordering for a sec.
+    return;
+
     struct node *node = *node_out;
     // The node passed to us has to be an expression
     if (node->type != NODE_TYPE_EXPRESSION)
@@ -388,7 +404,7 @@ void parser_reorder_expression(struct node **node_out)
     }
 
     // No expressions nothing to do
-    if (node->exp.left->type != NODE_TYPE_EXPRESSION &&
+    if (node->exp.left->type != NODE_TYPE_EXPRESSION && node->exp.right &&
         node->exp.right->type != NODE_TYPE_EXPRESSION)
     {
         return;
@@ -396,7 +412,7 @@ void parser_reorder_expression(struct node **node_out)
 
     // If we have a right expression but left is not an expression
     // then some reordering may be needed
-    if (node->exp.left->type != NODE_TYPE_EXPRESSION &&
+    if (node->exp.left->type != NODE_TYPE_EXPRESSION && node->exp.right &&
         node->exp.right->type == NODE_TYPE_EXPRESSION)
     {
         const char* right_op = node->exp.right->exp.op;
@@ -429,7 +445,7 @@ void parse_for_unary()
     const char *unary_op = token_next()->sval;
 
     // Now lets parse the expression after this unary operator
-    parse_expressionable();
+    parse_expressionable(0);
 
     struct node *unary_operand_node = node_pop();
     make_unary_node(unary_op, unary_operand_node);
@@ -459,7 +475,40 @@ void parse_struct_or_union(struct datatype *dtype)
     parse_err("Unions are not yet supported");
 }
 
-void parse_exp()
+static void parser_exp_flags_apply_node_flags(struct node* node_out, int flags)
+{
+    if (flags & PARSER_EXPRESSION_IS_ROOT)
+    {
+        node_out->flags |= NODE_FLAG_IS_ROOT_EXPRESSION;
+    }
+
+}
+void parse_exp_normal(int flags)
+{
+    struct token *op_token = token_next();
+    const char *op = op_token->sval;
+    // We must pop the last node as this will be the left operand
+    struct node *node_left = node_pop();
+    // Left node is now apart of an expression
+    node_left->flags |= NODE_FLAG_INSIDE_EXPRESSION;
+
+    // We must parse the right operand
+    parse_expressionable(flags & ~PARSER_EXPRESSION_IS_ROOT);
+
+    struct node *node_right = node_pop();
+    // Right node is now apart of an expression
+    node_right->flags |= NODE_FLAG_INSIDE_EXPRESSION;
+
+    make_exp_node(node_left, node_right, op);
+    struct node *exp_node = node_pop();
+    parser_exp_flags_apply_node_flags(exp_node, flags);
+
+    // We must reorder the expression if possible
+    parser_reorder_expression(&exp_node);
+    node_push(exp_node);
+}
+
+void parse_exp(int flags)
 {
     if (S_EQ(token_peek_next()->sval, "("))
     {
@@ -473,22 +522,10 @@ void parse_exp()
         return;
     }
 
-    struct token *op_token = token_next();
-    const char *op = op_token->sval;
-    // We must pop the last node as this will be the left operand
-    struct node *node_left = node_pop();
-    // We must parse the right operand
-    parse_expressionable();
-    struct node *node_right = node_pop();
-
-    make_exp_node(node_left, node_right, op);
-    struct node *exp_node = node_pop();
-    // We must reorder the expression if possible
-    parser_reorder_expression(&exp_node);
-    node_push(exp_node);
+    parse_exp_normal(flags);
 }
 
-int parse_expressionable_single()
+int parse_expressionable_single(int flags)
 {
     struct token *token = token_peek_next();
     if (!token)
@@ -506,46 +543,55 @@ int parse_expressionable_single()
         res = 0;
         break;
     case TOKEN_TYPE_OPERATOR:
-        parse_exp();
+        parse_exp(flags);
         res = 0;
         break;
     }
     return res;
 }
-void parse_expressionable()
+void parse_expressionable(int flags)
 {
     struct node *last_node = NULL;
-    while (parse_expressionable_single() == 0)
+    while (parse_expressionable_single(flags) == 0)
     {
     }
 }
 
 void parse_for_parentheses()
 {
-    expect_op("(");
-    parse_expressionable();
-    expect_sym(')');
-
-    struct node *left_node = node_pop();
-    // This is a unique expression as parentheses is present. I.e (50*20)+90
-    // (50*20) is a unique expression ().
-    left_node->exp.flags = EXPRESSION_FLAG_TREAT_UNIQUE;
-    struct node *right_node = NULL;
-
-    // DO we have another node? If we do its the left node
-    struct node *onode = node_peek_or_null();
-    if (onode)
+    // We must check to see if we have a left node i.e "test(50+20)". Left node = test
+    // If we have a left node we will have to create an expression
+    // otherwise we can just create a parentheses node
+    struct node* left_node = node_peek_or_null();
+    if (left_node)
     {
         node_pop();
-        right_node = left_node;
-        left_node = onode;
     }
-    make_exp_node(left_node, right_node, "()");
+    expect_op("(");
+    // Just because we have parentheses does not make this a root expression.
+    // So no PARSER_EXPRESSION_IS_ROOT flag!
+    parse_expressionable(0);
+    expect_sym(')');
 
-    struct node *exp_node = node_pop();
-    // We must reorder the expression if possible
-    parser_reorder_expression(&exp_node);
-    node_push(exp_node);
+    struct node* exp_node = node_pop();   
+    make_exp_parentheses_node(exp_node);
+
+    // Do we have a left node from earlier before we parsed the parentheses?
+    if (left_node)
+    {
+        // Ok we do so we must create an expression node, whose left node is the left node
+        // and whose right node is the parentheses node
+        struct node* parentheses_node = node_pop();
+        make_exp_node(left_node, parentheses_node, "()");
+        
+        // At this point we have something like this test(50*20)
+        // (hello)(what+50)
+        // ****a(90, 30, 40)
+
+        // Now that we know this we know that the expression of the parenthese node
+        // is a root expression
+        parentheses_node->parenthesis.exp->flags |= NODE_FLAG_IS_ROOT_EXPRESSION;
+    }
 }
 
 void parse_for_symbol()
@@ -695,7 +741,7 @@ void parse_variable(struct datatype *dtype, struct token *name_token)
         // Now we now we are at the "=" lets pop it off the token stack
         token_next();
         // Parse the value expression i.e the "50"
-        parse_expressionable();
+        parse_expressionable(PARSER_EXPRESSION_IS_ROOT);
         value_node = node_pop();
     }
 
@@ -840,7 +886,7 @@ void parse_keyword_return()
     // Ok we parsed the return keyword, lets now parse the expression of the return
     // keyword and then we expect a semicolon ;)
 
-    parse_expressionable();
+    parse_expressionable(PARSER_EXPRESSION_IS_ROOT);
 
     struct node *ret_expr = node_pop();
     make_return_node(ret_expr);
@@ -905,7 +951,7 @@ void parse_statement()
 
     // This must be an expression as its not a keyword
     // I.e a = 50;
-    parse_expressionable();
+    parse_expressionable(0);
     // Expression statements must end with a semicolon
     expect_sym(';');
 }
@@ -924,7 +970,7 @@ int parse_next()
     case TOKEN_TYPE_NUMBER:
     case TOKEN_TYPE_IDENTIFIER:
     case TOKEN_TYPE_OPERATOR:
-        parse_expressionable();
+        parse_expressionable(PARSER_EXPRESSION_IS_ROOT);
         break;
 
     case TOKEN_TYPE_SYMBOL:

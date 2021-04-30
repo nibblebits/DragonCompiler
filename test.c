@@ -1,8 +1,10 @@
 
 
+int abc(int a)
+{
 
+}
 int test(int k)
 {
-   k = 70+20+k;
-   return k;
+   abc(500);
 }

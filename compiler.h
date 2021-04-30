@@ -313,6 +313,7 @@ enum
 enum
 {
     NODE_TYPE_EXPRESSION,
+    NODE_TYPE_EXPRESSION_PARENTHESIS,
     NODE_TYPE_NUMBER,
     NODE_TYPE_IDENTIFIER,
     NODE_TYPE_VARIABLE,
@@ -323,9 +324,28 @@ enum
     NODE_TYPE_STRUCT
 };
 
+enum
+{
+    // Represents that this node is part of an expressions left or right operands.
+    // For example the node that represents decimal 50 would not have this flag set test(50)
+    // Since it is the only function argument. However in this case test(50*a) the number node
+    // of "50" would have this flag set as its apart of an expression.
+    NODE_FLAG_INSIDE_EXPRESSION  = 0b00000001,
+
+    // This flag is set if the given node is an expression and it is the root of an expression
+    // For example 50*20+40 would be parased as [[50*20]+40] 
+    // In this case [E+40] would be the root expression :) and this flag would be set
+    // In the case we have parenthesis such as ((90+(50*20)+40))) the flag would only be set
+    // for [90+E]. The root has to be the highest possible point, this does not include
+    // assignments only non-special expressions
+    NODE_FLAG_IS_ROOT_EXPRESSION = 0b00000010,
+};
+
 struct node
 {
     int type;
+    // Generic flags for the given node
+    int flags;
     union
     {
         struct exp
@@ -334,9 +354,16 @@ struct node
             struct node *right;
             // Operator for the expression
             const char *op;
-            // Special flags that determine how this expression should be treated.
-            int flags;
         } exp;
+
+        /**
+         * Represents a parenthesis expression i.e (50+20) (EXP)
+         */
+        struct parenthesis
+        {
+            // The expression between the brackets ()
+            struct node* exp;
+        } parenthesis;
 
         // Represents unary expressions i.e "~abc", "-a", "-90"
         struct unary
@@ -578,6 +605,24 @@ int struct_offset(struct compile_process* compile_proc, const char* struct_name,
  */
 struct node* first_node_of_type(struct node* node, int type);
 
+/**
+ * If the node provided has the same type we are looking for then its self is returned
+ * otherwise if its an expression we will iterate through the left operands of this expression
+ * and all sub-expressions until the given type is found. Otherwise NULL is returned.
+ * 
+ * The depth specifies how deep to search, if the depth is 1 then only the left operand
+ * of an expression will be checked and if its not found NULL will be returned. No deeper searching
+ * will be done.
+ * 
+ * Passing a depth of zero is essentially the same as just checking if the given node if the type provider
+ * no deeper searching will be done at all.
+ */
+struct node *first_node_of_type_from_left(struct node *node, int type, int depth);
+
+/**
+ * Returns true if the given node is apart of an expression
+ */
+bool node_in_expression(struct node* node);
 
 /**
  * Returns true if the given operator is an access operator.

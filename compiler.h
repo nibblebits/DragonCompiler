@@ -79,17 +79,26 @@ enum
     // Signifies we are on the right node of a single part of an expression
     // I.e (50+20+40+96). 20 is the right node and so is 96.
     // This flag will be set in the event the right node of an expression part is being processed
-    EXPRESSION_FLAG_RIGHT_NODE = 0b00000001,
+    EXPRESSION_FLAG_RIGHT_NODE = 0b0000000000000001,
 
     // This flag is set if the current expression is representing function arguments
     // seperated by a comma.
-    EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS = 0b00000010,
+    EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS = 0b0000000000000010,
     // This flag is set if the current function call expression is on the left operand
     // for example test(50). Whilst we generate left node "test" this flag will be set.
-    EXPRESSION_IN_FUNCTION_CALL_LEFT_OPERAND = 0b00000100,
+    EXPRESSION_IN_FUNCTION_CALL_LEFT_OPERAND = 0b0000000000000100,
+    // This flag is set if the expression represents an addition
+    EXPRESSION_IS_ADDITION = 0b0000000000001000,
+    EXPRESSION_IS_SUBTRACTION = 0b000000000010000,
+    EXPRESSION_IS_MULTIPLICATION = 0b0000000000100000,
+    EXPRESSIPON_IS_DIVISION = 0b0000000001000000,
 };
 
-#define EXPRESSION_UNINHERITABLE_FLAGS EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS
+#define EXPRESSION_UNINHERITABLE_FLAGS \
+      (EXPRESSION_FLAG_RIGHT_NODE | EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS | \
+      EXPRESSION_IS_ADDITION | EXPRESSION_IS_SUBTRACTION | EXPRESSION_IS_MULTIPLICATION | \
+      EXPRESSIPON_IS_DIVISION)
+
 enum
 {
     REGISTER_EAX_IS_USED = 0b00000001,

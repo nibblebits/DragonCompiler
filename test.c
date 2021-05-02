@@ -6,5 +6,6 @@ int abc(int a)
 }
 int test(int k)
 {
-   abc(k+5);
+
+   abc(10*k/4);
 }

@@ -785,15 +785,25 @@ void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, ch
     sprintf(out, "ebp+%i", entity->stack_offset);
 }
 
-void codegen_handle_variable_access(struct codegen_entity *entity)
+void codegen_handle_variable_access(struct codegen_entity *entity, int flags)
 {
     assert(!register_is_used("eax"));
     // We accessing a variable? Then grab its value put it in EAX!
     register_set_flag(REGISTER_EAX_IS_USED);
     asm_push("mov eax, [%s]", entity->address);
+    if (flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS)
+    {
+        // We have a function call argument, therefore we must push the argument to the stck
+        // so that it can be passed to the function we are calling
+        asm_push("PUSH eax");
+
+        // We are done with the EAX register.
+        register_unset_flag(REGISTER_EAX_IS_USED);
+    }
+    
 }
 
-void codegen_handle_function_access(struct codegen_entity *entity)
+void codegen_handle_function_access(struct codegen_entity *entity, int flags)
 {
     register_set_flag(REGISTER_EBX_IS_USED);
     asm_push("lea ebx, [%s]", entity->address);
@@ -808,11 +818,11 @@ void codegen_generate_identifier(struct node *node, int flags)
     switch (entity.node->type)
     {
     case NODE_TYPE_VARIABLE:
-        codegen_handle_variable_access(&entity);
+        codegen_handle_variable_access(&entity, flags);
         break;
 
     case NODE_TYPE_FUNCTION:
-        codegen_handle_function_access(&entity);
+        codegen_handle_function_access(&entity, flags);
         break;
 
     default:

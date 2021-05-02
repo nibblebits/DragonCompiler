@@ -133,3 +133,9 @@ bool node_in_expression(struct node* node)
 {
     return node->flags & NODE_FLAG_INSIDE_EXPRESSION;
 }
+
+bool node_is_root_expression(struct node* node)
+{
+    // Root expressions are not inside expressions.
+    return !(node->flags & NODE_FLAG_INSIDE_EXPRESSION);
+}

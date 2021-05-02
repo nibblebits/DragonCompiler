@@ -85,6 +85,11 @@ size_t codegen_align(size_t size)
     return size;
 }
 
+static int codegen_remove_uninheritable_flags(int flags)
+{
+    return flags & ~EXPRESSION_UNINHERITABLE_FLAGS;
+}
+
 struct codegen_scope_entity *codegen_new_scope_entity(struct node *node, int stack_offset, int flags)
 {
     struct codegen_scope_entity *entity = calloc(sizeof(struct codegen_scope_entity), 1);
@@ -341,24 +346,20 @@ void codegen_expression_flags_set_in_function_call_arguments(bool in_function_ar
 
 
 void codegen_generate_node(struct node *node);
-void codegen_generate_expressionable(struct node *node);
-void codegen_generate_new_expressionable(struct node *node)
+void codegen_generate_expressionable(struct node *node, int flags);
+void codegen_generate_new_expressionable(struct node *node, int flags)
 {
-    codegen_generate_expressionable(node);
+    codegen_generate_expressionable(node, flags);
 }
 const char *op;
 
 /**
  * For literal numbers
  */
-void codegen_generate_number_node(struct node *node)
+void codegen_generate_number_node(struct node *node, int flags)
 {
-    // Do we have only a number node or was it apart of an expression
-    // If we have just a number node and we are currently in a function call argument
-    // then let's just push it to the stack so that the result is passed to the function we are 
-    // calling :) 
-    if (exp_flag_set(EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS) 
-        && !node_in_expression(node))
+    // If this is a function call argument then we can just push the result straight to the stack
+    if (flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS)
     {
         // This node represents a function call argument
         // let's just push the number
@@ -579,7 +580,7 @@ void codegen_generate_assignment_expression(struct node *node)
     codegen_new_expression_state();
 
     // Process the right node first as this is an expression
-    codegen_generate_expressionable(node->exp.right);
+    codegen_generate_expressionable(node->exp.right, 0);
     // Now lets find the stack offset
     assert(codegen_get_entity_for_node(node->exp.left, &assignment_operand_entity) == 0);
 
@@ -599,12 +600,8 @@ void codegen_generate_expressionable_function_arguments(struct codegen_entity *f
     *total_arguments_out = 0;
     assert(func_call_args_exp_node->type == NODE_TYPE_EXPRESSION_PARENTHESIS);
 
-        // Code generate the function arguments
-    codegen_new_expression_state();
-    codegen_expression_flags_set_in_function_call_arguments(true);
-    codegen_generate_expressionable(func_call_args_exp_node);
-    codegen_expression_flags_set_in_function_call_arguments(false);
-    codegen_end_expression_state();
+    // Code generate the function arguments
+    codegen_generate_expressionable(func_call_args_exp_node, EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS);
 
 }
 
@@ -620,7 +617,7 @@ void codegen_generate_function_call_for_exp_node(struct codegen_entity *func_ent
 {
     // Generate expression for left node. EBX should contain the address we care about
     codegen_new_expression_state();
-    codegen_generate_expressionable(node->exp.left);
+    codegen_generate_expressionable(node->exp.left, 0);
     codegen_end_expression_state();
 
     size_t total_args = 0;
@@ -662,15 +659,15 @@ bool codegen_handle_codegen_entity_for_expression(struct codegen_entity *entity_
     return done;
 }
 
-void codegen_generate_exp_node_for_arithmetic(struct node *node)
+void codegen_generate_exp_node_for_arithmetic(struct node *node, int flags)
 {
     assert(node->type == NODE_TYPE_EXPRESSION);
 
-    codegen_generate_expressionable(node->exp.left);
+    codegen_generate_expressionable(node->exp.left, flags);
     asm_push("push eax");
     // EAX has been saved, and its free to be used again
     register_unset_flag(REGISTER_EAX_IS_USED);
-    codegen_generate_expressionable(node->exp.right);
+    codegen_generate_expressionable(node->exp.right, flags);
     asm_push("pop ecx");
     // We are done with EAX we have stored the result.
     register_unset_flag(REGISTER_EAX_IS_USED);
@@ -699,7 +696,7 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node)
     }
 }
 
-void _codegen_generate_exp_node(struct node *node)
+void _codegen_generate_exp_node(struct node *node, int flags)
 {
     if (is_node_assignment(node))
     {
@@ -717,22 +714,21 @@ void _codegen_generate_exp_node(struct node *node)
 
     // Still not done? Then its probably an arithmetic expression of some kind. 
     // I.e a+b+50
-    codegen_generate_exp_node_for_arithmetic(node);
+    codegen_generate_exp_node_for_arithmetic(node, codegen_remove_uninheritable_flags(flags));
 }
 
-void codegen_generate_exp_node(struct node* node)
+void codegen_generate_exp_node(struct node* node, int flags)
 {
-    _codegen_generate_exp_node(node);
+    // Generate the expression and all child expressions
+    _codegen_generate_exp_node(node, flags);
 
-    // If we are in the function call arguments and this is the root expression
-    // of the given function argument then we are ready to push the result
-    // to the stack which should be stored in the EAX register.
-    if(exp_flag_set(EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS) && 
-        node->flags & NODE_FLAG_IS_ROOT_EXPRESSION)
+    // If we are in function call arguments then we must push the result to the stack
+    if (flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS)
     {
         asm_push("PUSH eax");
-        register_unset_flag(REGISTER_EAX_IS_USED);
-    }  
+    }
+
+    
 }
 
 /**
@@ -803,7 +799,7 @@ void codegen_handle_function_access(struct codegen_entity *entity)
     asm_push("lea ebx, [%s]", entity->address);
 }
 
-void codegen_generate_identifier(struct node *node)
+void codegen_generate_identifier(struct node *node, int flags)
 {
     struct codegen_entity entity;
     assert(codegen_get_entity_for_node(node, &entity) == 0);
@@ -830,9 +826,9 @@ static bool is_comma_operator(struct node *node)
     return S_EQ(node->exp.op, ",");
 }
 
-void codegen_generate_unary(struct node *node)
+void codegen_generate_unary(struct node *node, int flags)
 {
-    codegen_generate_expressionable(node->unary.operand);
+    codegen_generate_expressionable(node->unary.operand, flags);
     // We have generated the value for the operand
     // Let's now decide what to do with the result based on the operator
     if (S_EQ(node->unary.op, "-"))
@@ -842,32 +838,33 @@ void codegen_generate_unary(struct node *node)
     }
 }
 
-void codegen_generate_exp_parenthesis_node(struct node* node)
+void codegen_generate_exp_parenthesis_node(struct node* node, int flags)
 {
-    codegen_generate_expressionable(node->parenthesis.exp);
+    codegen_generate_expressionable(node->parenthesis.exp, flags);
 }
 
-void codegen_generate_expressionable(struct node *node)
+
+void codegen_generate_expressionable(struct node *node, int flags)
 {
     switch (node->type)
     {
     case NODE_TYPE_NUMBER:
-        codegen_generate_number_node(node);
+        codegen_generate_number_node(node, flags);
         break;
 
     case NODE_TYPE_EXPRESSION:
-        codegen_generate_exp_node(node);
+        codegen_generate_exp_node(node, flags);
         break;
 
     case NODE_TYPE_EXPRESSION_PARENTHESIS:
-        codegen_generate_exp_parenthesis_node(node);
+        codegen_generate_exp_parenthesis_node(node, flags);
         break;
     case NODE_TYPE_IDENTIFIER:
-        codegen_generate_identifier(node);
+        codegen_generate_identifier(node, flags);
         break;
 
     case NODE_TYPE_UNARY:
-        codegen_generate_unary(node);
+        codegen_generate_unary(node, flags);
         break;
     }
 
@@ -988,7 +985,7 @@ void codegen_generate_scope_variable(struct node *node)
         codegen_new_expression_state();
 
         // Process the right node first as this is an expression
-        codegen_generate_expressionable(node->var.val);
+        codegen_generate_expressionable(node->var.val, 0);
 
         codegen_end_expression_state();
 
@@ -1021,7 +1018,7 @@ void codegen_generate_scope_variable_for_function_argument(struct node *node)
 void codegen_generate_statement_return(struct node *node)
 {
     // Let's generate the expression of the return statement
-    codegen_generate_expressionable(node->stmt.ret.exp);
+    codegen_generate_expressionable(node->stmt.ret.exp, 0);
 
     // Generate the stack subtraction.
     codegen_stack_add(codegen_align(codegen_scope_current()->size));
@@ -1039,7 +1036,7 @@ void codegen_generate_statement(struct node *node)
     switch (node->type)
     {
     case NODE_TYPE_EXPRESSION:
-        codegen_generate_exp_node(node);
+        codegen_generate_exp_node(node, 0);
         break;
 
     case NODE_TYPE_VARIABLE:

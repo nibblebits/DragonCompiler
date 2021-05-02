@@ -89,6 +89,7 @@ enum
     EXPRESSION_IN_FUNCTION_CALL_LEFT_OPERAND = 0b00000100,
 };
 
+#define EXPRESSION_UNINHERITABLE_FLAGS EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS
 enum
 {
     REGISTER_EAX_IS_USED = 0b00000001,
@@ -332,13 +333,6 @@ enum
     // of "50" would have this flag set as its apart of an expression.
     NODE_FLAG_INSIDE_EXPRESSION  = 0b00000001,
 
-    // This flag is set if the given node is an expression and it is the root of an expression
-    // For example 50*20+40 would be parased as [[50*20]+40] 
-    // In this case [E+40] would be the root expression :) and this flag would be set
-    // In the case we have parenthesis such as ((90+(50*20)+40))) the flag would only be set
-    // for [90+E]. The root has to be the highest possible point, this does not include
-    // assignments only non-special expressions
-    NODE_FLAG_IS_ROOT_EXPRESSION = 0b00000010,
 };
 
 struct node
@@ -623,6 +617,8 @@ struct node *first_node_of_type_from_left(struct node *node, int type, int depth
  * Returns true if the given node is apart of an expression
  */
 bool node_in_expression(struct node* node);
+
+bool node_is_root_expression(struct node* node);
 
 /**
  * Returns true if the given operator is an access operator.

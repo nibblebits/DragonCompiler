@@ -30,6 +30,47 @@ static struct expression_state blank_state = {};
 struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *node, bool *position_known_at_compile_time);
 void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, char *out);
 
+
+/**
+ * Specifies current history for the given operation/expression
+ */
+struct history
+{
+    // Flags for this history.
+    int flags;
+
+    // This union has shared memory, rely on the flags to ensure
+    // the memory you are accessing is what your looking for.
+    union
+    {
+        // History for the current function call (if any)
+        struct function_call
+        {
+            struct arguments
+            {
+                int total_args;
+                // Stack size for the given function arguments. i.e test(50, 40, 30, 20)
+                // would be 4*4 =16 bytes
+                size_t size;
+            } arguments;
+        } function_call;
+    };
+    
+};
+
+struct history* history_down(struct history* history, int flags)
+{
+    history->flags = flags;
+    return history;
+}
+
+struct history* history_begin(struct history* history_out, int flags)
+{
+    memset(history_out, 0, sizeof(struct history));
+    history_out->flags = flags;
+    return history_out;
+}
+
 // Simple bitmask for scope entity rules.
 enum
 {
@@ -357,10 +398,10 @@ void codegen_expression_flags_set_in_function_call_arguments(bool in_function_ar
 }
 
 void codegen_generate_node(struct node *node);
-void codegen_generate_expressionable(struct node *node, int flags);
-void codegen_generate_new_expressionable(struct node *node, int flags)
+void codegen_generate_expressionable(struct node *node, struct history* history);
+void codegen_generate_new_expressionable(struct node *node, struct history* history)
 {
-    codegen_generate_expressionable(node, flags);
+    codegen_generate_expressionable(node, history);
 }
 const char *op;
 
@@ -425,19 +466,25 @@ static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, in
 /**
  * For literal numbers
  */
-void codegen_generate_number_node(struct node *node, int flags)
+void codegen_generate_number_node(struct node *node, struct history* history)
 {
     // If this is a function call argument then we can just push the result straight to the stack
-    if (flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS)
+    if (history->flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS)
     {
         // This node represents a function call argument
         // let's just push the number
         asm_push("push %lld", node->llnum);
+
+        // Stack would be changed by four bytes with this push
+        // Perhaps better way to do this.. function of some kind..
+        history->function_call.arguments.size += 4;
+
         return;
     }
 
     const char *reg_to_use = "eax";
-    codegen_gen_mov_or_math(reg_to_use, node, flags, 0);
+    codegen_gen_mov_or_math(reg_to_use, node, history->flags, 0);
+
 }
 
 /**
@@ -662,13 +709,18 @@ void codegen_generate_assignment_expression(struct node *node)
     asm_push("mov [%s], eax", assignment_operand_entity.address);
 }
 
-void codegen_generate_expressionable_function_arguments(struct codegen_entity *func_entity, struct node *func_call_args_exp_node, size_t *total_arguments_out)
+void codegen_generate_expressionable_function_arguments(struct codegen_entity *func_entity, struct node *func_call_args_exp_node, size_t *arguments_size)
 {
-    *total_arguments_out = 0;
+    *arguments_size = 0;
     assert(func_call_args_exp_node->type == NODE_TYPE_EXPRESSION_PARENTHESIS);
 
+    struct history history;
+
     // Code generate the function arguments
-    codegen_generate_expressionable(func_call_args_exp_node, EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS);
+    codegen_generate_expressionable(func_call_args_exp_node, history_begin(&history, EXPRESSION_IN_FUNCTION_CALL | EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS));
+
+    // Let's set the arguments size based on the history we have gathered.
+    *arguments_size = history.function_call.arguments.size;
 }
 
 void codegen_generate_pop(const char *reg, size_t times)
@@ -684,10 +736,10 @@ void codegen_generate_function_call_for_exp_node(struct codegen_entity *func_ent
     // Generate expression for left node. EBX should contain the address we care about
     codegen_generate_expressionable(node->exp.left, 0);
 
-    size_t total_args = 0;
+    size_t arguments_size = 0;
 
     // Generate the function arguments i.e (50, 40, 30)
-    codegen_generate_expressionable_function_arguments(func_entity, node->exp.right, &total_args);
+    codegen_generate_expressionable_function_arguments(func_entity, node->exp.right, &arguments_size);
 
     // Call the function
     asm_push("call [ebx]");
@@ -695,8 +747,9 @@ void codegen_generate_function_call_for_exp_node(struct codegen_entity *func_ent
     // We don't need EBX anymore
     register_unset_flag(REGISTER_EBX_IS_USED);
 
-    // Now lets restore the stack to its original state before this function call
-    asm_push("add esp, %i", FUNCTION_CALL_ARGUMENTS_GET_STACK_SIZE(total_args));
+    // We don't ahve to align the arguments size because the deeper parts of the system
+    // should have done that already.
+    asm_push("add esp, %i", arguments_size);
 }
 
 void codegen_generate_structure_or_union_access(struct codegen_entity *entity_out, struct node *node)
@@ -762,18 +815,20 @@ int get_additional_flags(int current_flags, struct node* node)
     return additional_flags;
 }
 
-void codegen_generate_exp_node_for_arithmetic(struct node *node, int flags)
+void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history* history)
 {
     assert(node->type == NODE_TYPE_EXPRESSION);
+
+    int flags = history->flags;
 
     // We need to set the correct flag regarding which operator is being used
     flags |= codegen_set_flag_for_operator(node->exp.op);
 
-    codegen_generate_expressionable(node->exp.left, flags);
-    codegen_generate_expressionable(node->exp.right, flags | EXPRESSION_FLAG_RIGHT_NODE);
+    codegen_generate_expressionable(node->exp.left, history_down(history, flags));
+    codegen_generate_expressionable(node->exp.right, history_down(history, flags | EXPRESSION_FLAG_RIGHT_NODE));
 }
 
-void _codegen_generate_exp_node(struct node *node, int flags)
+void _codegen_generate_exp_node(struct node *node, struct history* history)
 {
     if (is_node_assignment(node))
     {
@@ -796,22 +851,27 @@ void _codegen_generate_exp_node(struct node *node, int flags)
     // If we have test(50, 40) then the expression (50, 40) has both left and right operands
     // being a function call argument. So the flag will be set for both of these by specifying the
     // additional_flags
-    int additional_flags = get_additional_flags(flags, node);
+    int additional_flags = get_additional_flags(history->flags, node);
 
     // Still not done? Then its probably an arithmetic expression of some kind.
     // I.e a+b+50
-    codegen_generate_exp_node_for_arithmetic(node, codegen_remove_uninheritable_flags(flags) | additional_flags);
+    codegen_generate_exp_node_for_arithmetic(node, history_down(history, codegen_remove_uninheritable_flags(history->flags) | additional_flags));
 }
 
-void codegen_generate_exp_node(struct node *node, int flags)
+void codegen_generate_exp_node(struct node *node, struct history* history)
 {
+    // Reserve current flags as they can be changed by lower in hirarchy
+    int flags = history->flags;
+
     // Generate the expression and all child expressions
-    _codegen_generate_exp_node(node, flags);
+    _codegen_generate_exp_node(node, history);
 
 
     // If we are in function call arguments then we must push the result to the stack
     // If we have comma then we got multiple arguments so no need to create a PUSH as it was
     // done earlier.
+
+    // Hmm could be improve perhaps..
     if (flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS && !S_EQ(node->exp.op, ","))
     {
         asm_push("PUSH eax");
@@ -851,8 +911,10 @@ void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, ch
     sprintf(out, "ebp+%i", entity->stack_offset);
 }
 
-void codegen_handle_variable_access(struct node* access_node, struct codegen_entity *entity, int flags)
+void codegen_handle_variable_access(struct node* access_node, struct codegen_entity *entity, struct history* history)
 {
+    int flags = history->flags;
+
     // Generate move or math.
     codegen_gen_mov_or_math("eax", access_node, flags, entity);
 
@@ -861,19 +923,24 @@ void codegen_handle_variable_access(struct node* access_node, struct codegen_ent
         // We have a function call argument, therefore we must push the argument to the stck
         // so that it can be passed to the function we are calling
         asm_push("PUSH eax");
-
+        
         // We are done with the EAX register.
         register_unset_flag(REGISTER_EAX_IS_USED);
+
+        // Think of a function name for this.. cant think of one..
+        // another time 
+        history->function_call.arguments.size += 4;
+
     }
 }
 
-void codegen_handle_function_access(struct codegen_entity *entity, int flags)
+void codegen_handle_function_access(struct codegen_entity *entity, struct history* history)
 {
     register_set_flag(REGISTER_EBX_IS_USED);
     asm_push("lea ebx, [%s]", entity->address);
 }
 
-void codegen_generate_identifier(struct node *node, int flags)
+void codegen_generate_identifier(struct node *node, struct history* history)
 {
     struct codegen_entity entity;
     assert(codegen_get_entity_for_node(node, &entity) == 0);
@@ -882,11 +949,11 @@ void codegen_generate_identifier(struct node *node, int flags)
     switch (entity.node->type)
     {
     case NODE_TYPE_VARIABLE:
-        codegen_handle_variable_access(node, &entity, flags);
+        codegen_handle_variable_access(node, &entity, history);
         break;
 
     case NODE_TYPE_FUNCTION:
-        codegen_handle_function_access(&entity, flags);
+        codegen_handle_function_access(&entity, history);
         break;
 
     default:
@@ -900,9 +967,10 @@ static bool is_comma_operator(struct node *node)
     return S_EQ(node->exp.op, ",");
 }
 
-void codegen_generate_unary(struct node *node, int flags)
+void codegen_generate_unary(struct node *node, struct history* history)
 {
-    codegen_generate_expressionable(node->unary.operand, flags);
+    int flags = history->flags;
+    codegen_generate_expressionable(node->unary.operand, history);
     // We have generated the value for the operand
     // Let's now decide what to do with the result based on the operator
     if (S_EQ(node->unary.op, "-"))
@@ -912,32 +980,32 @@ void codegen_generate_unary(struct node *node, int flags)
     }
 }
 
-void codegen_generate_exp_parenthesis_node(struct node *node, int flags)
+void codegen_generate_exp_parenthesis_node(struct node *node, struct history* history)
 {
-    codegen_generate_expressionable(node->parenthesis.exp, flags);
+    codegen_generate_expressionable(node->parenthesis.exp, history);
 }
 
-void codegen_generate_expressionable(struct node *node, int flags)
+void codegen_generate_expressionable(struct node *node, struct history* history)
 {
     switch (node->type)
     {
     case NODE_TYPE_NUMBER:
-        codegen_generate_number_node(node, flags);
+        codegen_generate_number_node(node, history);
         break;
 
     case NODE_TYPE_EXPRESSION:
-        codegen_generate_exp_node(node, flags);
+        codegen_generate_exp_node(node, history);
         break;
 
     case NODE_TYPE_EXPRESSION_PARENTHESIS:
-        codegen_generate_exp_parenthesis_node(node, flags);
+        codegen_generate_exp_parenthesis_node(node, history);
         break;
     case NODE_TYPE_IDENTIFIER:
-        codegen_generate_identifier(node, flags);
+        codegen_generate_identifier(node, history);
         break;
 
     case NODE_TYPE_UNARY:
-        codegen_generate_unary(node, flags);
+        codegen_generate_unary(node, history);
         break;
     }
 }
@@ -1006,10 +1074,7 @@ size_t codegen_compute_stack_size(struct vector *vec)
     }
 
     // Stack size must be 16 byte aligned as per C specification
-    if (stack_size % C_STACK_ALIGNMENT)
-        stack_size += C_STACK_ALIGNMENT - (stack_size % C_STACK_ALIGNMENT);
-
-    return stack_size;
+    return C_ALIGN(stack_size);
 }
 
 int codegen_stack_offset(struct node *node, int flags)
@@ -1054,12 +1119,9 @@ void codegen_generate_scope_variable(struct node *node)
     // Scope variables have values, lets compute that
     if (node->var.val)
     {
-        codegen_new_expression_state();
-
+        struct history history;
         // Process the right node first as this is an expression
-        codegen_generate_expressionable(node->var.val, 0);
-
-        codegen_end_expression_state();
+        codegen_generate_expressionable(node->var.val, history_begin(&history, 0));
 
         // Mark the EAX register as no longer used.
         register_unset_flag(REGISTER_EAX_IS_USED);
@@ -1105,10 +1167,11 @@ void codegen_generate_statement_return(struct node *node)
 
 void codegen_generate_statement(struct node *node)
 {
+    struct history history;
     switch (node->type)
     {
     case NODE_TYPE_EXPRESSION:
-        codegen_generate_exp_node(node, 0);
+        codegen_generate_exp_node(node, history_begin(&history, 0));
         break;
 
     case NODE_TYPE_VARIABLE:

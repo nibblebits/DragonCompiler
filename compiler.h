@@ -92,6 +92,7 @@ enum
     EXPRESSION_IS_SUBTRACTION = 0b000000000010000,
     EXPRESSION_IS_MULTIPLICATION = 0b0000000000100000,
     EXPRESSIPON_IS_DIVISION = 0b0000000001000000,
+    EXPRESSION_IN_FUNCTION_CALL = 0b0000000010000000
 };
 
 #define EXPRESSION_UNINHERITABLE_FLAGS \
@@ -119,7 +120,7 @@ enum
 // 4 bytes for a stack push and pop on 32 bit arch.
 #define STACK_PUSH_SIZE 4
 #define FUNCTION_CALL_ARGUMENTS_GET_STACK_SIZE(total_args) total_args *STACK_PUSH_SIZE
-
+#define C_ALIGN(size) (size % C_STACK_ALIGNMENT) ? size + (C_STACK_ALIGNMENT - (size % C_STACK_ALIGNMENT)) : size
 struct expression_state
 {
     int flags;

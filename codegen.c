@@ -745,6 +745,23 @@ int codegen_set_flag_for_operator(const char* op)
     return flag;
 }
 
+int get_additional_flags(int current_flags, struct node* node)
+{
+    if (node->type != NODE_TYPE_EXPRESSION)
+    {
+        return 0;
+    }
+
+    int additional_flags = 0;
+    bool maintain_function_call_argument_flag = (current_flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS) && S_EQ(node->exp.op, ",");
+    if (maintain_function_call_argument_flag)
+    {
+        additional_flags |= EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS;
+    }
+
+    return additional_flags;
+}
+
 void codegen_generate_exp_node_for_arithmetic(struct node *node, int flags)
 {
     assert(node->type == NODE_TYPE_EXPRESSION);
@@ -754,7 +771,6 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, int flags)
 
     codegen_generate_expressionable(node->exp.left, flags);
     codegen_generate_expressionable(node->exp.right, flags | EXPRESSION_FLAG_RIGHT_NODE);
-
 }
 
 void _codegen_generate_exp_node(struct node *node, int flags)
@@ -772,10 +788,19 @@ void _codegen_generate_exp_node(struct node *node, int flags)
         // Therefore we have done the job
         return;
     }
+    
+    // Additional flags might need to be passed down to the other nodes even if they are naturally uninheritable
+    // Examples include a function call with multiple arguments (50, 40, 30). In this case we have three arguments
+    // so if this expression has a comma as the operator then one of the additional flags will be EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS
+    // which specifies that we are in a function call argument, because we are.
+    // If we have test(50, 40) then the expression (50, 40) has both left and right operands
+    // being a function call argument. So the flag will be set for both of these by specifying the
+    // additional_flags
+    int additional_flags = get_additional_flags(flags, node);
 
     // Still not done? Then its probably an arithmetic expression of some kind.
     // I.e a+b+50
-    codegen_generate_exp_node_for_arithmetic(node, codegen_remove_uninheritable_flags(flags));
+    codegen_generate_exp_node_for_arithmetic(node, codegen_remove_uninheritable_flags(flags) | additional_flags);
 }
 
 void codegen_generate_exp_node(struct node *node, int flags)
@@ -783,8 +808,11 @@ void codegen_generate_exp_node(struct node *node, int flags)
     // Generate the expression and all child expressions
     _codegen_generate_exp_node(node, flags);
 
+
     // If we are in function call arguments then we must push the result to the stack
-    if (flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS)
+    // If we have comma then we got multiple arguments so no need to create a PUSH as it was
+    // done earlier.
+    if (flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS && !S_EQ(node->exp.op, ","))
     {
         asm_push("PUSH eax");
     }

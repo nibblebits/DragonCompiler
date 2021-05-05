@@ -692,14 +692,13 @@ void codegen_generate_assignment_expression(struct node *node)
 {
     struct codegen_entity assignment_operand_entity;
 
-    codegen_new_expression_state();
-
+    struct history history;
+    
     // Process the right node first as this is an expression
-    codegen_generate_expressionable(node->exp.right, 0);
+    codegen_generate_expressionable(node->exp.right, history_begin(&history, 0));
     // Now lets find the stack offset
     assert(codegen_get_entity_for_node(node->exp.left, &assignment_operand_entity) == 0);
 
-    codegen_end_expression_state();
 
     // Mark the EAX register as no longer used.
     register_unset_flag(REGISTER_EAX_IS_USED);

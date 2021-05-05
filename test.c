@@ -6,6 +6,6 @@ int abc(int a)
 }
 int test(int k)
 {
-
-  int z = abc(20)+20;
+   int *a = 512;
+   *a = 50;
 }

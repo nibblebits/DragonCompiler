@@ -744,6 +744,10 @@ void codegen_generate_function_call_for_exp_node(struct codegen_entity *func_ent
     // Call the function
     asm_push("call [ebx]");
 
+    // EAX register is now used because it contains the return result. Important that
+    // we mark it as used to prevent it being overwritten in some sort of expression
+    register_set_flag(REGISTER_EAX_IS_USED);
+
     // We don't need EBX anymore
     register_unset_flag(REGISTER_EBX_IS_USED);
 
@@ -1151,8 +1155,10 @@ void codegen_generate_scope_variable_for_function_argument(struct node *node)
 
 void codegen_generate_statement_return(struct node *node)
 {
+    struct history history;
+    
     // Let's generate the expression of the return statement
-    codegen_generate_expressionable(node->stmt.ret.exp, 0);
+    codegen_generate_expressionable(node->stmt.ret.exp, history_begin(&history, 0));
 
     // Generate the stack subtraction.
     codegen_stack_add(codegen_align(codegen_scope_current()->size));

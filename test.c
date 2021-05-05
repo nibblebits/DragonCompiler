@@ -7,5 +7,5 @@ int abc(int a)
 int test(int k)
 {
 
-   abc(20);
+  int z = abc(20)+20;
 }

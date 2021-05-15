@@ -14,6 +14,17 @@
 #define TOTAL_OPERATOR_GROUPS 14
 #define MAX_OPERATORS_IN_GROUP 12
 
+
+// Flags to represent history to try to make it easier to know what stage the parse process is at.
+enum
+{
+    // Signifies we are at the right operand of a structure access. I.e a.b "b" would be the right operand
+    HISTORY_FLAG_STRUCTURE_ACCESS_RIGHT_OPERAND = 0b00000001,
+    // Signifies the current code flow is inside of a structure right now.
+    // We are parsing a structure at this exact moment in time if this flag is set.
+    HISTORY_FLAG_INSIDE_STRUCTURE = 0b00000010,
+};
+
 // Expression flags
 
 enum
@@ -52,12 +63,141 @@ static struct op_precedence_group op_precedence[TOTAL_OPERATOR_GROUPS] = {
     {.operators = {",", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
 };
 
+struct history
+{
+    // Flags for this history.
+    int flags;
+
+    union
+    {
+        // In cases where we have structure access or union access we may need to store
+        // a current offset for when we end up in situations where theirs structures inside
+        // structures.
+        int current_offset;
+    };
+
+};
+
 static struct compile_process *current_process;
 int parse_next();
-void parse_statement();
+void parse_statement(struct history* history);
+
+
+
+static struct history *history_down(struct history *history, int flags)
+{
+    history->flags = flags;
+    return history;
+}
+
+static struct history *history_begin(struct history *history_out, int flags)
+{
+    memset(history_out, 0, sizeof(struct history));
+    history_out->flags = flags;
+    return history_out;
+}
+
 
 #define parse_err(...) \
     compiler_error(current_process, __VA_ARGS__)
+
+#define parser_err(...) \
+    compiler_error(current_process, __VA_ARGS__)
+
+#define parser_scope_new() \
+    scope_new(current_process, 0)
+
+#define parser_scope_finish() \
+    scope_finish(current_process)
+
+#define parser_scope_push(value, elem_size) \
+    scope_push(current_process, value, elem_size)
+
+#define parser_scope_last_entity() \
+    scope_last_entity(current_process)
+
+#define parser_scope_current() \
+    scope_current(current_process)
+
+
+// Simple bitmask for scope entity rules.
+enum
+{
+    PARSER_SCOPE_ENTITY_LOCAL_STACK = 0b00000001,
+    PARSER_SCOPE_ENTITY_OFFSET_ZERO = 0b00000010
+};
+
+struct parser_scope_entity
+{
+    // The flags for this scope entity
+    int flags;
+
+    // The stack offset this scope entity can be accessed at.
+    // i.e -4, -8 -12
+    // If this scope entity has no stack entity as its a global scope
+    // then this value should be ignored.
+    int stack_offset;
+
+    // A node to a variable declaration.
+    struct node *node;
+};
+
+
+struct parser_scope_entity *parser_new_scope_entity(struct node *node, int stack_offset, int flags)
+{
+    struct parser_scope_entity *entity = calloc(sizeof(struct parser_scope_entity), 1);
+    entity->node = node;
+    entity->flags = flags;
+    entity->stack_offset = stack_offset;
+    return entity;
+}
+
+int parser_stack_offset(struct node *node, int flags)
+{
+    int offset = node->var.type.size;
+
+    // If the stack is local then we must grow downwards
+    // as we want to access our local function arguments in our given scope
+    // You would not provide this flag for things such as function arguments whose stack
+    // is created by the function caller.
+    if (flags & PARSER_SCOPE_ENTITY_LOCAL_STACK)
+    {
+        offset = -offset;
+    }
+    
+    if (flags & PARSER_SCOPE_ENTITY_OFFSET_ZERO)
+    {
+        offset = 0;
+    }
+
+    struct parser_scope_entity *last_entity = parser_scope_last_entity();
+    if (last_entity)
+    {
+
+        // If this entity is not on a local stack but we want to get an offset
+        // for an element on a stack then their is an incompatability
+        // we should just return the current offset and make no effort to include it
+        // in the calculation at all.
+        if ((flags & PARSER_SCOPE_ENTITY_LOCAL_STACK) && !(last_entity->flags & PARSER_SCOPE_ENTITY_LOCAL_STACK))
+        {
+            return offset;
+        }
+
+        // We use += because if the stack_offset is negative then this will do a negative
+        // if its positive then it will do a positive. += is the best operator for both cases
+        offset += last_entity->stack_offset;
+        if (flags & PARSER_SCOPE_ENTITY_OFFSET_ZERO)
+        {
+            // Are we offsetting from zero? Alright then we need to add to the offset the
+            // previous entities variable size
+            offset += last_entity->node->var.type.size;
+        }
+    }
+
+    return offset;
+}
+
+
 
 static int parser_get_precedence_for_operator(const char *op, struct op_precedence_group **group_out)
 {
@@ -101,8 +241,10 @@ static bool parser_left_op_has_priority(const char *op_left, const char *op_righ
 
 static bool parser_is_unary_operator(const char *op)
 {
-    return S_EQ(op, "-") || S_EQ(op, "!") || S_EQ(op, "~");
+    return S_EQ(op, "-") || S_EQ(op, "!") || S_EQ(op, "~") || S_EQ(op, "*");
 }
+
+
 
 static struct token *token_next()
 {
@@ -140,6 +282,20 @@ static struct token *token_next_expected(int type)
 
     return token;
 }
+
+
+int parser_get_pointer_depth()
+{
+    int depth = 0;
+    while (token_next_is_operator("*"))
+    {
+        depth += 1;
+        token_next();
+    }
+
+    return depth;
+}
+
 
 static void expect_sym(char c)
 {
@@ -293,7 +449,7 @@ void make_variable_node(struct datatype *datatype, struct token *name_token, str
     node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type = *datatype, .var.name = name_token->sval, .var.val = value_node});
 }
 
-void parse_expressionable(int flags);
+void parse_expressionable(struct history* history);
 void parse_for_parentheses();
 
 static void parser_append_size_for_node(size_t *variable_size, struct node *node)
@@ -309,10 +465,10 @@ static void parser_append_size_for_node(size_t *variable_size, struct node *node
  * the variable_size variable will be incremented by the size of the variable
  * in this statement
  */
-void parse_body_single_statement(size_t *variable_size, struct vector *body_vec)
+void parse_body_single_statement(size_t *variable_size, struct vector *body_vec, struct history* history)
 {
     struct node *stmt_node = NULL;
-    parse_statement();
+    parse_statement(history);
     stmt_node = node_pop();
     vector_push(body_vec, &stmt_node);
 
@@ -328,14 +484,14 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec)
  * Parses the body_vec vector and for any variables the variable size is calculated
  * and added to the variable_size variable
  */
-void parse_body_multiple_statements(size_t *variable_size, struct vector *body_vec)
+void parse_body_multiple_statements(size_t *variable_size, struct vector *body_vec, struct history* history)
 {
     struct node *stmt_node = NULL;
     // Ok we are parsing a full body with many statements.
     expect_sym('{');
     while (!token_next_is_symbol('}'))
     {
-        parse_statement();
+        parse_statement(history);
         stmt_node = node_pop();
         vector_push(body_vec, &stmt_node);
 
@@ -357,7 +513,7 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
  * 
  * Note the size will not be 16-bit aligned as required in the C standard.
  */
-void parse_body(size_t *variable_size)
+void parse_body(size_t *variable_size, struct history* history)
 {
     // We must always have a variable size pointer
     // if the caller doesn't care about the size we will make our own.
@@ -371,12 +527,12 @@ void parse_body(size_t *variable_size)
     // We don't have a left curly? Then this body composes of only one statement
     if (!token_peek_next('{'))
     {
-        parse_body_single_statement(variable_size, body_vec);
+        parse_body_single_statement(variable_size, body_vec, history);
         return;
     }
 
     // We got a couple of statements between curly braces {int a; int b;}
-    parse_body_multiple_statements(variable_size, body_vec);
+    parse_body_multiple_statements(variable_size, body_vec, history);
 }
 
 /**
@@ -388,7 +544,7 @@ void parser_node_shift_children_left(struct node *node)
 {
     assert(node->type == NODE_TYPE_EXPRESSION);
     assert(node->exp.right->type == NODE_TYPE_EXPRESSION);
-    
+
     const char *right_op = node->exp.right->exp.op;
     struct node *new_exp_left_node = node->exp.left;
     struct node *new_exp_right_node = node->exp.right->exp.left;
@@ -442,29 +598,73 @@ void parser_reorder_expression(struct node **node_out)
     }
 }
 
-void parse_for_unary()
+
+/**
+ * Used for pointer access unary i.e ***abc = 50;
+ */
+void parse_for_indirection_unary()
 {
-    // Let's get the unary operator
-    const char *unary_op = token_next()->sval;
+    // We have an indirection operator.
+    // Let's calculate the pointer depth
+    int depth = parser_get_pointer_depth();
 
     // Now lets parse the expression after this unary operator
-    parse_expressionable(0);
+    struct history history;
+    parse_expressionable(history_begin(&history, 0));
+
+
+    struct node *unary_operand_node = node_pop();
+    make_unary_node("*", unary_operand_node);
+
+    struct node* unary_node = node_pop();
+    unary_node->unary.indirection.depth = depth;
+    node_push(unary_node);
+}
+
+void parse_for_normal_unary(const char* unary_op)
+{
+  // Now lets parse the expression after this unary operator
+    struct history history;
+    parse_expressionable(history_begin(&history, 0));
 
     struct node *unary_operand_node = node_pop();
     make_unary_node(unary_op, unary_operand_node);
 }
 
+void parse_for_unary()
+{
+    // Let's get the unary operator
+    const char *unary_op = token_peek_next()->sval;
+
+    if (op_is_indirection(unary_op))
+    {
+        parse_for_indirection_unary();
+        return;
+    }
+
+    // We have read the unary operator lets pop it off the token stack
+    token_next();
+
+    // Read the normal unary
+    parse_for_normal_unary(unary_op);
+}
+
 void parse_struct(struct datatype *dtype)
 {
+    parser_scope_new();
     // We already have the structure name parsed, its inside dtype.
     // Parse the body of the structure "struct abc {body_here}"
+
+    struct history history;
     size_t body_variable_size = 0;
-    parse_body(&body_variable_size);
+    parse_body(&body_variable_size, history_begin(&history, HISTORY_FLAG_INSIDE_STRUCTURE));
     struct node *body_node = node_pop();
     make_struct_node(dtype->type_str, body_node);
 
     // Structures must end with semicolons
     expect_sym(';');
+    parser_scope_finish();
+
 }
 
 void parse_struct_or_union(struct datatype *dtype)
@@ -478,10 +678,7 @@ void parse_struct_or_union(struct datatype *dtype)
     parse_err("Unions are not yet supported");
 }
 
-static void parser_exp_flags_apply_node_flags(struct node *node_out, int flags)
-{
-}
-void parse_exp_normal(int flags)
+void parse_exp_normal(struct history* history)
 {
     struct token *op_token = token_next();
     const char *op = op_token->sval;
@@ -490,8 +687,16 @@ void parse_exp_normal(int flags)
     // Left node is now apart of an expression
     node_left->flags |= NODE_FLAG_INSIDE_EXPRESSION;
 
+    int additional_flags = 0;
+    if (is_access_operator(op))
+    {
+        // We are accessing a structure here. Therefore we must set the flag in the history
+        // that this is a structure access.
+        additional_flags |= HISTORY_FLAG_STRUCTURE_ACCESS_RIGHT_OPERAND;
+    }
+
     // We must parse the right operand
-    parse_expressionable(flags);
+    parse_expressionable(history_down(history, history->flags | additional_flags));
 
     struct node *node_right = node_pop();
     // Right node is now apart of an expression
@@ -499,14 +704,14 @@ void parse_exp_normal(int flags)
 
     make_exp_node(node_left, node_right, op);
     struct node *exp_node = node_pop();
-    parser_exp_flags_apply_node_flags(exp_node, flags);
 
     // We must reorder the expression if possible
     parser_reorder_expression(&exp_node);
+
     node_push(exp_node);
 }
 
-void parse_exp(int flags)
+void parse_exp(struct history* history)
 {
     if (S_EQ(token_peek_next()->sval, "("))
     {
@@ -514,16 +719,22 @@ void parse_exp(int flags)
         return;
     }
 
+
     if (parser_is_unary_operator(token_peek_next()->sval))
     {
         parse_for_unary();
         return;
     }
 
-    parse_exp_normal(flags);
+    parse_exp_normal(history);
 }
 
-int parse_expressionable_single(int flags)
+void parse_identifier(struct history* history)
+{
+    parse_single_token_to_node();
+}
+
+int parse_expressionable_single(struct history* history)
 {
     struct token *token = token_peek_next();
     if (!token)
@@ -537,20 +748,20 @@ int parse_expressionable_single(int flags)
         res = 0;
         break;
     case TOKEN_TYPE_IDENTIFIER:
-        parse_single_token_to_node();
+        parse_identifier(history);
         res = 0;
         break;
     case TOKEN_TYPE_OPERATOR:
-        parse_exp(flags);
+        parse_exp(history);
         res = 0;
         break;
     }
     return res;
 }
-void parse_expressionable(int flags)
+void parse_expressionable(struct history* history)
 {
     struct node *last_node = NULL;
-    while (parse_expressionable_single(flags) == 0)
+    while (parse_expressionable_single(history) == 0)
     {
     }
 }
@@ -565,8 +776,10 @@ void parse_for_parentheses()
     {
         node_pop();
     }
+
+    struct history history;
     expect_op("(");
-    parse_expressionable(0);
+    parse_expressionable(history_begin(&history, 0));
     expect_sym(')');
 
     struct node *exp_node = node_pop();
@@ -579,7 +792,6 @@ void parse_for_parentheses()
         // and whose right node is the parentheses node
         struct node *parentheses_node = node_pop();
         make_exp_node(left_node, parentheses_node, "()");
-
     }
 }
 
@@ -684,18 +896,6 @@ void parser_datatype_init(struct token *datatype_token, struct datatype *datatyp
     datatype_out->type_str = datatype_token->sval;
 }
 
-int parser_get_pointer_depth()
-{
-    int depth = 0;
-    while (token_next_is_operator("*"))
-    {
-        depth += 1;
-        token_next();
-    }
-
-    return depth;
-}
-
 /**
  * Parses the type part of the datatype. I.e "int", "long"
  * 
@@ -718,7 +918,7 @@ void parse_datatype_type(struct datatype *datatype)
     parser_datatype_init(datatype_token, datatype, pointer_depth);
 }
 
-void parse_variable(struct datatype *dtype, struct token *name_token)
+void parse_variable(struct datatype *dtype, struct token *name_token, struct history* history)
 {
     struct node *value_node = NULL;
     // We have a datatype and a variable name but we still need to parse a value if their is one
@@ -730,47 +930,64 @@ void parse_variable(struct datatype *dtype, struct token *name_token)
         // Now we now we are at the "=" lets pop it off the token stack
         token_next();
         // Parse the value expression i.e the "50"
-        parse_expressionable(0);
+        parse_expressionable(history);
         value_node = node_pop();
     }
 
     make_variable_node(dtype, name_token, value_node);
+
+    struct node* var_node = node_pop();
+
+    // Can be optimized...
+    int offset = 0;
+    if (history->flags & HISTORY_FLAG_INSIDE_STRUCTURE)
+    {
+        // Inside a structure, then we offset from zero for all structure variables
+        // Do not use the local stack flag as the structure is its own space.
+        offset = parser_stack_offset(var_node, PARSER_SCOPE_ENTITY_OFFSET_ZERO);
+    }
+    else
+    {
+        // I hate else statements, make another function to resolve this rubbish.
+        offset = parser_stack_offset(var_node, PARSER_SCOPE_ENTITY_LOCAL_STACK);
+    }
+
+    parser_scope_push(parser_new_scope_entity(var_node, offset, PARSER_SCOPE_ENTITY_LOCAL_STACK), var_node->var.type.size);
+    var_node->var.offset = offset;
+
+    // Push the variable node back to the stack
+    node_push(var_node);
+
 }
 
 /**
  * Unlike the "parse_variable" function this function does not expect you 
  * to know the datatype or the name of the variable, it parses that for you
  */
-void parse_variable_full()
+void parse_variable_full(struct history* history)
 {
     // Null by default, making this an unsigned non-static variable
     struct datatype dtype;
     parse_datatype_modifiers(&dtype);
     parse_datatype_type(&dtype);
 
-    // Ok great we have a datatype at this point, next comes the variable name
-    // or the function name.. we don't know which one yet ;)
 
     struct token *name_token = token_next();
-    parse_variable(&dtype, name_token);
+    parse_variable(&dtype, name_token, history);
 }
 
-void parse_function_argument()
-{
-    parse_variable_full();
-}
 
 /**
  * Parses the function arguments and returns a vector of function arguments
  * that were parsed succesfully
  */
-struct vector *parse_function_arguments()
+struct vector *parse_function_arguments(struct history* history)
 {
     struct vector *arguments_vec = vector_create(sizeof(struct node *));
     // If we see a right bracket we are at the end of the function arguments i.e (int a, int b)
     while (!token_next_is_symbol(')'))
     {
-        parse_variable_full();
+        parse_variable_full(history);
         // Push the parsed argument variable into the arguments vector
         struct node *argument_node = node_pop();
         vector_push(arguments_vec, &argument_node);
@@ -788,25 +1005,28 @@ struct vector *parse_function_arguments()
     return arguments_vec;
 }
 
-void parse_function_body()
+void parse_function_body(struct history* history)
 {
-    parse_body(NULL);
+    parse_body(0, history);
 }
 
 void parse_function(struct datatype *dtype, struct token *name_token)
 {
     struct vector *arguments_vector = NULL;
+
+    struct history history;
+
     // We expect a left bracket for functions.
     // Let us not forget we already have the return type and name of the function i.e int abc
     expect_op("(");
-    arguments_vector = parse_function_arguments();
+    arguments_vector = parse_function_arguments(history_begin(&history, 0));
     expect_sym(')');
 
     // Do we have a function body or is this a declaration?
     if (token_next_is_symbol('{'))
     {
         // Parse the function body
-        parse_function_body();
+        parse_function_body(history_begin(&history, 0));
         struct node *body_node = node_pop();
         // Create the function node
         make_function_node(dtype, name_token->sval, arguments_vector, body_node);
@@ -827,7 +1047,7 @@ static bool is_datatype_struct_or_union(struct datatype *dtype)
  * Parses a variable or function, at this point the parser should be certain
  * that the tokens coming up will form a variable or a function
  */
-void parse_variable_function_or_struct_union()
+void parse_variable_function_or_struct_union(struct history* history)
 {
     //  Variables have datatypes, and so do functions have return types.
     //  lets parse the data type
@@ -863,7 +1083,7 @@ void parse_variable_function_or_struct_union()
 
     // Since this is not a function it has to be a variable
     // Let's handle the variable
-    parse_variable(&dtype, name_token);
+    parse_variable(&dtype, name_token, history);
     // We expect variable declarations to end with ";"
     expect_sym(';');
 }
@@ -874,8 +1094,8 @@ void parse_keyword_return()
 
     // Ok we parsed the return keyword, lets now parse the expression of the return
     // keyword and then we expect a semicolon ;)
-
-    parse_expressionable(0);
+    struct history history;
+    parse_expressionable(history_begin(&history, 0));
 
     struct node *ret_expr = node_pop();
     make_return_node(ret_expr);
@@ -884,7 +1104,7 @@ void parse_keyword_return()
     expect_sym(';');
 }
 
-void parse_keyword()
+void parse_keyword(struct history* history)
 {
     struct token *token = token_peek_next();
     // keyword_is_datatype is temporary because custom types can exist
@@ -893,7 +1113,7 @@ void parse_keyword()
     // This will be changed soon
     if (is_keyword_variable_modifier(token->sval) || keyword_is_datatype(token->sval))
     {
-        parse_variable_function_or_struct_union();
+        parse_variable_function_or_struct_union(history);
         return;
     }
 
@@ -908,7 +1128,8 @@ void parse_keyword()
 
 void parse_keyword_for_global()
 {
-    parse_keyword();
+    struct history history;
+    parse_keyword(history_begin(&history, 0));
 
     // Global variables and functions must be registered as symbols.
     struct node *node = node_pop();
@@ -929,24 +1150,26 @@ void parse_keyword_for_global()
  * if statements and so on. THeir is no node type of statment, there are however
  * nodes that fit in this statement category and should be parsed as such.
  */
-void parse_statement()
+void parse_statement(struct history* history)
 {
     // Statements are composed of keywords or expressions
     if (token_peek_next()->type == TOKEN_TYPE_KEYWORD)
     {
-        parse_keyword();
+        parse_keyword(history);
         return;
     }
-
     // This must be an expression as its not a keyword
     // I.e a = 50;
-    parse_expressionable(0);
+    parse_expressionable(history);
+
     // Expression statements must end with a semicolon
     expect_sym(';');
 }
 
 int parse_next()
 {
+    struct history history;
+
     struct token *token = token_peek_next();
     if (!token)
     {
@@ -959,7 +1182,7 @@ int parse_next()
     case TOKEN_TYPE_NUMBER:
     case TOKEN_TYPE_IDENTIFIER:
     case TOKEN_TYPE_OPERATOR:
-        parse_expressionable(0);
+        parse_expressionable(history_begin(&history, 0));
         break;
 
     case TOKEN_TYPE_SYMBOL:
@@ -1072,20 +1295,9 @@ struct vector *parser_get_all_nodes_of_type(struct compile_process *process, int
 
 int parse(struct compile_process *process)
 {
-
-    struct vector *vec1 = vector_create(sizeof(int *));
-    struct vector *vec2 = vector_create(sizeof(int **));
-
-    int a = 50;
-    vector_push(vec1, &a);
-    int **ptr = vector_back(vec1);
-    vector_push(vec2, &ptr);
-
-    int **ptr2 = (int **)(vector_back(vec2));
-    **ptr2 = 90;
-    printf("%i\n", **(int **)(vector_back(vec2)));
-
-    printf("%i\n", *(int *)(vector_back(vec1)));
+    // Create the root scope for parsing.
+    // This scope will help us generate static offsets to be used during compile time.
+    scope_create_root(process);
 
     current_process = process;
     vector_set_peek_pointer(process->token_vec, 0);
@@ -1100,6 +1312,8 @@ int parse(struct compile_process *process)
         // Also push it back to the main node stack that we just popped from
         node_push(node);
     }
+
+    scope_free_root(process);
 
     return PARSE_ALL_OK;
 }

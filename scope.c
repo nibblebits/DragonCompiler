@@ -21,6 +21,7 @@ void scope_dealloc(struct scope *scope)
     free(scope);
 }
 
+
 struct scope *scope_create_root(struct compile_process *process)
 {
     // Assert no root is currently set
@@ -30,6 +31,14 @@ struct scope *scope_create_root(struct compile_process *process)
     struct scope *root_scope = scope_alloc();
     process->scope.root = root_scope;
     process->scope.current = root_scope;
+    return root_scope;
+}
+
+void scope_free_root(struct compile_process* process)
+{
+    scope_dealloc(process->scope.root);
+    process->scope.root = NULL;
+    process->scope.current = NULL;
 }
 
 struct scope *scope_new(struct compile_process *process, int flags)

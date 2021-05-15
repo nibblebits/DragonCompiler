@@ -30,7 +30,6 @@ static struct expression_state blank_state = {};
 struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *node, bool *position_known_at_compile_time);
 void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, char *out);
 
-
 /**
  * Specifies current history for the given operation/expression
  */
@@ -55,16 +54,15 @@ struct history
             } arguments;
         } function_call;
     };
-    
 };
 
-struct history* history_down(struct history* history, int flags)
+static struct history *history_down(struct history *history, int flags)
 {
     history->flags = flags;
     return history;
 }
 
-struct history* history_begin(struct history* history_out, int flags)
+static struct history *history_begin(struct history *history_out, int flags)
 {
     memset(history_out, 0, sizeof(struct history));
     history_out->flags = flags;
@@ -98,6 +96,12 @@ enum
     CODEGEN_ENTITY_TYPE_SYMBOL
 };
 
+// Codegen entity types
+enum
+{
+    CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS = 0b00000001
+};
+
 /**
  * Codegen entities are addressable areas of memory known at compile time.
  * For example they can represent scope variables, functions or global variables
@@ -111,12 +115,21 @@ struct codegen_entity
     char address[60];
     bool is_scope_entity;
 
+    // If the position cannot be known at compile time because it has a run-time only address
+    // such as a pointer for example. Then the CODEGEN_ENTITY_COMPLETED_ADDRESS flag will not be set
+    int flags;
+
     union
     {
         struct codegen_scope_entity *scope_entity;
         struct symbol *global_symbol;
     };
 };
+
+bool codegen_entity_address_known(struct codegen_entity* entity)
+{
+    return entity->flags & CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS;
+}
 
 size_t codegen_align(size_t size)
 {
@@ -196,7 +209,7 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
 {
     memset(entity_out, 0, sizeof(struct codegen_entity));
 
-    bool position_known_at_compile_time;
+    bool position_known_at_compile_time = false;
     struct codegen_scope_entity *scope_entity = codegen_get_scope_variable_for_node(node, &position_known_at_compile_time);
     if (scope_entity)
     {
@@ -205,6 +218,9 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
         entity_out->is_scope_entity = true;
         codegen_scope_entity_to_asm_address(entity_out->scope_entity, entity_out->address);
         entity_out->node = codegen_get_entity_node(entity_out);
+
+        if (position_known_at_compile_time)
+            entity_out->flags |= CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS;
 
         return 0;
     }
@@ -230,7 +246,9 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
     entity_out->is_scope_entity = false;
     entity_out->node = codegen_get_entity_node(entity_out);
     sprintf(entity_out->address, "%s", identifier_node->sval);
-
+    if (position_known_at_compile_time)
+        entity_out->flags |= CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS;
+    
     // We only deal with node symbols right now.
     assert(sym->type == SYMBOL_TYPE_NODE);
 
@@ -398,8 +416,8 @@ void codegen_expression_flags_set_in_function_call_arguments(bool in_function_ar
 }
 
 void codegen_generate_node(struct node *node);
-void codegen_generate_expressionable(struct node *node, struct history* history);
-void codegen_generate_new_expressionable(struct node *node, struct history* history)
+void codegen_generate_expressionable(struct node *node, struct history *history);
+void codegen_generate_new_expressionable(struct node *node, struct history *history)
 {
     codegen_generate_expressionable(node, history);
 }
@@ -408,7 +426,7 @@ const char *op;
 // Rename this function... terrible name
 // Return result should be used immedeitly and not stored
 // copy only! Temp result!
-static const char *codegen_get_fmt_for_value(struct node *value_node, struct codegen_entity* entity)
+static const char *codegen_get_fmt_for_value(struct node *value_node, struct codegen_entity *entity)
 {
     assert(value_node->type == NODE_TYPE_NUMBER || value_node->type == NODE_TYPE_IDENTIFIER);
 
@@ -425,17 +443,17 @@ static const char *codegen_get_fmt_for_value(struct node *value_node, struct cod
     return tmp_buf;
 }
 
-static void codegen_gen_math(const char *reg, struct node *value_node, int flags, struct codegen_entity* entity)
+static void codegen_gen_math(const char *reg, struct node *value_node, int flags, struct codegen_entity *entity)
 {
     if (flags & EXPRESSION_IS_ADDITION)
     {
         asm_push("add %s, %s", reg, codegen_get_fmt_for_value(value_node, entity));
     }
-    else if(flags & EXPRESSION_IS_SUBTRACTION)
+    else if (flags & EXPRESSION_IS_SUBTRACTION)
     {
         asm_push("sub %s, %s", reg, codegen_get_fmt_for_value(value_node, entity));
     }
-    else if(flags & EXPRESSION_IS_MULTIPLICATION)
+    else if (flags & EXPRESSION_IS_MULTIPLICATION)
     {
         codegen_use_register("ecx");
         asm_push("mov ecx, %s", codegen_get_fmt_for_value(value_node, entity));
@@ -443,7 +461,7 @@ static void codegen_gen_math(const char *reg, struct node *value_node, int flags
         // Need a way to know if its signed in the future.. Assumed all signed for now.
         asm_push("imul ecx");
     }
-    else if(flags & EXPRESSIPON_IS_DIVISION)
+    else if (flags & EXPRESSIPON_IS_DIVISION)
     {
         codegen_use_register("ecx");
         asm_push("mov ecx, %s", codegen_get_fmt_for_value(value_node, entity));
@@ -452,7 +470,7 @@ static void codegen_gen_math(const char *reg, struct node *value_node, int flags
     }
 }
 
-static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, int flags, struct codegen_entity* entity)
+static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, int flags, struct codegen_entity *entity)
 {
     if (register_is_used(reg))
     {
@@ -466,7 +484,7 @@ static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, in
 /**
  * For literal numbers
  */
-void codegen_generate_number_node(struct node *node, struct history* history)
+void codegen_generate_number_node(struct node *node, struct history *history)
 {
     // If this is a function call argument then we can just push the result straight to the stack
     if (history->flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS)
@@ -484,7 +502,6 @@ void codegen_generate_number_node(struct node *node, struct history* history)
 
     const char *reg_to_use = "eax";
     codegen_gen_mov_or_math(reg_to_use, node, history->flags, 0);
-
 }
 
 /**
@@ -505,64 +522,10 @@ static bool is_node_assignment(struct node *node)
            S_EQ(node->exp.op, "/=");
 }
 
-/**
- * Finds the given structure offset for the node provided. If the node represents
- * an expression such as: "a.b.c.d.f" then each operand will be processed and the structure
- * will be found and offset will be understood.
- * 
- * This is in the code generator but it should be moved to helper.c.
- * Reason its in code generator is because we depend on some other functions that should be in helper.c
- * but are in the code generator.
- * 
- * 
- * struct test
- * {
- *  int a;
- *  int b;
- * };
- * var_node_out will be set to the final variable in an expression i.e for the expression "test.b" var_node_out
- * will contain the variable node for variable "b" in this case our test structures variable "b"
- * 
- * \param var_node_out After calculating an offset for the structure the final structure variable in the sequence is outputted to vaR_node_out
- */
-int struct_offset_for_node(struct compile_process *compile_proc, struct node *node, struct node **var_node_out)
-{
-    // We only want to deal with expressions i.e "a.b.c"
-    assert(node->type == NODE_TYPE_EXPRESSION);
-    assert(is_access_operator(node->exp.op));
 
-    // Left operand = structure variable
-    // right operand = variable (possibly structure variable) or expression
 
-    struct node *left_operand = node->exp.left;
-    struct node *right_operand = node->exp.right;
 
-    // Represents the offset for the current expression's left and right operands
-    // ignoring any further expressions on the right operand.
-    // For example: "a.b.c". This offset is the offset of variable "b" in structure "a".
-    // The ".c" is not computed. We will compute that in a moment.
 
-    struct codegen_entity left_variable_entity;
-    assert(codegen_get_entity_for_node(left_operand, &left_variable_entity) == 0);
-
-    int offset = struct_offset(current_process,
-                               left_variable_entity.node->var.type.type_str,
-                               first_node_of_type(right_operand, NODE_TYPE_IDENTIFIER)->sval, var_node_out);
-
-    // Is the right operand an expression too?
-    if (is_access_operator_node(right_operand))
-    {
-        // Great then we need to deal with this. Recursion ;)
-        //  offset += struct_offset_for_node(current_process, right_operand);
-        assert(0 == 1 && "Not implemented yet. No structure in structure allowed");
-    }
-
-    // We should now have a computed offset for the entire structure access
-    // We do not care for pointers yet which will need to be considered
-    // We cant compute addresses we can't know until run time ;)
-
-    return offset;
-}
 
 /**
  * Iterates through the node until a codegen_scope_entity can be found, otherwise returns NULL.
@@ -578,36 +541,37 @@ struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *no
     assert(node);
 
     *position_known_at_compile_time = false;
-    struct node *left_node = node;
 
-    if (node->type == NODE_TYPE_EXPRESSION)
+    struct codegen_scope_entity* entity = NULL;
+    switch(node->type)
     {
-        left_node = node->exp.left;
-    }
+        case NODE_TYPE_EXPRESSION:
+            if(is_access_operator(node->exp.op))
+            {
+                entity = codegen_get_scope_variable_for_node(node->exp.left, position_known_at_compile_time);
+                // Ok entity is the root entity i.e "a.b" (variable a)
+                // We have access operator so we must get the next variable.
 
-    if (left_node->type != NODE_TYPE_IDENTIFIER)
-    {
-        // Hmm we need an identifier here if we are looking up a scope variable
-        // as identifiers represent variable names.
-        // Since we don't have an identifier we should return NULL as this lookup is impossible
-        return NULL;
-    }
+                // Offset will store the absolute offset from zero for the strucutre access
+                // it acts as if its a global variable, as we are on the scope we need
+                // to convert this to a stack address.
+                int offset = 0;
+                struct node* access_node = struct_for_access(current_process, node->exp.right, entity->node->var.type.type_str, &offset);
+                entity = codegen_new_scope_entity(access_node, entity->stack_offset+offset, 0);
+                break;
+            }
 
-    struct codegen_scope_entity *entity = codegen_get_scope_variable(left_node->sval);
+            entity = codegen_get_scope_variable_for_node(node->exp.left, position_known_at_compile_time);
+        break;
 
-    if (is_access_operator_node(node))
-    {
-        struct node *var_node = NULL;
-        int offset = struct_offset_for_node(current_process, node, &var_node);
-        // We must create a new scope entity to represent this structure
-        // We will then add the stack offset for the root entity to the offset
-        // giving an absolute address for a compile time-known structure address.
-        // Pointers not yet supported.
+        case NODE_TYPE_EXPRESSION_PARENTHESIS:
+            entity = codegen_get_scope_variable_for_node(node->parenthesis.exp, position_known_at_compile_time);
+        break;
 
-        // Our given entity will represent the resolved structure variable
-        // its offset should be the structure variable sstack offset + the absolute offset
-        // from zero in the structure.
-        entity = codegen_new_scope_entity(var_node, entity->stack_offset + offset, 0);
+        case NODE_TYPE_IDENTIFIER:
+            entity = codegen_get_scope_variable(node->sval);
+        break;
+
     }
 
     *position_known_at_compile_time = true;
@@ -693,12 +657,11 @@ void codegen_generate_assignment_expression(struct node *node)
     struct codegen_entity assignment_operand_entity;
 
     struct history history;
-    
+
     // Process the right node first as this is an expression
     codegen_generate_expressionable(node->exp.right, history_begin(&history, 0));
     // Now lets find the stack offset
     assert(codegen_get_entity_for_node(node->exp.left, &assignment_operand_entity) == 0);
-
 
     // Mark the EAX register as no longer used.
     register_unset_flag(REGISTER_EAX_IS_USED);
@@ -755,9 +718,6 @@ void codegen_generate_function_call_for_exp_node(struct codegen_entity *func_ent
     asm_push("add esp, %i", arguments_size);
 }
 
-void codegen_generate_structure_or_union_access(struct codegen_entity *entity_out, struct node *node)
-{
-}
 
 bool codegen_handle_codegen_entity_for_expression(struct codegen_entity *entity_out, struct node *node)
 {
@@ -777,23 +737,23 @@ bool codegen_handle_codegen_entity_for_expression(struct codegen_entity *entity_
     return done;
 }
 
-int codegen_set_flag_for_operator(const char* op)
+int codegen_set_flag_for_operator(const char *op)
 {
     int flag = 0;
 
-    if(S_EQ(op, "+"))
+    if (S_EQ(op, "+"))
     {
         flag |= EXPRESSION_IS_ADDITION;
     }
-    else if(S_EQ(op, "-"))
+    else if (S_EQ(op, "-"))
     {
         flag |= EXPRESSION_IS_SUBTRACTION;
     }
-    else if(S_EQ(op, "*"))
+    else if (S_EQ(op, "*"))
     {
         flag |= EXPRESSION_IS_MULTIPLICATION;
     }
-    else if(S_EQ(op, "/"))
+    else if (S_EQ(op, "/"))
     {
         flag |= EXPRESSIPON_IS_DIVISION;
     }
@@ -801,7 +761,7 @@ int codegen_set_flag_for_operator(const char* op)
     return flag;
 }
 
-int get_additional_flags(int current_flags, struct node* node)
+int get_additional_flags(int current_flags, struct node *node)
 {
     if (node->type != NODE_TYPE_EXPRESSION)
     {
@@ -818,7 +778,7 @@ int get_additional_flags(int current_flags, struct node* node)
     return additional_flags;
 }
 
-void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history* history)
+void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history *history)
 {
     assert(node->type == NODE_TYPE_EXPRESSION);
 
@@ -831,7 +791,7 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history*
     codegen_generate_expressionable(node->exp.right, history_down(history, flags | EXPRESSION_FLAG_RIGHT_NODE));
 }
 
-void _codegen_generate_exp_node(struct node *node, struct history* history)
+void _codegen_generate_exp_node(struct node *node, struct history *history)
 {
     if (is_node_assignment(node))
     {
@@ -846,7 +806,7 @@ void _codegen_generate_exp_node(struct node *node, struct history* history)
         // Therefore we have done the job
         return;
     }
-    
+
     // Additional flags might need to be passed down to the other nodes even if they are naturally uninheritable
     // Examples include a function call with multiple arguments (50, 40, 30). In this case we have three arguments
     // so if this expression has a comma as the operator then one of the additional flags will be EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS
@@ -861,14 +821,13 @@ void _codegen_generate_exp_node(struct node *node, struct history* history)
     codegen_generate_exp_node_for_arithmetic(node, history_down(history, codegen_remove_uninheritable_flags(history->flags) | additional_flags));
 }
 
-void codegen_generate_exp_node(struct node *node, struct history* history)
+void codegen_generate_exp_node(struct node *node, struct history *history)
 {
     // Reserve current flags as they can be changed by lower in hirarchy
     int flags = history->flags;
 
     // Generate the expression and all child expressions
     _codegen_generate_exp_node(node, history);
-
 
     // If we are in function call arguments then we must push the result to the stack
     // If we have comma then we got multiple arguments so no need to create a PUSH as it was
@@ -914,10 +873,23 @@ void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, ch
     sprintf(out, "ebp+%i", entity->stack_offset);
 }
 
-void codegen_handle_variable_access(struct node* access_node, struct codegen_entity *entity, struct history* history)
+void codegen_handle_variable_access(struct node *access_node, struct codegen_entity *entity, struct history *history)
 {
     int flags = history->flags;
 
+    // Are we instructed to get the address of this entity?
+    if (flags & EXPRESSION_GET_ADDRESS)
+    {
+        register_set_flag(REGISTER_EBX_IS_USED);
+
+        // We have indirection, therefore we should load the address into EBX. 
+        // rather than mov instruction
+        asm_push("lea ebx, [%s]", entity->address);
+        // We are done for now
+        return;
+    }
+
+    // Normal variable access? 
     // Generate move or math.
     codegen_gen_mov_or_math("eax", access_node, flags, entity);
 
@@ -926,24 +898,23 @@ void codegen_handle_variable_access(struct node* access_node, struct codegen_ent
         // We have a function call argument, therefore we must push the argument to the stck
         // so that it can be passed to the function we are calling
         asm_push("PUSH eax");
-        
+
         // We are done with the EAX register.
         register_unset_flag(REGISTER_EAX_IS_USED);
 
         // Think of a function name for this.. cant think of one..
-        // another time 
+        // another time
         history->function_call.arguments.size += 4;
-
     }
 }
 
-void codegen_handle_function_access(struct codegen_entity *entity, struct history* history)
+void codegen_handle_function_access(struct codegen_entity *entity, struct history *history)
 {
     register_set_flag(REGISTER_EBX_IS_USED);
     asm_push("lea ebx, [%s]", entity->address);
 }
 
-void codegen_generate_identifier(struct node *node, struct history* history)
+void codegen_generate_identifier(struct node *node, struct history *history)
 {
     struct codegen_entity entity;
     assert(codegen_get_entity_for_node(node, &entity) == 0);
@@ -970,9 +941,17 @@ static bool is_comma_operator(struct node *node)
     return S_EQ(node->exp.op, ",");
 }
 
-void codegen_generate_unary(struct node *node, struct history* history)
+void codegen_generate_unary_indirection(struct node *node, struct history *history)
 {
     int flags = history->flags;
+    // Generate the operand while passing the indirection flag
+    codegen_generate_expressionable(node->unary.operand, history_down(history, flags | EXPRESSION_GET_ADDRESS | EXPRESSION_INDIRECTION));
+
+    // EBX register now has the address of the variable for indirection
+}
+
+void codegen_generate_normal_unary(struct node *node, struct history *history)
+{
     codegen_generate_expressionable(node->unary.operand, history);
     // We have generated the value for the operand
     // Let's now decide what to do with the result based on the operator
@@ -983,12 +962,26 @@ void codegen_generate_unary(struct node *node, struct history* history)
     }
 }
 
-void codegen_generate_exp_parenthesis_node(struct node *node, struct history* history)
+void codegen_generate_unary(struct node *node, struct history *history)
+{
+    int flags = history->flags;
+
+    // Indirection unary should be handled differently to most unaries
+    if (op_is_indirection(node->unary.op))
+    {
+        codegen_generate_unary_indirection(node, history);
+        return;
+    }
+
+    codegen_generate_normal_unary(node, history);
+}
+
+void codegen_generate_exp_parenthesis_node(struct node *node, struct history *history)
 {
     codegen_generate_expressionable(node->parenthesis.exp, history);
 }
 
-void codegen_generate_expressionable(struct node *node, struct history* history)
+void codegen_generate_expressionable(struct node *node, struct history *history)
 {
     switch (node->type)
     {
@@ -1116,7 +1109,7 @@ int codegen_stack_offset(struct node *node, int flags)
 
 void codegen_generate_scope_variable(struct node *node)
 {
-    struct codegen_scope_entity *entity = codegen_new_scope_entity(node, codegen_stack_offset(node, CODEGEN_SCOPE_ENTITY_LOCAL_STACK), CODEGEN_SCOPE_ENTITY_LOCAL_STACK);
+    struct codegen_scope_entity *entity = codegen_new_scope_entity(node, node->var.offset, CODEGEN_SCOPE_ENTITY_LOCAL_STACK);
     codegen_scope_push(entity, node->var.type.size);
 
     // Scope variables have values, lets compute that
@@ -1131,7 +1124,7 @@ void codegen_generate_scope_variable(struct node *node)
 
         // Write the move. Only intergers supported at the moment as you can see
         // this will be improved.
-        asm_push("mov [ebp%i], eax", entity->stack_offset);
+        asm_push("mov [ebp%i], eax", node->var.offset);
     }
 
     register_unset_flag(REGISTER_EAX_IS_USED);
@@ -1155,7 +1148,7 @@ void codegen_generate_scope_variable_for_function_argument(struct node *node)
 void codegen_generate_statement_return(struct node *node)
 {
     struct history history;
-    
+
     // Let's generate the expression of the return statement
     codegen_generate_expressionable(node->stmt.ret.exp, history_begin(&history, 0));
 
@@ -1175,8 +1168,13 @@ void codegen_generate_statement(struct node *node)
     struct history history;
     switch (node->type)
     {
+
     case NODE_TYPE_EXPRESSION:
         codegen_generate_exp_node(node, history_begin(&history, 0));
+        break;
+
+    case NODE_TYPE_UNARY:
+        codegen_generate_unary(node, history_begin(&history, 0));
         break;
 
     case NODE_TYPE_VARIABLE:
@@ -1275,6 +1273,7 @@ void codegen_generate_function(struct node *node)
     asm_push("ret");
 }
 
+
 void codegen_generate_root_node(struct node *node)
 {
     switch (node->type)
@@ -1286,6 +1285,7 @@ void codegen_generate_root_node(struct node *node)
     case NODE_TYPE_FUNCTION:
         codegen_generate_function(node);
         break;
+
     }
 }
 

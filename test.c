@@ -1,11 +1,34 @@
 
+struct bob
+{
+   int i;
+   int p;
+   int z;
+   int o;
+};
 
-int abc(int a)
+struct animal
 {
-   return a + 10;
-}
-int test(int k)
+   int e;
+};
+struct dog
 {
-   int *a = 512;
-   *a = 50;
+   int o;
+   int z;
+   int d;
+   struct animal a;
+};
+
+struct hello
+{
+   int a;
+   struct dog c;
+   int b;
+};
+
+int main()
+{
+   struct hello h;
+
+   h.c.a.e = 50;
 }

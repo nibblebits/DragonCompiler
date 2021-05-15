@@ -39,19 +39,61 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
 
     struct node *var_node_cur = vector_peek_ptr(struct_vars_vec);
     int position = 0;
+    *var_node_out = NULL;
     while (var_node_cur)
     {
         *var_node_out = var_node_cur;
         if (S_EQ(var_node_cur->var.name, var_name))
         {
+            position = var_node_cur->var.offset;
             break;
         }
 
-        position += var_node_cur->var.type.size;
         var_node_cur = vector_peek_ptr(struct_vars_vec);
     }
 
     return position;
+}
+
+/**
+ * Returns the node for the structure access expression.
+ * 
+ * For example if you had the structure "test" and "abc"
+ * struct abc
+ * {
+ *    int z;
+ * }
+ *
+ * struct test
+ * {
+ *   struct abc a;
+ * }
+ * 
+ * and your expression node was "a.z" and your type_str was "test" you would have 
+ * the node for variable "z" returned.
+ * 
+ * Likewise if only "a" was provided then the "a" variable node in the test structure would be returned.
+ * 
+ * \param offset_out This is set to the offset based on the access pattern. I.e "a.b.c.d.e.f" would take all those additional structure variables into account for calculating the offset
+ */
+struct node* struct_for_access(struct compile_process* process, struct node* node, const char* type_str, int* offset_out)
+{
+    assert((node->type == NODE_TYPE_EXPRESSION && is_access_operator(node->exp.op)) || node->type == NODE_TYPE_IDENTIFIER);
+
+    struct node* var_node = NULL;
+    if (node->type == NODE_TYPE_IDENTIFIER)
+    {
+        struct_offset(process, type_str, node->sval, &var_node);
+        *offset_out += var_node->var.offset;
+        return var_node;
+    }
+
+    // Let's handle the access expression i.e "a.z"
+    var_node = struct_for_access(process, node->exp.left, type_str, offset_out);
+    assert(var_node);
+
+    return struct_for_access(process, node->exp.right, var_node->var.type.type_str, offset_out);
+
 }
 
 bool is_access_operator(const char *op)
@@ -64,6 +106,20 @@ bool is_access_operator_node(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_access_operator(node->exp.op);
 }
 
+
+/**
+ * Decrements the depth so long as the value is not equal to DEPTH_INFINITE
+ */
+int decrement_depth(int depth)
+{
+    if(depth == DEPTH_INFINITE)
+    {
+        return DEPTH_INFINITE;
+    }
+
+    return depth-1;
+}
+
 /**
  * If the node provided has the same type we are looking for then its self is returned
  * otherwise if its an expression we will iterate through the left operands of this expression
@@ -73,27 +129,41 @@ bool is_access_operator_node(struct node *node)
  * of an expression will be checked and if its not found NULL will be returned. No deeper searching
  * will be done.
  * 
- * Passing a depth of zero is essentially the same as just checking if the given node if the type provider
+ * Passing a depth of DEPTH_INFINITE is essentially the same as just checking if the given node if the type provider
  * no deeper searching will be done at all.
  */
 struct node *first_node_of_type_from_left(struct node *node, int type, int depth)
 {
-    if (node->type == NODE_TYPE_EXPRESSION)
-    {
-        if (depth <= 0)
-        {
-            return NULL;
-        }
-        return first_node_of_type_from_left(node->exp.left, type, depth - 1);
-    }
-
     if (node->type == type)
     {
         return node;
     }
 
-    return NULL;
+    if (depth <= -1)
+    {
+        return NULL;
+    }
+
+    struct node* left_node = NULL;
+    switch (node->type)
+    {
+    case NODE_TYPE_EXPRESSION:
+        left_node = first_node_of_type_from_left(node->exp.left, type, decrement_depth(depth));
+        break;
+
+    case NODE_TYPE_EXPRESSION_PARENTHESIS:
+        left_node = first_node_of_type_from_left(node->parenthesis.exp, type, decrement_depth(depth));
+        break;
+
+    case NODE_TYPE_UNARY:
+        left_node = first_node_of_type_from_left(node->unary.operand, type, decrement_depth(depth));
+        break;
+    }
+
+    return left_node;
 }
+
+
 
 /**
  * Finds the first node of the given type.
@@ -129,13 +199,18 @@ struct node *first_node_of_type(struct node *node, int type)
 /**
  * Returns true if the given node is apart of an expression
  */
-bool node_in_expression(struct node* node)
+bool node_in_expression(struct node *node)
 {
     return node->flags & NODE_FLAG_INSIDE_EXPRESSION;
 }
 
-bool node_is_root_expression(struct node* node)
+bool node_is_root_expression(struct node *node)
 {
     // Root expressions are not inside expressions.
     return !(node->flags & NODE_FLAG_INSIDE_EXPRESSION);
+}
+
+bool op_is_indirection(const char *op)
+{
+    return S_EQ(op, "*");
 }

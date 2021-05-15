@@ -41,6 +41,13 @@ void test(struct node* node)
         printf("%c", ']');
 
     }
+    else if(node->type == NODE_TYPE_UNARY)
+    {
+        printf("%c", '{');
+        printf("%c", '*');
+        test(node->unary.operand);
+        printf("%c", '}');
+    }
     else if(node->type == NODE_TYPE_EXPRESSION_PARENTHESIS)
     {
         test(node->parenthesis.exp);

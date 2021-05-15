@@ -15,6 +15,10 @@
 // when accessing function arguments passed to us and looking up the stack
 #define C_OFFSET_FROM_FIRST_FUNCTION_ARGUMENT 8
 
+// Magic number for an infinite depth for iterating through expressions
+// and grabbing information from operands.
+#define DEPTH_INFINITE 0xffff
+
 // Macro's make life cleaner..
 #define S_EQ(str, str2) \
     (strcmp(str, str2) == 0)
@@ -92,7 +96,10 @@ enum
     EXPRESSION_IS_SUBTRACTION = 0b000000000010000,
     EXPRESSION_IS_MULTIPLICATION = 0b0000000000100000,
     EXPRESSIPON_IS_DIVISION = 0b0000000001000000,
-    EXPRESSION_IN_FUNCTION_CALL = 0b0000000010000000
+    EXPRESSION_IN_FUNCTION_CALL = 0b0000000010000000,
+    EXPRESSION_INDIRECTION = 0b0000000100000000,
+    EXPRESSION_GET_ADDRESS =0b0000001000000000
+
 };
 
 #define EXPRESSION_UNINHERITABLE_FLAGS \
@@ -342,8 +349,9 @@ enum
     // Since it is the only function argument. However in this case test(50*a) the number node
     // of "50" would have this flag set as its apart of an expression.
     NODE_FLAG_INSIDE_EXPRESSION  = 0b00000001,
-
 };
+
+
 
 struct node
 {
@@ -445,6 +453,9 @@ struct node
                     unsigned long long llnum;
                 };
             } const_val;
+
+            // The stack offset for this variable (if its a stack variable)
+            int offset;
         } var;
 
         union statement
@@ -533,9 +544,14 @@ char compile_process_peek_char(struct compile_process *process);
  */
 void compile_process_push_char(struct compile_process *process, char c);
 
+struct scope *scope_alloc();
 struct scope *scope_create_root(struct compile_process *process);
 struct scope *scope_new(struct compile_process *process, int flags);
 void scope_finish(struct compile_process *process);
+
+struct scope *scope_create_root(struct compile_process *process);
+void scope_free_root(struct compile_process* process);
+
 /**
  * Pushes an element to the current scope
  */
@@ -600,6 +616,27 @@ void symresolver_build_for_node(struct compile_process* process, struct node* no
 int struct_offset(struct compile_process* compile_proc, const char* struct_name, const char* var_name, struct node** var_node_out);
 
 /**
+ * Returns the node for the structure access expression.
+ * 
+ * For example if you had the structure "test" and "abc"
+ * struct abc
+ * {
+ *    int z;
+ * }
+ *
+ * struct test
+ * {
+ *   struct abc a;
+ * }
+ * 
+ * and your expression node was "a.z" and your type_str was "test" you would have 
+ * the node for variable "z" returned.
+ * 
+ * Likewise if only "a" was provided then the "a" variable node in the test structure would be returned.
+ */
+struct node* struct_for_access(struct compile_process* process, struct node* node, const char* type_str, int* offset_out);
+
+/**
  * Finds the first node of the given type.
  * 
  * For example lets imagine the expression "a.b.e.f"
@@ -644,4 +681,7 @@ bool is_access_operator(const char *op);
  * Just like is_access_operator except it checks on a node basis rather than operator
  */
 bool is_access_operator_node(struct node* node);
+
+bool op_is_indirection(const char* op);
+
 #endif

@@ -23,6 +23,9 @@ enum
     // Signifies the current code flow is inside of a structure right now.
     // We are parsing a structure at this exact moment in time if this flag is set.
     HISTORY_FLAG_INSIDE_STRUCTURE = 0b00000010,
+    // Specifies that we are outside of a function in the parsing process
+    // You can think of this as where global variables would be.
+    HISTORY_FLAG_IS_GLOBAL_SCOPE = 0b00000100,
 };
 
 // Expression flags
@@ -918,6 +921,24 @@ void parse_datatype_type(struct datatype *datatype)
     parser_datatype_init(datatype_token, datatype, pointer_depth);
 }
 
+int parser_get_stack_offset(struct node* var_node, int flags, struct history* history)
+{
+    // Global scopes are not in the stack!, Therefore an offset of zero is acceptable
+    if (history->flags & HISTORY_FLAG_IS_GLOBAL_SCOPE)
+    {
+        return 0;
+    }
+
+    if (history->flags & HISTORY_FLAG_INSIDE_STRUCTURE)
+    {
+        // Inside a structure, then we offset from zero for all structure variables
+        // Do not use the local stack flag as the structure is its own space.
+        return parser_stack_offset(var_node, PARSER_SCOPE_ENTITY_OFFSET_ZERO);
+    }
+
+    return parser_stack_offset(var_node, PARSER_SCOPE_ENTITY_LOCAL_STACK);
+}
+
 void parse_variable(struct datatype *dtype, struct token *name_token, struct history* history)
 {
     struct node *value_node = NULL;
@@ -940,18 +961,10 @@ void parse_variable(struct datatype *dtype, struct token *name_token, struct his
 
     // Can be optimized...
     int offset = 0;
-    if (history->flags & HISTORY_FLAG_INSIDE_STRUCTURE)
+    if (!(history->flags & HISTORY_FLAG_IS_GLOBAL_SCOPE))
     {
-        // Inside a structure, then we offset from zero for all structure variables
-        // Do not use the local stack flag as the structure is its own space.
-        offset = parser_stack_offset(var_node, PARSER_SCOPE_ENTITY_OFFSET_ZERO);
+        offset = parser_get_stack_offset(var_node, 0, history);
     }
-    else
-    {
-        // I hate else statements, make another function to resolve this rubbish.
-        offset = parser_stack_offset(var_node, PARSER_SCOPE_ENTITY_LOCAL_STACK);
-    }
-
     parser_scope_push(parser_new_scope_entity(var_node, offset, PARSER_SCOPE_ENTITY_LOCAL_STACK), var_node->var.type.size);
     var_node->var.offset = offset;
 
@@ -1010,23 +1023,22 @@ void parse_function_body(struct history* history)
     parse_body(0, history);
 }
 
-void parse_function(struct datatype *dtype, struct token *name_token)
+void parse_function(struct datatype *dtype, struct token *name_token, struct history* history)
 {
     struct vector *arguments_vector = NULL;
 
-    struct history history;
-
+    struct history new_history;
     // We expect a left bracket for functions.
     // Let us not forget we already have the return type and name of the function i.e int abc
     expect_op("(");
-    arguments_vector = parse_function_arguments(history_begin(&history, 0));
+    arguments_vector = parse_function_arguments(history_begin(&new_history, 0));
     expect_sym(')');
 
     // Do we have a function body or is this a declaration?
     if (token_next_is_symbol('{'))
     {
         // Parse the function body
-        parse_function_body(history_begin(&history, 0));
+        parse_function_body(history_begin(&new_history, 0));
         struct node *body_node = node_pop();
         // Create the function node
         make_function_node(dtype, name_token->sval, arguments_vector, body_node);
@@ -1077,7 +1089,7 @@ void parse_variable_function_or_struct_union(struct history* history)
     // Let's handle the function
     if (token_next_is_operator("("))
     {
-        parse_function(&dtype, name_token);
+        parse_function(&dtype, name_token, history);
         return;
     }
 
@@ -1088,14 +1100,13 @@ void parse_variable_function_or_struct_union(struct history* history)
     expect_sym(';');
 }
 
-void parse_keyword_return()
+void parse_keyword_return(struct history* history)
 {
     expect_keyword("return");
 
     // Ok we parsed the return keyword, lets now parse the expression of the return
     // keyword and then we expect a semicolon ;)
-    struct history history;
-    parse_expressionable(history_begin(&history, 0));
+    parse_expressionable(history);
 
     struct node *ret_expr = node_pop();
     make_return_node(ret_expr);
@@ -1119,7 +1130,7 @@ void parse_keyword(struct history* history)
 
     if (S_EQ(token->sval, "return"))
     {
-        parse_keyword_return();
+        parse_keyword_return(history);
         return;
     }
 
@@ -1129,7 +1140,7 @@ void parse_keyword(struct history* history)
 void parse_keyword_for_global()
 {
     struct history history;
-    parse_keyword(history_begin(&history, 0));
+    parse_keyword(history_begin(&history, HISTORY_FLAG_IS_GLOBAL_SCOPE));
 
     // Global variables and functions must be registered as symbols.
     struct node *node = node_pop();

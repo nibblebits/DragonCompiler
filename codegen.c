@@ -72,7 +72,8 @@ static struct history *history_begin(struct history *history_out, int flags)
 // Simple bitmask for scope entity rules.
 enum
 {
-    CODEGEN_SCOPE_ENTITY_LOCAL_STACK = 0b00000001
+    CODEGEN_SCOPE_ENTITY_LOCAL_STACK = 0b00000001,
+    CODEGEN_SCOPE_ENTITY_INDIRECTION = 0b00000010
 };
 
 struct codegen_scope_entity
@@ -88,6 +89,37 @@ struct codegen_scope_entity
 
     // A node to a variable declaration.
     struct node *node;
+
+    struct seindirection
+    {
+        // I.e pointer depth "**a = 50" this would mean we solved the scope entity variable "a"
+        // and it was accessed with a depth of two.
+        int depth;
+    } indirection;
+};
+
+enum
+{
+    CODEGEN_GLOBAL_ENTITY_INDIRECTION = 0b00000001
+};
+
+struct codegen_global_entity
+{
+    // The flags for the global entity
+    int flags;
+
+    // The node to the global entity variable node
+    struct node *node;
+
+    struct geindirection
+    {
+        // I.e pointer depth "**a = 50" this would mean we solved the scope entity variable "a"
+        // and it was accessed with a depth of two.
+        int depth;
+    } indirection;
+
+    // The offset relative to the base address of the global entity
+    int offset;
 };
 
 enum
@@ -99,7 +131,8 @@ enum
 // Codegen entity types
 enum
 {
-    CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS = 0b00000001
+    CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS = 0b00000001,
+    CODEGEN_ENTITY_FLAG_HAS_INDIRECTION = 0b00000010
 };
 
 /**
@@ -122,11 +155,20 @@ struct codegen_entity
     union
     {
         struct codegen_scope_entity *scope_entity;
-        struct symbol *global_symbol;
+        struct global
+        {
+            struct codegen_global_entity *entity;
+            struct symbol *sym;
+        } global;
     };
+
+    struct eindirection
+    {
+        int depth;
+    } indirection;
 };
 
-bool codegen_entity_address_known(struct codegen_entity* entity)
+bool codegen_entity_address_known(struct codegen_entity *entity)
 {
     return entity->flags & CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS;
 }
@@ -154,6 +196,20 @@ struct codegen_scope_entity *codegen_new_scope_entity(struct node *node, int sta
 }
 
 void codegen_free_scope_entity(struct codegen_scope_entity *entity)
+{
+    free(entity);
+}
+
+struct codegen_global_entity *codegen_new_global_entity(struct node *node, int offset, int flags)
+{
+    struct codegen_global_entity *entity = calloc(sizeof(struct codegen_global_entity), 1);
+    entity->node = node;
+    entity->flags = flags;
+    entity->offset = offset;
+    return entity;
+}
+
+void codegen_free_global_entity(struct codegen_global_entity *entity)
 {
     free(entity);
 }
@@ -193,8 +249,7 @@ struct node *codegen_get_entity_node(struct codegen_entity *entity)
         break;
 
     case CODEGEN_ENTITY_TYPE_SYMBOL:
-        node = entity->global_symbol->data;
-        assert(entity->global_symbol->type == SYMBOL_TYPE_NODE);
+        node = entity->global.entity->node;
         break;
 
     default:
@@ -203,6 +258,119 @@ struct node *codegen_get_entity_node(struct codegen_entity *entity)
     }
 
     return node;
+}
+
+struct codegen_global_entity *codegen_get_global_variable_for_node(struct node *node, bool *position_known_at_compile_time, struct symbol **sym_out)
+{
+    struct codegen_global_entity *entity = NULL;
+    switch (node->type)
+    {
+    case NODE_TYPE_EXPRESSION:
+        if (is_access_operator(node->exp.op))
+        {
+            entity = codegen_get_global_variable_for_node(node->exp.left, position_known_at_compile_time, sym_out);
+            if (!entity)
+            {
+                // Cannot find scope entity? Perhaps its a global variable
+                return NULL;
+            }
+
+            // Ok entity is the root entity i.e "a.b" (variable a)
+            // We have access operator so we must get the next variable.
+
+            // Offset will store the absolute offset from zero for the strucutre access
+            int offset = 0;
+            struct node *access_node = struct_for_access(current_process, node->exp.right, entity->node->var.type.type_str, &offset);
+            entity = codegen_new_global_entity(access_node, offset, 0);
+            break;
+        }
+
+        entity = codegen_get_global_variable_for_node(node->exp.left, position_known_at_compile_time, sym_out);
+        break;
+
+    case NODE_TYPE_EXPRESSION_PARENTHESIS:
+        entity = codegen_get_global_variable_for_node(node->parenthesis.exp, position_known_at_compile_time, sym_out);
+        break;
+
+    // Repeating myself in both global and stack scopes. Consider making function
+    case NODE_TYPE_UNARY:
+        entity = codegen_get_global_variable_for_node(node->unary.operand, position_known_at_compile_time, sym_out);
+        if (S_EQ(node->unary.op, "*"))
+        {
+            entity->flags |= CODEGEN_GLOBAL_ENTITY_INDIRECTION;
+            entity->indirection.depth = node->unary.indirection.depth;
+        }
+        break;
+
+    case NODE_TYPE_IDENTIFIER:
+    {
+        // We shouldn't be creating a new global entity every time we resolve it
+        // Best to solve this in the symresolver, when you get the time
+        struct symbol *sym = symresolver_get_symbol(current_process, node->sval);
+        struct node *var_node = symresolver_node(sym);
+        entity = codegen_new_global_entity(var_node, var_node->var.offset, 0);
+        if (sym_out && !(*sym_out))
+        {
+            // We haven't resolved the symbol of the global variable yet?
+            // Then let's let the caller know that we are that resolved symbol
+            *sym_out = sym;
+        }
+    }
+    break;
+    }
+
+    *position_known_at_compile_time = true;
+
+    return entity;
+}
+
+void codegen_put_address_for_entity(struct codegen_entity *entity_out, struct codegen_global_entity *entity)
+{
+    assert(entity_out->global.sym);
+
+    if (entity->offset)
+    {
+        sprintf(entity_out->address, "%s+%i", entity_out->global.sym->name, entity->offset);
+        return;
+    }
+
+    sprintf(entity_out->address, "%s", entity_out->global.sym->name);
+}
+
+int codegen_get_global_entity_for_node(struct node *node, struct codegen_entity *entity_out)
+{
+    bool position_known_at_compile_time = false;
+    struct symbol *sym = NULL;
+    struct codegen_global_entity *entity = codegen_get_global_variable_for_node(node, &position_known_at_compile_time, &sym);
+    if (!entity)
+    {
+        return -1;
+    }
+
+    // We got the resolved symbol right?
+    assert(sym);
+
+    entity_out->type = CODEGEN_ENTITY_TYPE_SYMBOL;
+    entity_out->global.sym = sym;
+    entity_out->global.entity = entity;
+    entity_out->is_scope_entity = false;
+    entity_out->node = entity->node;
+    
+    if (position_known_at_compile_time)
+        entity_out->flags |= CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS;
+
+    if (entity->flags & CODEGEN_GLOBAL_ENTITY_INDIRECTION)
+    {
+        entity_out->flags |= CODEGEN_ENTITY_FLAG_HAS_INDIRECTION;
+        entity_out->indirection.depth = entity->indirection.depth;
+    }
+
+    codegen_put_address_for_entity(entity_out, entity);
+
+    // We only deal with node symbols right now.
+    assert(sym->type == SYMBOL_TYPE_NODE);
+
+    return 0;
 }
 
 int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity_out)
@@ -222,37 +390,16 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
         if (position_known_at_compile_time)
             entity_out->flags |= CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS;
 
+        if (scope_entity->flags & CODEGEN_SCOPE_ENTITY_INDIRECTION)
+        {
+            entity_out->flags |= CODEGEN_ENTITY_FLAG_HAS_INDIRECTION;
+            entity_out->indirection.depth = scope_entity->indirection.depth;
+        }
+
         return 0;
     }
 
-    struct node *identifier_node = first_node_of_type_from_left(node, NODE_TYPE_IDENTIFIER, 1);
-    if (!identifier_node)
-    {
-        // Nothing more we can do at the moment
-        // We expect an identifier node.
-        return -1;
-    }
-
-    struct symbol *sym = symresolver_get_symbol(current_process, identifier_node->sval);
-    // Assertion because its a compile bug if we still cant find this symbol
-    // validation should have peacefully temrinated the compiler way back...
-    if (!sym)
-    {
-        return -1;
-    }
-
-    entity_out->type = CODEGEN_ENTITY_TYPE_SYMBOL;
-    entity_out->global_symbol = sym;
-    entity_out->is_scope_entity = false;
-    entity_out->node = codegen_get_entity_node(entity_out);
-    sprintf(entity_out->address, "%s", identifier_node->sval);
-    if (position_known_at_compile_time)
-        entity_out->flags |= CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS;
-    
-    // We only deal with node symbols right now.
-    assert(sym->type == SYMBOL_TYPE_NODE);
-
-    return 0;
+    return codegen_get_global_entity_for_node(node, entity_out);
 }
 
 int codegen_get_enum_for_register(const char *reg)
@@ -328,26 +475,38 @@ void codegen_stack_add(size_t stack_size)
     }
 }
 
-static const char *asm_keyword_for_size(size_t size)
+/**
+ * Fills tmp_buf with the assembly keyword for the given size.
+ * Returns tmp_buf
+ */
+static const char *asm_keyword_for_size(size_t size, char *tmp_buf)
 {
+    if (size > DATA_SIZE_DDWORD)
+    {
+        // We have a structure? Then lets reserve enough bytes.
+        sprintf(tmp_buf, "times %lld db 0", (unsigned long long)size);
+        return tmp_buf;
+    }
+
     const char *keyword = NULL;
     switch (size)
     {
-    case 1:
+    case DATA_SIZE_BYTE:
         keyword = "db";
         break;
-    case 2:
+    case DATA_SIZE_WORD:
         keyword = "dw";
         break;
-    case 4:
+    case DATA_SIZE_DWORD:
         keyword = "dd";
         break;
-    case 8:
+    case DATA_SIZE_DDWORD:
         keyword = "dq";
         break;
     }
 
-    return keyword;
+    stpcpy(tmp_buf, keyword);
+    return tmp_buf;
 }
 
 static struct node *node_next()
@@ -522,11 +681,6 @@ static bool is_node_assignment(struct node *node)
            S_EQ(node->exp.op, "/=");
 }
 
-
-
-
-
-
 /**
  * Iterates through the node until a codegen_scope_entity can be found, otherwise returns NULL.
  * This function does not work for structure pointers as its impossible to complete this action
@@ -542,36 +696,50 @@ struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *no
 
     *position_known_at_compile_time = false;
 
-    struct codegen_scope_entity* entity = NULL;
-    switch(node->type)
+    struct codegen_scope_entity *entity = NULL;
+    switch (node->type)
     {
-        case NODE_TYPE_EXPRESSION:
-            if(is_access_operator(node->exp.op))
+    case NODE_TYPE_EXPRESSION:
+        if (is_access_operator(node->exp.op))
+        {
+            entity = codegen_get_scope_variable_for_node(node->exp.left, position_known_at_compile_time);
+            if (!entity)
             {
-                entity = codegen_get_scope_variable_for_node(node->exp.left, position_known_at_compile_time);
-                // Ok entity is the root entity i.e "a.b" (variable a)
-                // We have access operator so we must get the next variable.
-
-                // Offset will store the absolute offset from zero for the strucutre access
-                // it acts as if its a global variable, as we are on the scope we need
-                // to convert this to a stack address.
-                int offset = 0;
-                struct node* access_node = struct_for_access(current_process, node->exp.right, entity->node->var.type.type_str, &offset);
-                entity = codegen_new_scope_entity(access_node, entity->stack_offset+offset, 0);
-                break;
+                // Cannot find scope entity? Perhaps its a global variable
+                return NULL;
             }
 
-            entity = codegen_get_scope_variable_for_node(node->exp.left, position_known_at_compile_time);
+            // Ok entity is the root entity i.e "a.b" (variable a)
+            // We have access operator so we must get the next variable.
+
+            // Offset will store the absolute offset from zero for the strucutre access
+            // it acts as if its a global variable, as we are on the scope we need
+            // to convert this to a stack address.
+            int offset = 0;
+            struct node *access_node = struct_for_access(current_process, node->exp.right, entity->node->var.type.type_str, &offset);
+            entity = codegen_new_scope_entity(access_node, entity->stack_offset + offset, 0);
+            break;
+        }
+
+        entity = codegen_get_scope_variable_for_node(node->exp.left, position_known_at_compile_time);
         break;
 
-        case NODE_TYPE_EXPRESSION_PARENTHESIS:
-            entity = codegen_get_scope_variable_for_node(node->parenthesis.exp, position_known_at_compile_time);
+    case NODE_TYPE_EXPRESSION_PARENTHESIS:
+        entity = codegen_get_scope_variable_for_node(node->parenthesis.exp, position_known_at_compile_time);
         break;
 
-        case NODE_TYPE_IDENTIFIER:
-            entity = codegen_get_scope_variable(node->sval);
+    case NODE_TYPE_UNARY:
+        entity = codegen_get_scope_variable_for_node(node->unary.operand, position_known_at_compile_time);
+        if (S_EQ(node->unary.op, "*"))
+        {
+            entity->flags |= CODEGEN_SCOPE_ENTITY_INDIRECTION;
+            entity->indirection.depth = node->unary.indirection.depth;
+        }
         break;
 
+    case NODE_TYPE_IDENTIFIER:
+        entity = codegen_get_scope_variable(node->sval);
+        break;
     }
 
     *position_known_at_compile_time = true;
@@ -666,8 +834,26 @@ void codegen_generate_assignment_expression(struct node *node)
     // Mark the EAX register as no longer used.
     register_unset_flag(REGISTER_EAX_IS_USED);
 
-    // Write the move. Only intergers supported at the moment as you can see
-    // this will be improved.
+    // Do we have any pointer indirection for this assignment?
+    if (assignment_operand_entity.flags & CODEGEN_ENTITY_FLAG_HAS_INDIRECTION)
+    {
+        int depth = assignment_operand_entity.indirection.depth;
+        asm_push("mov ebx, [%s]", assignment_operand_entity.address);
+
+        // We got any more depth?
+        for (int i = 1; i < depth; i++)
+        {
+            asm_push("mov ebx, [ebx]");
+        }
+
+
+        // We finally here? Good write EAX into the address we care about.
+        asm_push("mov [ebx], eax");
+
+        return;
+    }
+
+    // Normal variable no pointer access? Then write the move
     asm_push("mov [%s], eax", assignment_operand_entity.address);
 }
 
@@ -717,7 +903,6 @@ void codegen_generate_function_call_for_exp_node(struct codegen_entity *func_ent
     // should have done that already.
     asm_push("add esp, %i", arguments_size);
 }
-
 
 bool codegen_handle_codegen_entity_for_expression(struct codegen_entity *entity_out, struct node *node)
 {
@@ -882,14 +1067,14 @@ void codegen_handle_variable_access(struct node *access_node, struct codegen_ent
     {
         register_set_flag(REGISTER_EBX_IS_USED);
 
-        // We have indirection, therefore we should load the address into EBX. 
+        // We have indirection, therefore we should load the address into EBX.
         // rather than mov instruction
         asm_push("lea ebx, [%s]", entity->address);
         // We are done for now
         return;
     }
 
-    // Normal variable access? 
+    // Normal variable access?
     // Generate move or math.
     codegen_gen_mov_or_math("eax", access_node, flags, entity);
 
@@ -950,6 +1135,16 @@ void codegen_generate_unary_indirection(struct node *node, struct history *histo
     // EBX register now has the address of the variable for indirection
 }
 
+void codegen_generate_indirection_for_unary(struct node *node, struct history *history)
+{
+    // Firstly generate the expressionable of the unary
+    codegen_generate_expressionable(node, history);
+    int depth = node->unary.indirection.depth;
+    for (int i = 0; i < depth; i++)
+    {
+    }
+}
+
 void codegen_generate_normal_unary(struct node *node, struct history *history)
 {
     codegen_generate_expressionable(node->unary.operand, history);
@@ -959,6 +1154,11 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
     {
         // We have negation operator, so negate.
         asm_push("neg eax");
+    }
+    else if (S_EQ(node->unary.op, "*"))
+    {
+        // We are accessing a pointer
+        codegen_generate_indirection_for_unary(node, history);
     }
 }
 
@@ -1006,15 +1206,40 @@ void codegen_generate_expressionable(struct node *node, struct history *history)
     }
 }
 
-void codegen_generate_global_variable_with_value(struct node *node)
+static void codegen_generate_global_variable_for_non_floating(struct node *node)
 {
+    char tmp_buf[256];
+    if (node->var.val != NULL)
+    {
+        asm_push("%s: %s %lld", node->var.name, asm_keyword_for_size(node->var.type.size, tmp_buf), node->var.val->llnum, tmp_buf);
+        return;
+    }
+
+    asm_push("%s: %s 0", node->var.name, asm_keyword_for_size(node->var.type.size, tmp_buf));
+}
+
+static void codegen_generate_global_variable_for_struct(struct node *node)
+{
+    if (node->var.val != NULL)
+    {
+        codegen_err("We don't yet support values for structures");
+        return;
+    }
+
+    char tmp_buf[256];
+    asm_push("%s: %s", node->var.name, asm_keyword_for_size(node->var.type.size, tmp_buf));
+}
+
+void codegen_generate_global_variable(struct node *node)
+{
+    asm_push("; %s %s", node->var.type.type_str, node->var.name);
     switch (node->var.type.type)
     {
     case DATA_TYPE_CHAR:
     case DATA_TYPE_SHORT:
     case DATA_TYPE_INTEGER:
     case DATA_TYPE_LONG:
-        asm_push("%s: %s %lld", node->var.name, asm_keyword_for_size(node->var.type.size), node->var.val->llnum);
+        codegen_generate_global_variable_for_non_floating(node);
         break;
     case DATA_TYPE_DOUBLE:
         codegen_err("Doubles are not yet supported for global variable values.");
@@ -1024,23 +1249,11 @@ void codegen_generate_global_variable_with_value(struct node *node)
         codegen_err("Floats are not yet supported for global variable values.");
         break;
 
+    case DATA_TYPE_STRUCT:
+        codegen_generate_global_variable_for_struct(node);
+        break;
     default:
         codegen_err("Not sure how to generate value for global variable.. Problem!");
-    }
-}
-
-void codegen_generate_global_variable_without_value(struct node *node)
-{
-    asm_push("%s: %s 0", node->var.name, asm_keyword_for_size(node->var.type.size));
-}
-
-void codegen_generate_global_variable(struct node *node)
-{
-    asm_push("; %s %s", node->var.type.type_str, node->var.name);
-    if (node->var.val)
-    {
-        codegen_generate_global_variable_with_value(node);
-        return;
     }
 }
 
@@ -1273,7 +1486,6 @@ void codegen_generate_function(struct node *node)
     asm_push("ret");
 }
 
-
 void codegen_generate_root_node(struct node *node)
 {
     switch (node->type)
@@ -1285,7 +1497,6 @@ void codegen_generate_root_node(struct node *node)
     case NODE_TYPE_FUNCTION:
         codegen_generate_function(node);
         break;
-
     }
 }
 

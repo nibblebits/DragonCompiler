@@ -80,6 +80,13 @@ struct pos
 
 enum
 {
+    DATA_SIZE_BYTE = 1,
+    DATA_SIZE_WORD = 2,
+    DATA_SIZE_DWORD = 4,
+    DATA_SIZE_DDWORD = 8
+};
+enum
+{
     // Signifies we are on the right node of a single part of an expression
     // I.e (50+20+40+96). 20 is the right node and so is 96.
     // This flag will be set in the event the right node of an expression part is being processed
@@ -449,8 +456,10 @@ struct node
                     char cval;
                     const char *sval;
                     unsigned int inum;
-                    unsigned long lnum;
-                    unsigned long long llnum;
+                    long lnum;
+                    long long llnum;
+                    unsigned long ulnum;
+                    unsigned long long ullnum;
                 };
             } const_val;
 
@@ -581,6 +590,12 @@ struct symbol *symresolver_register_symbol(struct compile_process *process, cons
  * Gets the registered symbol from the symbol table for the given name
  */
 struct symbol *symresolver_get_symbol(struct compile_process *process, const char *name);
+
+
+/**
+ * Gets the node from the symbol data
+ */
+struct node* symresolver_node(struct symbol* sym);
 
 /**
  * Builds a symbol for the given node.

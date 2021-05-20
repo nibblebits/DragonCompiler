@@ -1,6 +1,14 @@
 
+struct dog
+{
+   int oo;
+   char c;
+
+
+};
 int main()
 {
-   int** a = 50;
-   (**a) = 50;
+   struct dog dogs;
+   dogs.c = 100;
+   dogs.oo = 10;
 }

@@ -181,6 +181,22 @@ size_t codegen_align(size_t size)
     return size;
 }
 
+/**
+ * Aligns the size to a dword so long as the size is above 4 bytes
+ */
+size_t codegen_align_to_dword(size_t size)
+{
+    if (size < DATA_SIZE_DWORD)
+        return size;
+    
+    if (size % DATA_SIZE_DWORD)
+    {
+        size += DATA_SIZE_DWORD - (size % DATA_SIZE_DWORD);
+    }
+
+    return size;
+}
+
 static int codegen_remove_uninheritable_flags(int flags)
 {
     return flags & ~EXPRESSION_UNINHERITABLE_FLAGS;
@@ -355,7 +371,7 @@ int codegen_get_global_entity_for_node(struct node *node, struct codegen_entity 
     entity_out->global.entity = entity;
     entity_out->is_scope_entity = false;
     entity_out->node = entity->node;
-    
+
     if (position_known_at_compile_time)
         entity_out->flags |= CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS;
 
@@ -481,13 +497,6 @@ void codegen_stack_add(size_t stack_size)
  */
 static const char *asm_keyword_for_size(size_t size, char *tmp_buf)
 {
-    if (size > DATA_SIZE_DDWORD)
-    {
-        // We have a structure? Then lets reserve enough bytes.
-        sprintf(tmp_buf, "times %lld db 0", (unsigned long long)size);
-        return tmp_buf;
-    }
-
     const char *keyword = NULL;
     switch (size)
     {
@@ -503,6 +512,11 @@ static const char *asm_keyword_for_size(size_t size, char *tmp_buf)
     case DATA_SIZE_DDWORD:
         keyword = "dq";
         break;
+
+        default:
+        // We have a structure or unknown type? Then lets just reserve enough bytes.
+        sprintf(tmp_buf, "times %lld db 0", (unsigned long long)size);
+        return tmp_buf;
     }
 
     stpcpy(tmp_buf, keyword);
@@ -759,65 +773,89 @@ const char *codegen_sub_register(const char *original_register, size_t size)
     const char *reg = NULL;
     if (S_EQ(original_register, "eax"))
     {
-        if (size == 1)
+        if (size == DATA_SIZE_BYTE)
         {
             reg = "al";
         }
-        else if (size == 2)
+        else if (size == DATA_SIZE_WORD)
         {
             reg = "ax";
         }
-        else if (size == 4)
+        else if (size == DATA_SIZE_DWORD)
         {
             reg = "eax";
         }
     }
     else if (S_EQ(original_register, "ebx"))
     {
-        if (size == 1)
+        if (size == DATA_SIZE_BYTE)
         {
             reg = "bl";
         }
-        else if (size == 2)
+        else if (size == DATA_SIZE_WORD)
         {
             reg = "bx";
         }
-        else if (size == 4)
+        else if (size == DATA_SIZE_DWORD)
         {
             reg = "ebx";
         }
     }
     else if (S_EQ(original_register, "ecx"))
     {
-        if (size == 1)
+        if (size == DATA_SIZE_BYTE)
         {
             reg = "cl";
         }
-        else if (size == 2)
+        else if (size == DATA_SIZE_WORD)
         {
             reg = "cx";
         }
-        else if (size == 4)
+        else if (size == DATA_SIZE_DWORD)
         {
             reg = "ecx";
         }
     }
     else if (S_EQ(original_register, "edx"))
     {
-        if (size == 1)
+        if (size == DATA_SIZE_BYTE)
         {
             reg = "dl";
         }
-        else if (size == 2)
+        else if (size == DATA_SIZE_WORD)
         {
             reg = "dx";
         }
-        else if (size == 4)
+        else if (size == DATA_SIZE_DWORD)
         {
             reg = "edx";
         }
     }
     return reg;
+}
+
+/**
+ * Finds weather this is a byte operation, word operation or double word operation based on the size provided
+ * Returns either "byte", "word", or "dword" 
+ */
+const char *codegen_byte_word_or_dword(size_t size)
+{
+    const char *type = NULL;
+
+    if (size == DATA_SIZE_BYTE)
+    {
+        type = "byte";
+    }
+    else if (size == DATA_SIZE_WORD)
+    {
+        type = "word";
+    }
+    else if (size == DATA_SIZE_DWORD)
+    {
+        type = "dword";
+    }
+
+    return type;
 }
 
 void codegen_generate_assignment_expression(struct node *node)
@@ -846,15 +884,14 @@ void codegen_generate_assignment_expression(struct node *node)
             asm_push("mov ebx, [ebx]");
         }
 
-
         // We finally here? Good write EAX into the address we care about.
-        asm_push("mov [ebx], eax");
+        asm_push("mov %s [ebx], eax", codegen_byte_word_or_dword(assignment_operand_entity.node->var.type.size));
 
         return;
     }
 
     // Normal variable no pointer access? Then write the move
-    asm_push("mov [%s], eax", assignment_operand_entity.address);
+    asm_push("mov %s [%s], eax", codegen_byte_word_or_dword(assignment_operand_entity.node->var.type.size), assignment_operand_entity.address);
 }
 
 void codegen_generate_expressionable_function_arguments(struct codegen_entity *func_entity, struct node *func_call_args_exp_node, size_t *arguments_size)
@@ -1047,15 +1084,22 @@ const char *codegen_choose_ebx_or_edx()
 
     return reg;
 }
-void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, char *out)
+
+char* codegen_stack_asm_address(int stack_offset, char* out)
 {
-    if (entity->stack_offset < 0)
+    if (stack_offset < 0)
     {
-        sprintf(out, "ebp%i", entity->stack_offset);
-        return;
+        sprintf(out, "ebp%i", stack_offset);
+        return out;
     }
 
-    sprintf(out, "ebp+%i", entity->stack_offset);
+    sprintf(out, "ebp+%i", stack_offset);
+    return out; 
+}
+
+void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, char *out)
+{
+    codegen_stack_asm_address(entity->stack_offset, out);
 }
 
 void codegen_handle_variable_access(struct node *access_node, struct codegen_entity *entity, struct history *history)
@@ -1335,9 +1379,10 @@ void codegen_generate_scope_variable(struct node *node)
         // Mark the EAX register as no longer used.
         register_unset_flag(REGISTER_EAX_IS_USED);
 
+        char address[256];
         // Write the move. Only intergers supported at the moment as you can see
         // this will be improved.
-        asm_push("mov [ebp%i], eax", node->var.offset);
+        asm_push("mov [%s], eax", codegen_stack_asm_address(node->var.offset, address));
     }
 
     register_unset_flag(REGISTER_EAX_IS_USED);

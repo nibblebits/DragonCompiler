@@ -699,4 +699,12 @@ bool is_access_operator_node(struct node* node);
 
 bool op_is_indirection(const char* op);
 
+int align_value(int val, int to);
+
+/**
+ * Aligns the given value and if its a negative value then it pretends its positive
+ * aligns it and then returns the negative result
+ */
+int align_value_treat_positive(int val, int to);
+
 #endif

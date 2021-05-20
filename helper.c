@@ -214,3 +214,29 @@ bool op_is_indirection(const char *op)
 {
     return S_EQ(op, "*");
 }
+
+
+int align_value(int val, int to)
+{
+    if (val % to)
+    {
+        val += to - (val % to);
+    }
+    return val;
+}
+
+/**
+ * Aligns the given value and if its a negative value then it pretends its positive
+ * aligns it and then returns the negative result
+ */
+int align_value_treat_positive(int val, int to)
+{
+    assert(to >= 0);
+
+    if (val < 0)
+    {
+        to = -to;
+    }
+    
+    return align_value(val, to);
+}

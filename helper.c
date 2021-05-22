@@ -26,7 +26,7 @@
  * \param var_name The variable in the structure that we want the offset for.
  * \param var_node_out Set to the variable node in the structure that we are resolving an offset for.
  */
-int struct_offset(struct compile_process *compile_proc, const char *struct_name, const char *var_name, struct node **var_node_out)
+int struct_offset(struct compile_process *compile_proc, const char *struct_name, const char *var_name, struct node **var_node_out, int last_pos, int flags)
 {
     struct symbol *struct_sym = symresolver_get_symbol(compile_proc, struct_name);
     assert(struct_sym->type == SYMBOL_TYPE_NODE);
@@ -37,20 +37,41 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
     struct vector *struct_vars_vec = node->_struct.body_n->body.statements;
     vector_set_peek_pointer(struct_vars_vec, 0);
 
+    // Do we need to read the structure backwards. I.e
+    // struct a
+    // {
+    //   int c;
+    //   char b   
+    // }
+    // Then we will read "b" then "c"
+    if (flags & STRUCT_ACCESS_BACKWARDS)
+    {
+        // We need to go through this structure in reverse
+        vector_set_peek_pointer_end(struct_vars_vec);
+        vector_set_flag(struct_vars_vec, VECTOR_FLAG_PEEK_DECREMENT);
+    }
+
     struct node *var_node_cur = vector_peek_ptr(struct_vars_vec);
-    int position = 0;
+    int position = last_pos;
     *var_node_out = NULL;
     while (var_node_cur)
     {
         *var_node_out = var_node_cur;
+        position = var_node_cur->var.offset;
+
         if (S_EQ(var_node_cur->var.name, var_name))
         {
-            position = var_node_cur->var.offset;
+            // Note we don't access the "offset" this is because the offset assume its a global
+            // structure, it also has no concept of weather or not its nested insde a structure
+            // its aware of only its self. Therefore offset is not fit for purpose
             break;
         }
 
         var_node_cur = vector_peek_ptr(struct_vars_vec);
     }
+
+
+    vector_unset_flag(struct_vars_vec, VECTOR_FLAG_PEEK_DECREMENT);
 
     return position;
 }
@@ -76,24 +97,21 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
  * 
  * \param offset_out This is set to the offset based on the access pattern. I.e "a.b.c.d.e.f" would take all those additional structure variables into account for calculating the offset
  */
-struct node* struct_for_access(struct compile_process* process, struct node* node, const char* type_str, int* offset_out)
+struct node *struct_for_access(struct compile_process *process, struct node *node, const char *type_str, int *offset_out, int flags)
 {
     assert((node->type == NODE_TYPE_EXPRESSION && is_access_operator(node->exp.op)) || node->type == NODE_TYPE_IDENTIFIER);
 
-    struct node* var_node = NULL;
+    struct node *var_node = NULL;
     if (node->type == NODE_TYPE_IDENTIFIER)
     {
-        struct_offset(process, type_str, node->sval, &var_node);
-        *offset_out += var_node->var.offset;
+        *offset_out = struct_offset(process, type_str, node->sval, &var_node, *offset_out, flags);
         return var_node;
     }
 
-    // Let's handle the access expression i.e "a.z"
-    var_node = struct_for_access(process, node->exp.left, type_str, offset_out);
+    var_node = struct_for_access(process, node->exp.left, type_str, offset_out, flags);
     assert(var_node);
 
-    return struct_for_access(process, node->exp.right, var_node->var.type.type_str, offset_out);
-
+    return struct_for_access(process, node->exp.right, var_node->var.type.type_str, offset_out, flags);
 }
 
 bool is_access_operator(const char *op)
@@ -106,18 +124,17 @@ bool is_access_operator_node(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_access_operator(node->exp.op);
 }
 
-
 /**
  * Decrements the depth so long as the value is not equal to DEPTH_INFINITE
  */
 int decrement_depth(int depth)
 {
-    if(depth == DEPTH_INFINITE)
+    if (depth == DEPTH_INFINITE)
     {
         return DEPTH_INFINITE;
     }
 
-    return depth-1;
+    return depth - 1;
 }
 
 /**
@@ -144,7 +161,7 @@ struct node *first_node_of_type_from_left(struct node *node, int type, int depth
         return NULL;
     }
 
-    struct node* left_node = NULL;
+    struct node *left_node = NULL;
     switch (node->type)
     {
     case NODE_TYPE_EXPRESSION:
@@ -162,8 +179,6 @@ struct node *first_node_of_type_from_left(struct node *node, int type, int depth
 
     return left_node;
 }
-
-
 
 /**
  * Finds the first node of the given type.
@@ -215,7 +230,6 @@ bool op_is_indirection(const char *op)
     return S_EQ(op, "*");
 }
 
-
 int align_value(int val, int to)
 {
     if (val % to)
@@ -237,6 +251,22 @@ int align_value_treat_positive(int val, int to)
     {
         to = -to;
     }
-    
+
     return align_value(val, to);
+}
+
+void variable_align_offset(struct node *var_node, int *stack_offset_out)
+{
+    if ((*stack_offset_out + var_node->var.type.size) % DATA_SIZE_WORD)
+    {
+        *stack_offset_out = align_value_treat_positive(*stack_offset_out, DATA_SIZE_DWORD);
+    }
+}
+
+
+void var_node_set_offset(struct node* node, int offset, int unaligned_offset)
+{
+    assert(node->type == NODE_TYPE_VARIABLE);
+    node->var.offset = offset;
+    node->var.uoffset = unaligned_offset;
 }

@@ -140,53 +140,17 @@ struct parser_scope_entity *parser_new_scope_entity(struct node *node, int stack
     return entity;
 }
 
-int parser_stack_offset(struct node *node, int flags)
+
+int parser_scope_offset(struct node *node, int flags, int* unaligned_offset)
 {
-    int offset = node->var.type.size;
-
-    // If the stack is local then we must grow downwards
-    // as we want to access our local function arguments in our given scope
-    // You would not provide this flag for things such as function arguments whose stack
-    // is created by the function caller.
-    if (flags & PARSER_SCOPE_ENTITY_LOCAL_STACK)
-    {
-        offset = -offset;
-    }
-
-    if (flags & PARSER_SCOPE_ENTITY_OFFSET_ZERO)
-    {
-        offset = 0;
-    }
-
+    int offset = 0;
     struct parser_scope_entity *last_entity = parser_scope_last_entity();
     if (last_entity)
     {
-
-        // If this entity is not on a local stack but we want to get an offset
-        // for an element on a stack then their is an incompatability
-        // we should just return the current offset and make no effort to include it
-        // in the calculation at all.
-        if ((flags & PARSER_SCOPE_ENTITY_LOCAL_STACK) && !(last_entity->flags & PARSER_SCOPE_ENTITY_LOCAL_STACK))
-        {
-            return offset;
-        }
-
-        // We use += because if the stack_offset is negative then this will do a negative
-        // if its positive then it will do a positive. += is the best operator for both cases
-        offset += last_entity->stack_offset;
-
-        if (flags & PARSER_SCOPE_ENTITY_OFFSET_ZERO)
-        {
-            // Are we offsetting from zero? Alright then we need to add to the offset the
-            // previous entities variable size
-            offset += last_entity->node->var.type.size;
-        }
-
-        if (node->var.type.size == DATA_SIZE_DWORD && last_entity->node->var.offset % DATA_SIZE_DWORD)
-        {
-            offset = align_value_treat_positive(offset, DATA_SIZE_DWORD);
-        }
+        offset += last_entity->stack_offset + last_entity->node->var.type.size;
+    
     }
+    offset = align_value_treat_positive(offset, node->var.type.size);
 
     return offset;
 }
@@ -444,8 +408,11 @@ static void parser_append_size_for_node(size_t *variable_size, struct node *node
 {
     if (node->type == NODE_TYPE_VARIABLE)
     {
+        // Do we need to adjust the stack?
+        *variable_size = align_value_treat_positive(*variable_size, node->var.type.size);
         // Ok we have a variable lets adjust the variable_size.
         *variable_size += node->var.type.size;
+
     }
 }
 /**
@@ -903,7 +870,7 @@ void parse_datatype_type(struct datatype *datatype)
     parser_datatype_init(datatype_token, datatype, pointer_depth);
 }
 
-int parser_get_stack_offset(struct node *var_node, int flags, struct history *history)
+int parser_get_scope_offset(struct node *var_node, struct history *history, int* unaligned_offset)
 {
     // Global scopes are not in the stack!, Therefore an offset of zero is acceptable
     if (history->flags & HISTORY_FLAG_IS_GLOBAL_SCOPE)
@@ -911,14 +878,14 @@ int parser_get_stack_offset(struct node *var_node, int flags, struct history *hi
         return 0;
     }
 
+    int flags = 0;
+
     if (history->flags & HISTORY_FLAG_INSIDE_STRUCTURE)
     {
-        // Inside a structure, then we offset from zero for all structure variables
-        // Do not use the local stack flag as the structure is its own space.
-        return parser_stack_offset(var_node, PARSER_SCOPE_ENTITY_OFFSET_ZERO);
+        flags |= PARSER_SCOPE_ENTITY_OFFSET_ZERO;
     }
-
-    return parser_stack_offset(var_node, PARSER_SCOPE_ENTITY_LOCAL_STACK);
+    int offset = parser_scope_offset(var_node, flags, unaligned_offset);
+    return offset;
 }
 
 void parse_variable(struct datatype *dtype, struct token *name_token, struct history *history)
@@ -941,14 +908,15 @@ void parse_variable(struct datatype *dtype, struct token *name_token, struct his
 
     struct node *var_node = node_pop();
 
-    // Can be optimized...
     int offset = 0;
+    int unaligned_offset = 0;
     if (!(history->flags & HISTORY_FLAG_IS_GLOBAL_SCOPE))
     {
-        offset = parser_get_stack_offset(var_node, 0, history);
+        offset = parser_get_scope_offset(var_node, history, &unaligned_offset);
     }
     parser_scope_push(parser_new_scope_entity(var_node, offset, PARSER_SCOPE_ENTITY_LOCAL_STACK), var_node->var.type.size);
-    var_node->var.offset = offset;
+    
+    var_node_set_offset(var_node, offset, unaligned_offset);
 
     // Push the variable node back to the stack
     node_push(var_node);

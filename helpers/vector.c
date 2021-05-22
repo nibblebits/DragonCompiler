@@ -92,6 +92,11 @@ void vector_set_flag(struct vector* vector, int flag)
     vector->flags |= flag;
 }
 
+void vector_unset_flag(struct vector* vector, int flag)
+{
+    vector->flags &= ~flag;
+}
+
 void* vector_peek_ptr(struct vector* vector)
 {
     void** ptr = vector_peek(vector);

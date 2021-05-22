@@ -188,7 +188,7 @@ size_t codegen_align_to_dword(size_t size)
 {
     if (size < DATA_SIZE_DWORD)
         return size;
-    
+
     if (size % DATA_SIZE_DWORD)
     {
         size += DATA_SIZE_DWORD - (size % DATA_SIZE_DWORD);
@@ -296,7 +296,7 @@ struct codegen_global_entity *codegen_get_global_variable_for_node(struct node *
 
             // Offset will store the absolute offset from zero for the strucutre access
             int offset = 0;
-            struct node *access_node = struct_for_access(current_process, node->exp.right, entity->node->var.type.type_str, &offset);
+            struct node *access_node = struct_for_access(current_process, node->exp.right, entity->node->var.type.type_str, &offset, 0);
             entity = codegen_new_global_entity(access_node, offset, 0);
             break;
         }
@@ -340,7 +340,7 @@ struct codegen_global_entity *codegen_get_global_variable_for_node(struct node *
     return entity;
 }
 
-void codegen_put_address_for_entity(struct codegen_entity *entity_out, struct codegen_global_entity *entity)
+void codegen_put_address_for_global_entity(struct codegen_entity *entity_out, struct codegen_global_entity *entity)
 {
     assert(entity_out->global.sym);
 
@@ -381,7 +381,7 @@ int codegen_get_global_entity_for_node(struct node *node, struct codegen_entity 
         entity_out->indirection.depth = entity->indirection.depth;
     }
 
-    codegen_put_address_for_entity(entity_out, entity);
+    codegen_put_address_for_global_entity(entity_out, entity);
 
     // We only deal with node symbols right now.
     assert(sym->type == SYMBOL_TYPE_NODE);
@@ -400,6 +400,7 @@ int codegen_get_entity_for_node(struct node *node, struct codegen_entity *entity
         entity_out->type = CODEGEN_ENTITY_TYPE_STACK;
         entity_out->scope_entity = scope_entity;
         entity_out->is_scope_entity = true;
+
         codegen_scope_entity_to_asm_address(entity_out->scope_entity, entity_out->address);
         entity_out->node = codegen_get_entity_node(entity_out);
 
@@ -513,7 +514,7 @@ static const char *asm_keyword_for_size(size_t size, char *tmp_buf)
         keyword = "dq";
         break;
 
-        default:
+    default:
         // We have a structure or unknown type? Then lets just reserve enough bytes.
         sprintf(tmp_buf, "times %lld db 0", (unsigned long long)size);
         return tmp_buf;
@@ -729,9 +730,11 @@ struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *no
             // Offset will store the absolute offset from zero for the strucutre access
             // it acts as if its a global variable, as we are on the scope we need
             // to convert this to a stack address.
-            int offset = 0;
-            struct node *access_node = struct_for_access(current_process, node->exp.right, entity->node->var.type.type_str, &offset);
-            entity = codegen_new_scope_entity(access_node, entity->stack_offset + offset, 0);
+            int offset = entity->stack_offset;
+
+            // STRUCT_ACCESS_BACKWARDS - We are the stack so we need to read the structure backwards.
+            struct node *access_node = struct_for_access(current_process, node->exp.right, entity->node->var.type.type_str, &offset, 0);
+            entity = codegen_new_scope_entity(access_node, offset, 0);
             break;
         }
 
@@ -1085,7 +1088,7 @@ const char *codegen_choose_ebx_or_edx()
     return reg;
 }
 
-char* codegen_stack_asm_address(int stack_offset, char* out)
+char *codegen_stack_asm_address(int stack_offset, char *out)
 {
     if (stack_offset < 0)
     {
@@ -1094,7 +1097,7 @@ char* codegen_stack_asm_address(int stack_offset, char* out)
     }
 
     sprintf(out, "ebp+%i", stack_offset);
-    return out; 
+    return out;
 }
 
 void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, char *out)
@@ -1382,7 +1385,7 @@ void codegen_generate_scope_variable(struct node *node)
         char address[256];
         // Write the move. Only intergers supported at the moment as you can see
         // this will be improved.
-        asm_push("mov [%s], eax", codegen_stack_asm_address(node->var.offset, address));
+        asm_push("mov [%s], eax", codegen_stack_asm_address(entity->stack_offset, address));
     }
 
     register_unset_flag(REGISTER_EAX_IS_USED);

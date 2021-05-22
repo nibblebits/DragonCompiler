@@ -114,6 +114,18 @@ enum
       EXPRESSION_IS_ADDITION | EXPRESSION_IS_SUBTRACTION | EXPRESSION_IS_MULTIPLICATION | \
       EXPRESSIPON_IS_DIVISION)
 
+
+
+// Flags for structure access functions.
+enum
+{
+    /**
+     * Signifies that any structure access should be calculated backwards,
+     * this is useful for calculating offsets for structures on the stack
+     */
+    STRUCT_ACCESS_BACKWARDS = 0b00000001
+};
+
 enum
 {
     REGISTER_EAX_IS_USED = 0b00000001,
@@ -463,8 +475,10 @@ struct node
                 };
             } const_val;
 
-            // The stack offset for this variable (if its a stack variable)
+            // The offset for this variable
             int offset;
+            // The unaligned offset for this variable.
+            int uoffset;
         } var;
 
         union statement
@@ -627,8 +641,10 @@ void symresolver_build_for_node(struct compile_process* process, struct node* no
  * \param compile_proc The compiler process to peek for a structure for
  * \param struct_name The name of the given structure we must peek into
  * \param var_name The variable in the structure that we want the offset for.
+ * \param last_pos The last offset for the structure offset. I.e the current stack offset.
+ * \param flags The flags for this operation
  */
-int struct_offset(struct compile_process* compile_proc, const char* struct_name, const char* var_name, struct node** var_node_out);
+int struct_offset(struct compile_process *compile_proc, const char *struct_name, const char *var_name, struct node **var_node_out, int last_pos, int flags);
 
 /**
  * Returns the node for the structure access expression.
@@ -649,7 +665,7 @@ int struct_offset(struct compile_process* compile_proc, const char* struct_name,
  * 
  * Likewise if only "a" was provided then the "a" variable node in the test structure would be returned.
  */
-struct node* struct_for_access(struct compile_process* process, struct node* node, const char* type_str, int* offset_out);
+struct node *struct_for_access(struct compile_process *process, struct node *node, const char *type_str, int *offset_out, int flags);
 
 /**
  * Finds the first node of the given type.
@@ -707,4 +723,10 @@ int align_value(int val, int to);
  */
 int align_value_treat_positive(int val, int to);
 
+/**
+ * Aligns the offset for the provided offset for the given variable
+ */
+void variable_align_offset(struct node *var_node, int *stack_offset_out);
+
+void var_node_set_offset(struct node* node, int offset, int unaligned_offset);
 #endif

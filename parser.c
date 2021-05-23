@@ -24,6 +24,7 @@ enum
     HISTORY_FLAG_INSIDE_STRUCTURE = 0b00000010,
     // Specifies that we are outside of a function in the parsing process
     // You can think of this as where global variables would be.
+    // Does not include situations where we are inside of a structure
     HISTORY_FLAG_IS_GLOBAL_SCOPE = 0b00000100,
 };
 
@@ -112,8 +113,8 @@ static struct history *history_begin(struct history *history_out, int flags)
 // Simple bitmask for scope entity rules.
 enum
 {
-    PARSER_SCOPE_ENTITY_LOCAL_STACK = 0b00000001,
-    PARSER_SCOPE_ENTITY_OFFSET_ZERO = 0b00000010,
+    PARSER_SCOPE_ENTITY_ON_STACK = 0b00000001,
+    PARSER_SCOPE_ENTITY_STRUCTURE_SCOPE = 0b00000010,
 };
 
 struct parser_scope_entity
@@ -140,19 +141,55 @@ struct parser_scope_entity *parser_new_scope_entity(struct node *node, int stack
     return entity;
 }
 
+int parser_scope_offset_for_stack(struct node *node, struct history* history)
+{
+    int offset = -node->var.type.size;
+    struct parser_scope_entity *last_entity = parser_scope_last_entity();
 
-int parser_scope_offset(struct node *node, int flags, int* unaligned_offset)
+    if (last_entity)
+    {
+        offset += last_entity->stack_offset;
+        // Doble check below is correct at some point. I think so...
+        last_entity->node->var.padding = padding(offset, node->var.type.size);
+    }
+    offset += node->var.type.size;
+    return offset;
+}
+
+int parser_scope_offset_for_structure(struct node *node, struct history* history)
 {
     int offset = 0;
     struct parser_scope_entity *last_entity = parser_scope_last_entity();
+    
     if (last_entity)
     {
         offset += last_entity->stack_offset + last_entity->node->var.type.size;
-    
+        last_entity->node->var.padding = padding(offset, node->var.type.size);
     }
-    offset = align_value_treat_positive(offset, node->var.type.size);
-
     return offset;
+}
+
+int parser_scope_offset_for_global(struct node *node, struct history* history)
+{
+    // We don't have global scopes. Each variable is independant
+    return 0;
+}
+
+
+int parser_scope_offset(struct node *node, struct history* history)
+{
+
+    if (history->flags & HISTORY_FLAG_INSIDE_STRUCTURE)
+    {
+        return parser_scope_offset_for_structure(node, history);
+    }
+
+    if (history->flags & HISTORY_FLAG_IS_GLOBAL_SCOPE)
+    {
+        return parser_scope_offset_for_global(node, history);
+    }
+
+    return parser_scope_offset_for_stack(node, history);
 }
 
 static int parser_get_precedence_for_operator(const char *op, struct op_precedence_group **group_out)
@@ -408,11 +445,8 @@ static void parser_append_size_for_node(size_t *variable_size, struct node *node
 {
     if (node->type == NODE_TYPE_VARIABLE)
     {
-        // Do we need to adjust the stack?
-        *variable_size = align_value_treat_positive(*variable_size, node->var.type.size);
         // Ok we have a variable lets adjust the variable_size.
         *variable_size += node->var.type.size;
-
     }
 }
 /**
@@ -454,8 +488,22 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
         // Incrementing it by the size of our variable
         parser_append_size_for_node(variable_size, stmt_node);
     }
+
     // bodies must end with a right curley bracket!
     expect_sym('}');
+
+    // Variable size should be adjusted to + the padding of all the body variables padding
+    int padding = compute_sum_padding(body_vec);
+    *variable_size += padding;
+
+    // If we do have padding then we must also align to 4 bytes or 32 bit as 
+    // we are a 32 bit compiler and the strucutre must be 4 byte aligned! If we have padding
+    if (padding)
+    {
+        *variable_size = align_value_treat_positive(*variable_size, DATA_SIZE_DWORD);
+    }
+
+
 
     // Let's make the body node now we have parsed all statements.
     make_body_node(body_vec, *variable_size);
@@ -472,7 +520,7 @@ void parse_body(size_t *variable_size, struct history *history)
 {
     // We must always have a variable size pointer
     // if the caller doesn't care about the size we will make our own.
-    size_t tmp_size;
+    size_t tmp_size = 0x00;
     if (!variable_size)
     {
         variable_size = &tmp_size;
@@ -870,21 +918,11 @@ void parse_datatype_type(struct datatype *datatype)
     parser_datatype_init(datatype_token, datatype, pointer_depth);
 }
 
-int parser_get_scope_offset(struct node *var_node, struct history *history, int* unaligned_offset)
+int parser_get_scope_offset(struct node *var_node, struct history* history)
 {
     // Global scopes are not in the stack!, Therefore an offset of zero is acceptable
-    if (history->flags & HISTORY_FLAG_IS_GLOBAL_SCOPE)
-    {
-        return 0;
-    }
 
-    int flags = 0;
-
-    if (history->flags & HISTORY_FLAG_INSIDE_STRUCTURE)
-    {
-        flags |= PARSER_SCOPE_ENTITY_OFFSET_ZERO;
-    }
-    int offset = parser_scope_offset(var_node, flags, unaligned_offset);
+    int offset = parser_scope_offset(var_node, history);
     return offset;
 }
 
@@ -907,16 +945,11 @@ void parse_variable(struct datatype *dtype, struct token *name_token, struct his
     make_variable_node(dtype, name_token, value_node);
 
     struct node *var_node = node_pop();
-
-    int offset = 0;
-    int unaligned_offset = 0;
-    if (!(history->flags & HISTORY_FLAG_IS_GLOBAL_SCOPE))
-    {
-        offset = parser_get_scope_offset(var_node, history, &unaligned_offset);
-    }
-    parser_scope_push(parser_new_scope_entity(var_node, offset, PARSER_SCOPE_ENTITY_LOCAL_STACK), var_node->var.type.size);
     
-    var_node_set_offset(var_node, offset, unaligned_offset);
+    int offset = parser_get_scope_offset(var_node, history);
+    parser_scope_push(parser_new_scope_entity(var_node, offset, 0), var_node->var.type.size);
+
+    var_node_set_offset(var_node, offset);
 
     // Push the variable node back to the stack
     node_push(var_node);

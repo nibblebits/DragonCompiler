@@ -52,12 +52,18 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
     }
 
     struct node *var_node_cur = vector_peek_ptr(struct_vars_vec);
+    struct node* var_node_last = NULL;
     int position = last_pos;
     *var_node_out = NULL;
     while (var_node_cur)
     {
         *var_node_out = var_node_cur;
-        position = var_node_cur->var.offset;
+
+        if (var_node_last)
+        {
+            position += var_node_last->var.type.size;
+            position = align_value_treat_positive(position, var_node_cur->var.type.size);
+        }
 
         if (S_EQ(var_node_cur->var.name, var_name))
         {
@@ -67,6 +73,7 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
             break;
         }
 
+        var_node_last = var_node_cur;
         var_node_cur = vector_peek_ptr(struct_vars_vec);
     }
 
@@ -230,11 +237,19 @@ bool op_is_indirection(const char *op)
     return S_EQ(op, "*");
 }
 
+int padding(int val, int to)
+{
+    if ((val % to) == 0)
+        return 0;
+        
+    return to - (val % to) % to;
+}
+
 int align_value(int val, int to)
 {
     if (val % to)
     {
-        val += to - (val % to);
+        val += padding(val, to);
     }
     return val;
 }
@@ -257,16 +272,40 @@ int align_value_treat_positive(int val, int to)
 
 void variable_align_offset(struct node *var_node, int *stack_offset_out)
 {
-    if ((*stack_offset_out + var_node->var.type.size) % DATA_SIZE_WORD)
+    if ((*stack_offset_out + var_node->var.type.size) % DATA_SIZE_DWORD)
     {
         *stack_offset_out = align_value_treat_positive(*stack_offset_out, DATA_SIZE_DWORD);
     }
 }
 
 
-void var_node_set_offset(struct node* node, int offset, int unaligned_offset)
+void var_node_set_offset(struct node* node, int offset)
 {
     assert(node->type == NODE_TYPE_VARIABLE);
     node->var.offset = offset;
-    node->var.uoffset = unaligned_offset;
 }
+
+int compute_sum_padding(struct vector* vec)
+{
+    int padding = 0;
+    vector_set_peek_pointer(vec, 0);
+    struct node* cur_node = vector_peek_ptr(vec);
+    while (cur_node)
+    {
+        if (cur_node->type != NODE_TYPE_VARIABLE)
+        {
+            cur_node = vector_peek_ptr(vec);
+            continue;
+        }
+
+        padding += cur_node->var.padding;
+        cur_node = vector_peek_ptr(vec);
+    }
+    return padding;
+}
+
+int compute_sum_padding_for_body(struct node* node)
+{
+    assert(node->type == NODE_TYPE_BODY);
+    return compute_sum_padding(node->body.statements);
+}  

@@ -475,10 +475,10 @@ struct node
                 };
             } const_val;
 
-            // The offset for this variable
+            // The unaligned offset for this variable
             int offset;
-            // The unaligned offset for this variable.
-            int uoffset;
+            // The total bytes to add to the offset to make this variable memory aligned.
+            int padding;
         } var;
 
         union statement
@@ -728,5 +728,21 @@ int align_value_treat_positive(int val, int to);
  */
 void variable_align_offset(struct node *var_node, int *stack_offset_out);
 
-void var_node_set_offset(struct node* node, int offset, int unaligned_offset);
+void var_node_set_offset(struct node* node, int offset);
+
+/**
+ * Sums all the padding for a vector of variable nodes.
+ * Non variable nodes are ignored
+ */
+int compute_sum_padding(struct vector* vec);
+/**
+ * Sums all the padding for a body of variable nodes, non variable nodes are ignored
+ */
+int compute_sum_padding_for_body(struct node* node);
+
+
+/**
+ * Calculates padding for the given value. Pads to "to"
+ */
+int padding(int val, int to);
 #endif

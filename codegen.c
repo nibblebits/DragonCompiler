@@ -730,10 +730,9 @@ struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *no
             // Offset will store the absolute offset from zero for the strucutre access
             // it acts as if its a global variable, as we are on the scope we need
             // to convert this to a stack address.
-            int offset = entity->stack_offset;
-
-            // STRUCT_ACCESS_BACKWARDS - We are the stack so we need to read the structure backwards.
+            int offset = 0;
             struct node *access_node = struct_for_access(current_process, node->exp.right, entity->node->var.type.type_str, &offset, 0);
+            offset += -entity->node->var.type.size;
             entity = codegen_new_scope_entity(access_node, offset, 0);
             break;
         }

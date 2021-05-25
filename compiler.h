@@ -312,6 +312,15 @@ struct datatype
 
     // The pointer depth of this datatype
     int pointer_depth;
+
+    // If this is a data type of structure or union then you can access one of the modifiers here
+    union
+    {
+        struct node* struct_node;
+        struct node* union_node;
+    };
+    
+    
 };
 
 
@@ -451,6 +460,9 @@ struct node
             // Useful for accessing the bodies of structures and unions
             // where you need to know the size.
             size_t variable_size;
+
+            // True if the variable size had to be increased due to padding in the body
+            bool padded;
         } body;
 
         struct variable
@@ -475,10 +487,16 @@ struct node
                 };
             } const_val;
 
-            // The unaligned offset for this variable
+            // The unaligned offset for this variable not including any padding.
             int offset;
-            // The total bytes to add to the offset to make this variable memory aligned.
+
+            // Aligned offset taking the "padding" into account
+            int aoffset;
+
+            // The total bytes before this offset that will be NULL's to allow alignment
             int padding;
+            // The total bytes after this variable will be NULL's to allow alignment
+            int padding_after;
         } var;
 
         union statement
@@ -745,4 +763,25 @@ int compute_sum_padding_for_body(struct node* node);
  * Calculates padding for the given value. Pads to "to"
  */
 int padding(int val, int to);
+
+/**
+ * Returns true if the given variable node is a primative variable
+ */
+bool variable_node_is_primative(struct node* node);
+
+
+struct node* node_from_symbol(struct compile_process* current_process, const char* name);
+struct node* node_from_sym(struct symbol* sym);
+struct node* struct_node_for_name(struct compile_process* current_process, const char* struct_name);
+
+/**
+ * Returns a node that has the given structure for the provided var_node.
+ * The var_node must be of type NODE_TYPE_VARIABLE. It must also represent a structure variable type
+ * 
+ * i.e struct abc test;
+ * 
+ * Calling this function would return the structure node that represents struct "abc" giving
+ * accessing to its entire body and attributes.
+ */
+struct node* variable_struct_node(struct node* var_node);
 #endif

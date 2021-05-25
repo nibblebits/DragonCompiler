@@ -241,7 +241,7 @@ int padding(int val, int to)
 {
     if ((val % to) == 0)
         return 0;
-        
+
     return to - (val % to) % to;
 }
 
@@ -309,3 +309,55 @@ int compute_sum_padding_for_body(struct node* node)
     assert(node->type == NODE_TYPE_BODY);
     return compute_sum_padding(node->body.statements);
 }  
+
+bool variable_node_is_primative(struct node* node)
+{
+    assert(node->type == NODE_TYPE_VARIABLE);
+    return node->var.type.type != DATA_TYPE_STRUCT && node->var.type.type != DATA_TYPE_UNION;
+}
+
+
+struct node* node_from_sym(struct symbol* sym)
+{
+    if (sym->type != SYMBOL_TYPE_NODE)
+        return 0;
+
+    struct node* node = sym->data;
+    return node;
+}
+
+struct node* node_from_symbol(struct compile_process* current_process, const char* name)
+{
+    struct symbol* sym = symresolver_get_symbol(current_process, name);
+    if (!sym)
+    {
+        return 0;
+    }
+    return node_from_sym(sym);
+}
+
+
+struct node* struct_node_for_name(struct compile_process* current_process, const char* struct_name)
+{
+    struct node* node = node_from_symbol(current_process, struct_name);
+    if (!node)
+        return NULL;
+
+    if (node->type != NODE_TYPE_STRUCT)
+        return NULL;
+
+    return node;
+}
+
+struct node* variable_struct_node(struct node* var_node)
+{
+    if (var_node->type != NODE_TYPE_VARIABLE)
+    {
+        return NULL;
+    }
+
+    if (var_node->var.type.type != DATA_TYPE_STRUCT)
+        return NULL;
+    
+    return var_node->var.type.struct_node;
+}

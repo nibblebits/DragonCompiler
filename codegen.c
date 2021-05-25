@@ -732,7 +732,7 @@ struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *no
             // to convert this to a stack address.
             int offset = 0;
             struct node *access_node = struct_for_access(current_process, node->exp.right, entity->node->var.type.type_str, &offset, 0);
-            offset += -entity->node->var.type.size;
+            offset += entity->stack_offset;
             entity = codegen_new_scope_entity(access_node, offset, 0);
             break;
         }
@@ -1368,7 +1368,8 @@ int codegen_stack_offset(struct node *node, int flags)
 
 void codegen_generate_scope_variable(struct node *node)
 {
-    struct codegen_scope_entity *entity = codegen_new_scope_entity(node, node->var.offset, CODEGEN_SCOPE_ENTITY_LOCAL_STACK);
+    struct codegen_scope_entity *entity = codegen_new_scope_entity(node, node->var.aoffset, CODEGEN_SCOPE_ENTITY_LOCAL_STACK);
+    
     codegen_scope_push(entity, node->var.type.size);
 
     // Scope variables have values, lets compute that

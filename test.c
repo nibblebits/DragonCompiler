@@ -2,12 +2,20 @@ struct dog2
 {
 
    char i; 
-   char k; 
+   int mmmm;
+   char k;
+   char e;
 };
 
-struct dog2 dog;
 int main()
 {
-   dog.i = 10;
-   dog.k = 30;
+  char k = 40;
+  int kkkk = 40;
+  char e = 20;
+struct dog2 dog;
+      dog.i = 10;
+      dog.mmmm = 100;
+      dog.k = 50;
+      dog.e = 10;
+ 
 }

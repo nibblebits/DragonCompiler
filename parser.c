@@ -141,55 +141,71 @@ struct parser_scope_entity *parser_new_scope_entity(struct node *node, int stack
     return entity;
 }
 
-int parser_scope_offset_for_stack(struct node *node, struct history* history)
+void parser_scope_offset_for_stack(struct node *node, struct history *history)
 {
     int offset = -node->var.type.size;
     struct parser_scope_entity *last_entity = parser_scope_last_entity();
 
     if (last_entity)
     {
-        offset += last_entity->stack_offset;
-        // Doble check below is correct at some point. I think so...
-        last_entity->node->var.padding = padding(offset, node->var.type.size);
+        offset += last_entity->node->var.aoffset;
+        if (variable_node_is_primative(node))
+        {
+            node->var.padding = padding(-offset, node->var.type.size);
+            last_entity->node->var.padding_after = node->var.padding;
+        }
     }
-    offset += node->var.type.size;
-    return offset;
+    
+    // If this is a structure variable then we must align the padding to a 4-byte boundary so long
+    // as their was any padding in the original structure scope
+    // \attention Maybe make a new function for second operand, a bit long...
+    if (!variable_node_is_primative(node) && variable_struct_node(node)->_struct.body_n->body.padded)
+    {
+        node->var.padding = padding(-offset, DATA_SIZE_DWORD);
+    }
+    node->var.aoffset = offset + -node->var.padding;
 }
 
-int parser_scope_offset_for_structure(struct node *node, struct history* history)
+void parser_scope_offset_for_structure(struct node *node, struct history *history)
 {
     int offset = 0;
     struct parser_scope_entity *last_entity = parser_scope_last_entity();
-    
+
     if (last_entity)
     {
         offset += last_entity->stack_offset + last_entity->node->var.type.size;
-        last_entity->node->var.padding = padding(offset, node->var.type.size);
+        if (variable_node_is_primative(node))
+        {
+            node->var.padding = padding(offset, node->var.type.size);
+            last_entity->node->var.padding_after = node->var.padding;
+        }
+        node->var.aoffset = offset + node->var.padding;
+
     }
-    return offset;
 }
 
-int parser_scope_offset_for_global(struct node *node, struct history* history)
+int parser_scope_offset_for_global(struct node *node, struct history *history)
 {
     // We don't have global scopes. Each variable is independant
     return 0;
 }
 
-
-int parser_scope_offset(struct node *node, struct history* history)
+void parser_scope_offset(struct node *node, struct history *history)
 {
 
     if (history->flags & HISTORY_FLAG_INSIDE_STRUCTURE)
     {
-        return parser_scope_offset_for_structure(node, history);
+        parser_scope_offset_for_structure(node, history);
+        return;
     }
 
     if (history->flags & HISTORY_FLAG_IS_GLOBAL_SCOPE)
     {
-        return parser_scope_offset_for_global(node, history);
+        parser_scope_offset_for_global(node, history);
+        return;
     }
 
-    return parser_scope_offset_for_stack(node, history);
+    parser_scope_offset_for_stack(node, history);
 }
 
 static int parser_get_precedence_for_operator(const char *op, struct op_precedence_group **group_out)
@@ -428,9 +444,9 @@ void make_function_node(struct datatype *ret_type, const char *name, struct vect
     node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body_n = body});
 }
 
-void make_body_node(struct vector *body_vec, size_t variable_size)
+void make_body_node(struct vector *body_vec, size_t variable_size, bool padded)
 {
-    node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.variable_size = variable_size});
+    node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.variable_size = variable_size, .body.padded=padded});
 }
 
 void make_variable_node(struct datatype *datatype, struct token *name_token, struct node *value_node)
@@ -466,7 +482,7 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
     parser_append_size_for_node(variable_size, stmt_node);
 
     // Let's make the body node for this one statement.
-    make_body_node(body_vec, *variable_size);
+    make_body_node(body_vec, *variable_size, 0);
 }
 
 /**
@@ -496,17 +512,16 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
     int padding = compute_sum_padding(body_vec);
     *variable_size += padding;
 
-    // If we do have padding then we must also align to 4 bytes or 32 bit as 
+    // If we do have padding then we must also align to 4 bytes or 32 bit as
     // we are a 32 bit compiler and the strucutre must be 4 byte aligned! If we have padding
     if (padding)
     {
         *variable_size = align_value_treat_positive(*variable_size, DATA_SIZE_DWORD);
     }
 
-
-
     // Let's make the body node now we have parsed all statements.
-    make_body_node(body_vec, *variable_size);
+    bool padded = padding != 0;
+    make_body_node(body_vec, *variable_size, padded);
 }
 
 /**
@@ -661,6 +676,13 @@ void parse_struct(struct datatype *dtype)
     parse_body(&body_variable_size, history_begin(&history, HISTORY_FLAG_INSIDE_STRUCTURE));
     struct node *body_node = node_pop();
     make_struct_node(dtype->type_str, body_node);
+    struct node* struct_node = node_pop();
+
+    dtype->size = body_node->body.variable_size;
+    dtype->struct_node = struct_node;
+
+    // Push the structure node back to the stack
+    node_push(struct_node);
 
     // Structures must end with semicolons
     expect_sym(';');
@@ -889,6 +911,7 @@ void parser_datatype_init(struct token *datatype_token, struct datatype *datatyp
         // in future we need to check for this as we have unions.
         datatype_out->type = DATA_TYPE_STRUCT;
         datatype_out->size = size_of_struct(datatype_token->sval);
+        datatype_out->struct_node = struct_node_for_name(current_process, datatype_token->sval);
     }
 
     datatype_out->flags |= DATATYPE_FLAG_IS_POINTER;
@@ -918,14 +941,6 @@ void parse_datatype_type(struct datatype *datatype)
     parser_datatype_init(datatype_token, datatype, pointer_depth);
 }
 
-int parser_get_scope_offset(struct node *var_node, struct history* history)
-{
-    // Global scopes are not in the stack!, Therefore an offset of zero is acceptable
-
-    int offset = parser_scope_offset(var_node, history);
-    return offset;
-}
-
 void parse_variable(struct datatype *dtype, struct token *name_token, struct history *history)
 {
     struct node *value_node = NULL;
@@ -945,11 +960,10 @@ void parse_variable(struct datatype *dtype, struct token *name_token, struct his
     make_variable_node(dtype, name_token, value_node);
 
     struct node *var_node = node_pop();
-    
-    int offset = parser_get_scope_offset(var_node, history);
-    parser_scope_push(parser_new_scope_entity(var_node, offset, 0), var_node->var.type.size);
 
-    var_node_set_offset(var_node, offset);
+    // Calculate scope offset
+    parser_scope_offset(var_node, history);
+    parser_scope_push(parser_new_scope_entity(var_node, var_node->var.aoffset, 0), var_node->var.type.size);
 
     // Push the variable node back to the stack
     node_push(var_node);

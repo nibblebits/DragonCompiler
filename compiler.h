@@ -463,6 +463,11 @@ struct node
 
             // True if the variable size had to be increased due to padding in the body
             bool padded;
+
+            // Equal to the largest variable declaration node in the given body
+            // NULL if no variable node exists within the body.
+            struct node* largest_var_node;
+      
         } body;
 
         struct variable
@@ -784,4 +789,23 @@ struct node* struct_node_for_name(struct compile_process* current_process, const
  * accessing to its entire body and attributes.
  */
 struct node* variable_struct_node(struct node* var_node);
+
+
+/**
+ * Returns true if the given node is a variable node that is a structure variable and
+ * that structures memory is padded. Otherwise false.
+ */
+bool variable_struct_padded(struct node* var_node);
+
+
+/**
+ * Returns the largest variable node for the given structure, otherwise NULL.
+ */
+struct node* variable_struct_largest_variable_node(struct node* var_node);
+
+/**
+ * Returns the largest variable declaration inside the provided body.
+ * Largest being the variable that takes up the most room. Primitive variables only.
+ */
+struct node* body_largest_variable_node(struct node* body_node);
 #endif

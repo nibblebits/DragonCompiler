@@ -155,7 +155,7 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
             last_entity->node->var.padding_after = node->var.padding;
         }
     }
-    
+
     // If this is a structure variable then we must align the padding to a 4-byte boundary so long
     // as their was any padding in the original structure scope
     // \attention Maybe make a new function for second operand, a bit long...
@@ -180,7 +180,6 @@ void parser_scope_offset_for_structure(struct node *node, struct history *histor
             last_entity->node->var.padding_after = node->var.padding;
         }
         node->var.aoffset = offset + node->var.padding;
-
     }
 }
 
@@ -444,9 +443,9 @@ void make_function_node(struct datatype *ret_type, const char *name, struct vect
     node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body_n = body});
 }
 
-void make_body_node(struct vector *body_vec, size_t variable_size, bool padded)
+void make_body_node(struct vector *body_vec, size_t variable_size, bool padded, struct node *largest_var_node)
 {
-    node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.variable_size = variable_size, .body.padded=padded});
+    node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.variable_size = variable_size, .body.padded = padded, .body.largest_var_node = largest_var_node});
 }
 
 void make_variable_node(struct datatype *datatype, struct token *name_token, struct node *value_node)
@@ -463,6 +462,14 @@ static void parser_append_size_for_node(size_t *variable_size, struct node *node
     {
         // Ok we have a variable lets adjust the variable_size.
         *variable_size += node->var.type.size;
+
+        // If this variable is a structure and we have padding then it must be 4-byte aligned
+        // as we are a 32 bit C compiler..
+        if (node->var.type.type == DATA_TYPE_STRUCT)
+        {
+            // Great we need to align to its largest datatype boundary ((Way to large, make a function for that mess))
+            *variable_size = align_value(*variable_size, variable_struct_node(node)->_struct.body_n->body.largest_var_node->var.type.size);
+        }
     }
 }
 /**
@@ -481,8 +488,14 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
     // Incrementing it by the size of our variable
     parser_append_size_for_node(variable_size, stmt_node);
 
+    struct node *largest_var_node = NULL;
+    if (stmt_node->type == NODE_TYPE_VARIABLE)
+    {
+        largest_var_node = stmt_node;
+    }
+
     // Let's make the body node for this one statement.
-    make_body_node(body_vec, *variable_size, 0);
+    make_body_node(body_vec, *variable_size, 0, largest_var_node);
 }
 
 /**
@@ -492,12 +505,22 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
 void parse_body_multiple_statements(size_t *variable_size, struct vector *body_vec, struct history *history)
 {
     struct node *stmt_node = NULL;
+    struct node *largest_primative_var_node = NULL;
     // Ok we are parsing a full body with many statements.
     expect_sym('{');
     while (!token_next_is_symbol('}'))
     {
         parse_statement(history);
         stmt_node = node_pop();
+
+        if (stmt_node->type == NODE_TYPE_VARIABLE)
+        {
+            if (!largest_primative_var_node ||
+                (largest_primative_var_node->var.type.size <= stmt_node->var.type.size))
+            {
+                largest_primative_var_node = stmt_node;
+            }
+        }
         vector_push(body_vec, &stmt_node);
 
         // Change the variable_size if this statement is a variable.
@@ -512,16 +535,14 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
     int padding = compute_sum_padding(body_vec);
     *variable_size += padding;
 
-    // If we do have padding then we must also align to 4 bytes or 32 bit as
-    // we are a 32 bit compiler and the strucutre must be 4 byte aligned! If we have padding
-    if (padding)
+    // Our own variable size must pad to the largest member
+    if (largest_primative_var_node)
     {
-        *variable_size = align_value_treat_positive(*variable_size, DATA_SIZE_DWORD);
+        *variable_size = align_value(*variable_size, largest_primative_var_node->var.type.size);
     }
-
     // Let's make the body node now we have parsed all statements.
     bool padded = padding != 0;
-    make_body_node(body_vec, *variable_size, padded);
+    make_body_node(body_vec, *variable_size, padded, largest_primative_var_node);
 }
 
 /**
@@ -676,7 +697,7 @@ void parse_struct(struct datatype *dtype)
     parse_body(&body_variable_size, history_begin(&history, HISTORY_FLAG_INSIDE_STRUCTURE));
     struct node *body_node = node_pop();
     make_struct_node(dtype->type_str, body_node);
-    struct node* struct_node = node_pop();
+    struct node *struct_node = node_pop();
 
     dtype->size = body_node->body.variable_size;
     dtype->struct_node = struct_node;

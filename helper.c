@@ -62,7 +62,16 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
         if (var_node_last)
         {
             position += var_node_last->var.type.size;
-            position = align_value_treat_positive(position, var_node_cur->var.type.size);
+            if (variable_node_is_primative(var_node_cur))
+            {
+                position = align_value_treat_positive(position, var_node_cur->var.type.size);
+            }
+            else
+            {
+                position = align_value_treat_positive(position, variable_struct_largest_variable_node(var_node_cur)->var.type.size);
+            }
+   
+
         }
 
         if (S_EQ(var_node_cur->var.name, var_name))
@@ -118,7 +127,12 @@ struct node *struct_for_access(struct compile_process *process, struct node *nod
     var_node = struct_for_access(process, node->exp.left, type_str, offset_out, flags);
     assert(var_node);
 
-    return struct_for_access(process, node->exp.right, var_node->var.type.type_str, offset_out, flags);
+    struct node* ret_node = NULL;
+    // Start of structure must be aligned in memory correctly
+    *offset_out = align_value_treat_positive(*offset_out, variable_struct_node(var_node)->_struct.body_n->body.largest_var_node->var.type.size);
+    ret_node = struct_for_access(process, node->exp.right, var_node->var.type.type_str, offset_out, flags);
+
+    return ret_node;
 }
 
 bool is_access_operator(const char *op)
@@ -288,8 +302,11 @@ void var_node_set_offset(struct node* node, int offset)
 int compute_sum_padding(struct vector* vec)
 {
     int padding = 0;
+    int last_type = -1;
+    bool mixed_types = false;
     vector_set_peek_pointer(vec, 0);
     struct node* cur_node = vector_peek_ptr(vec);
+    struct node* last_node = NULL;
     while (cur_node)
     {
         if (cur_node->type != NODE_TYPE_VARIABLE)
@@ -299,8 +316,13 @@ int compute_sum_padding(struct vector* vec)
         }
 
         padding += cur_node->var.padding;
+        last_type = cur_node->var.type.type;
+        last_node = cur_node;
         cur_node = vector_peek_ptr(vec);
     }
+
+
+
     return padding;
 }
 
@@ -360,4 +382,34 @@ struct node* variable_struct_node(struct node* var_node)
         return NULL;
     
     return var_node->var.type.struct_node;
+}
+
+bool variable_struct_padded(struct node* var_node)
+{
+    struct node* s_node = variable_struct_node(var_node);
+    if (!s_node)
+    {
+        return false;
+    }
+
+    return s_node->_struct.body_n->body.padded;
+}
+
+
+struct node* body_largest_variable_node(struct node* body_node)
+{
+    if (!body_node)
+        return NULL;
+
+    if (body_node->type != NODE_TYPE_BODY)
+    {
+        return NULL;
+    }
+
+    return body_node->body.largest_var_node;
+}
+
+struct node* variable_struct_largest_variable_node(struct node* var_node)
+{
+    return body_largest_variable_node(variable_struct_node(var_node)->_struct.body_n);
 }

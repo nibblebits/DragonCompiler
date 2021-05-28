@@ -41,7 +41,6 @@
     case '&':                           \
     case '(':                           \
     case '[':                           \
-    case ']':                           \
     case ',':                            \
     case '.'                           \
 
@@ -70,7 +69,8 @@
     case ';':       \
     case '#':       \
     case '\\':      \
-    case ')'
+    case ')':       \
+    case ']'
 
 struct pos
 {
@@ -284,6 +284,7 @@ enum
     DATATYPE_FLAG_IS_STATIC =  0b00000010,
     DATATYPE_FLAG_IS_CONST  =  0b00000100,
     DATATYPE_FLAG_IS_POINTER = 0b00001000,
+    DATATYPE_FLAG_IS_ARRAY =   0b00010000
 };
 
 enum
@@ -298,6 +299,13 @@ enum
     DATA_TYPE_UNION
 };
 
+
+struct array_brackets
+{
+    // Vector of node brackets.
+    struct vector* n_brackets;
+};
+
 struct datatype
 {
     int flags;
@@ -307,8 +315,11 @@ struct datatype
     // if the type is "unsigned int" here will be written only "int"
     const char *type_str;
 
-    // The size in bytes of this datatype.
+    // The size in bytes of this datatype. Does not include array size. THis is the size
+    // of the primitive type or the structure size. Arrays not included!!!
     size_t size;
+
+
 
     // The pointer depth of this datatype
     int pointer_depth;
@@ -318,6 +329,14 @@ struct datatype
     {
         struct node* struct_node;
         struct node* union_node;
+
+        struct array
+        {
+            struct array_brackets* brackets;
+            // This datatype size for the full array its self. 
+            // Calculation is datatype.size * EACH_INDEX.
+            size_t size;
+        } array;
     };
     
     
@@ -367,7 +386,8 @@ enum
     NODE_TYPE_BODY,
     NODE_TYPE_STATEMENT_RETURN,
     NODE_TYPE_UNARY,
-    NODE_TYPE_STRUCT
+    NODE_TYPE_STRUCT,
+    NODE_TYPE_BRACKET // Array brackets i.e [50][20] Two node brackets.
 };
 
 enum
@@ -503,6 +523,14 @@ struct node
             // The total bytes after this variable will be NULL's to allow alignment
             int padding_after;
         } var;
+
+        // Array brackets i.e [50]
+        struct bracket
+        {
+            // The inner expression for the given bracket.
+            // i.e [50] inner would be NODE_TYPE_NUMBER that contains a node that represents number 50
+            struct node* inner;
+        } bracket;
 
         union statement
         {
@@ -808,4 +836,23 @@ struct node* variable_struct_largest_variable_node(struct node* var_node);
  * Largest being the variable that takes up the most room. Primitive variables only.
  */
 struct node* body_largest_variable_node(struct node* body_node);
+
+
+/**
+ * Array
+ * 
+ */
+
+struct array_brackets* array_brackets_new();
+void array_brackets_free(struct array_brackets* brackets);
+void array_brackets_add(struct array_brackets* brackets, struct node* bracket_node);
+size_t array_brackets_calculate_size(struct datatype* type, struct array_brackets* brackets);
+
+/**
+ * Returns the full variable size for the given var_node. The full size in memory
+ * if this is an array variable it will return the array size for the given data type.
+ * 
+ * I.e short abc[8]; will return 8*2;
+ */
+size_t variable_size(struct node* var_node);
 #endif

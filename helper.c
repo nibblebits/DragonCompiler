@@ -338,6 +338,13 @@ bool variable_node_is_primative(struct node* node)
     return node->var.type.type != DATA_TYPE_STRUCT && node->var.type.type != DATA_TYPE_UNION;
 }
 
+size_t variable_size(struct node* var_node)
+{
+    if (var_node->var.type.flags & DATATYPE_FLAG_IS_ARRAY)
+        return var_node->var.type.array.size;
+
+    return var_node->var.type.size;
+}
 
 struct node* node_from_sym(struct symbol* sym)
 {

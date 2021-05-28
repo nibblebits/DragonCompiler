@@ -453,6 +453,11 @@ void make_variable_node(struct datatype *datatype, struct token *name_token, str
     node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type = *datatype, .var.name = name_token->sval, .var.val = value_node});
 }
 
+void make_bracket_node(struct node* inner_node)
+{
+    node_create(&(struct node){NODE_TYPE_BRACKET, .bracket.inner=inner_node});
+}
+
 void parse_expressionable(struct history *history);
 void parse_for_parentheses();
 
@@ -962,9 +967,38 @@ void parse_datatype_type(struct datatype *datatype)
     parser_datatype_init(datatype_token, datatype, pointer_depth);
 }
 
+struct array_brackets *parse_array_brackets(struct history *history)
+{
+    struct array_brackets *brackets = array_brackets_new();
+    while (token_next_is_operator("["))
+    {
+        expect_op("[");
+        parse_expressionable(history);
+        expect_sym(']');
+
+        struct node *exp_node = node_pop();
+        make_bracket_node(exp_node);
+
+        struct node *bracket_node = node_pop();
+        array_brackets_add(brackets, bracket_node);
+    }
+
+    return brackets;
+}
+
 void parse_variable(struct datatype *dtype, struct token *name_token, struct history *history)
 {
     struct node *value_node = NULL;
+    struct array_brackets* brackets = NULL;
+    if (token_next_is_operator("["))
+    {
+        // We have an array declaration by the looks of it.
+        brackets = parse_array_brackets(history);
+        dtype->array.brackets = brackets;
+        dtype->array.size = array_brackets_calculate_size(dtype, brackets);
+        dtype->flags |= DATATYPE_FLAG_IS_ARRAY;
+    }
+
     // We have a datatype and a variable name but we still need to parse a value if their is one
     // Lets do that now
     if (token_next_is_operator("="))

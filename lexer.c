@@ -92,13 +92,14 @@ static bool is_single_operator(char op)
            op == '~' ||
            op == '!' ||
            op == '(' ||
+           op == '[' ||
            op == ',' || 
            op == '.';
 }
 
 static bool op_treated_as_one(char op)
 {
-    return op == '(' || op == ',' || op == '.' || op == '*';
+    return op == '(' || op == '[' || op == ',' || op == '.' || op == '*';
 }
 
 static bool op_valid(const char *op)
@@ -134,6 +135,7 @@ static bool op_valid(const char *op)
            S_EQ(op, "->") ||
            S_EQ(op, "**") ||
            S_EQ(op, "(")  ||
+           S_EQ(op, "[") ||
            S_EQ(op, ",") ||
            S_EQ(op, ".");
 }

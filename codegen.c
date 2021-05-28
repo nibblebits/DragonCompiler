@@ -1252,16 +1252,28 @@ void codegen_generate_expressionable(struct node *node, struct history *history)
     }
 }
 
-static void codegen_generate_global_variable_for_non_floating(struct node *node)
+static void codegen_generate_variable_for_array(struct node* node)
+{
+    if (node->var.val != NULL)
+    {
+        codegen_err("We don't yet support values for arrays");
+        return;
+    }
+
+    char tmp_buf[256];
+    asm_push("%s: %s ", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf));
+
+}
+static void codegen_generate_global_variable_for_primitive(struct node *node)
 {
     char tmp_buf[256];
     if (node->var.val != NULL)
     {
-        asm_push("%s: %s %lld", node->var.name, asm_keyword_for_size(node->var.type.size, tmp_buf), node->var.val->llnum, tmp_buf);
+        asm_push("%s: %s %lld", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf), node->var.val->llnum, tmp_buf);
         return;
     }
 
-    asm_push("%s: %s 0", node->var.name, asm_keyword_for_size(node->var.type.size, tmp_buf));
+    asm_push("%s: %s 0", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf));
 }
 
 static void codegen_generate_global_variable_for_struct(struct node *node)
@@ -1273,19 +1285,25 @@ static void codegen_generate_global_variable_for_struct(struct node *node)
     }
 
     char tmp_buf[256];
-    asm_push("%s: %s", node->var.name, asm_keyword_for_size(node->var.type.size, tmp_buf));
+    asm_push("%s: %s", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf));
 }
 
 void codegen_generate_global_variable(struct node *node)
 {
     asm_push("; %s %s", node->var.type.type_str, node->var.name);
+    if (node->var.type.flags & DATATYPE_FLAG_IS_ARRAY)
+    {
+        codegen_generate_variable_for_array(node);
+        return;
+    }
+
     switch (node->var.type.type)
     {
     case DATA_TYPE_CHAR:
     case DATA_TYPE_SHORT:
     case DATA_TYPE_INTEGER:
     case DATA_TYPE_LONG:
-        codegen_generate_global_variable_for_non_floating(node);
+        codegen_generate_global_variable_for_primitive(node);
         break;
     case DATA_TYPE_DOUBLE:
         codegen_err("Doubles are not yet supported for global variable values.");
@@ -1317,7 +1335,7 @@ size_t codegen_compute_stack_size(struct vector *vec)
         switch (node->type)
         {
         case NODE_TYPE_VARIABLE:
-            stack_size += node->var.type.size;
+            stack_size += variable_size(node);
             break;
 
         default:
@@ -1334,7 +1352,7 @@ size_t codegen_compute_stack_size(struct vector *vec)
 
 int codegen_stack_offset(struct node *node, int flags)
 {
-    int offset = node->var.type.size;
+    int offset = variable_size(node);
 
     // If the stack is local then we must grow downwards
     // as we want to access our local function arguments in our given scope
@@ -1370,7 +1388,7 @@ void codegen_generate_scope_variable(struct node *node)
 {
     struct codegen_scope_entity *entity = codegen_new_scope_entity(node, node->var.aoffset, CODEGEN_SCOPE_ENTITY_LOCAL_STACK);
     
-    codegen_scope_push(entity, node->var.type.size);
+    codegen_scope_push(entity, variable_size(node));
 
     // Scope variables have values, lets compute that
     if (node->var.val)
@@ -1398,12 +1416,12 @@ void codegen_generate_scope_variable_for_first_function_argument(struct node *no
     // Naturally once the first function argument has been stored in its scope with the +8 offset
     // any additional generated function arguments will take the previous
     // scope variable into account. So we only need to +8 here for the first argument
-    codegen_scope_push(codegen_new_scope_entity(node, C_OFFSET_FROM_FIRST_FUNCTION_ARGUMENT, 0), node->var.type.size);
+    codegen_scope_push(codegen_new_scope_entity(node, C_OFFSET_FROM_FIRST_FUNCTION_ARGUMENT, 0), variable_size(node));
 }
 
 void codegen_generate_scope_variable_for_function_argument(struct node *node)
 {
-    codegen_scope_push(codegen_new_scope_entity(node, codegen_stack_offset(node, 0), 0), node->var.type.size);
+    codegen_scope_push(codegen_new_scope_entity(node, codegen_stack_offset(node, 0), 0), variable_size(node));
 }
 
 void codegen_generate_statement_return(struct node *node)

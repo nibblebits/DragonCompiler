@@ -54,8 +54,11 @@ void test(struct node* node)
     }
     else if(node->type == NODE_TYPE_FUNCTION)
     {
-        test_vec(node->func.argument_vector);
-        test_vec(node->func.body_n->body.statements);
+        if (node->func.argument_vector)
+            test_vec(node->func.argument_vector);
+            
+        if (node->func.body_n->body.statements)
+            test_vec(node->func.body_n->body.statements);
     }
     
 }

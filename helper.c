@@ -140,6 +140,17 @@ bool is_access_operator(const char *op)
     return S_EQ(op, "->") || S_EQ(op, ".");
 }
 
+bool is_array_operator(const char* op)
+{
+    return S_EQ(op, "[]");
+}
+
+
+bool is_compile_computable(struct node* node)
+{
+    return node->type == NODE_TYPE_NUMBER;
+}
+
 bool is_access_operator_node(struct node *node)
 {
     return node->type == NODE_TYPE_EXPRESSION && is_access_operator(node->exp.op);
@@ -419,4 +430,36 @@ struct node* body_largest_variable_node(struct node* body_node)
 struct node* variable_struct_largest_variable_node(struct node* var_node)
 {
     return body_largest_variable_node(variable_struct_node(var_node)->_struct.body_n);
+}
+
+
+int compute_array_offset(struct node* node, size_t single_element_size)
+{
+    assert((node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op)) ||
+            node->type == NODE_TYPE_BRACKET);
+
+    if (node->type == NODE_TYPE_EXPRESSION)
+    {
+        // bug check.
+        assert(node->exp.right->type == NODE_TYPE_BRACKET);
+        int rel_offset = compute_array_offset(node->exp.right, single_element_size);
+        if (rel_offset == -1)
+        {
+            return -1;
+        }
+        
+        return rel_offset * single_element_size;
+    }
+
+    // We can only deal with compile time computable static, const indexes
+    // Caller must ensure this before calling us. We will terminate fatally.
+    assert(is_compile_computable(node->bracket.inner));
+
+    // We only know how to deal with static content that are numbers..
+    if(node->bracket.inner->type != NODE_TYPE_NUMBER)
+    {
+        return -1;
+    }
+
+    return node->bracket.inner->llnum;
 }

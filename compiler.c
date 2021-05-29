@@ -60,6 +60,10 @@ void test(struct node* node)
         if (node->func.body_n->body.statements)
             test_vec(node->func.body_n->body.statements);
     }
+    else if(node->type == NODE_TYPE_BRACKET)
+    {
+        test(node->bracket.inner);
+    }
     
 }
 int compile_file(const char *filename)

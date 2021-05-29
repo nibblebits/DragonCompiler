@@ -855,4 +855,21 @@ size_t array_brackets_calculate_size(struct datatype* type, struct array_bracket
  * I.e short abc[8]; will return 8*2;
  */
 size_t variable_size(struct node* var_node);
+
+bool is_array_operator(const char* op);
+
+/**
+ * Returns true if the address can be caclulated at compile time
+ */
+bool is_compile_computable(struct node* node);
+
+
+/**
+ * Computes the array offset for the given expression node or array bracket node.
+ * 
+ * \param node The node to perform the computation on
+ * \param single_element_size THe size of the type of the array. I.e an array of ints would be "4"
+ */
+
+int compute_array_offset(struct node* node, size_t single_element_size);
 #endif

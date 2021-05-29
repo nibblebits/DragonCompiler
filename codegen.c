@@ -100,7 +100,8 @@ struct codegen_scope_entity
 
 enum
 {
-    CODEGEN_GLOBAL_ENTITY_INDIRECTION = 0b00000001
+    CODEGEN_GLOBAL_ENTITY_INDIRECTION = 0b00000001,
+    CODEGEN_GLOBAL_ENTITY_ARRAY_ACCESS_RUNTIME = 0b00000010,
 };
 
 struct codegen_global_entity
@@ -132,7 +133,8 @@ enum
 enum
 {
     CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS = 0b00000001,
-    CODEGEN_ENTITY_FLAG_HAS_INDIRECTION = 0b00000010
+    CODEGEN_ENTITY_FLAG_HAS_INDIRECTION = 0b00000010,
+    CODEGEN_ENTITY_FLAG_ARRAY_ACCESS_RUNTIME = 0b00000100,
 };
 
 /**
@@ -300,6 +302,33 @@ struct codegen_global_entity *codegen_get_global_variable_for_node(struct node *
             entity = codegen_new_global_entity(access_node, offset, 0);
             break;
         }
+        else if (is_array_operator(node->exp.op))
+        {
+            entity = codegen_get_global_variable_for_node(node->exp.left, position_known_at_compile_time, sym_out);
+            if (!entity)
+            {
+                // Cannot find scope entity? Perhaps its a global variable
+                return NULL;
+            }
+
+            // Right node contains the array operators.
+            int array_offset = compute_array_offset(node, entity->node->var.type.size);
+            if (array_offset != -1)
+            {
+                // The array indexes are static and can be computed at compile time?
+                // Great!
+                int base_offset = entity->offset;
+                entity = codegen_new_global_entity(entity->node, base_offset+array_offset, 0);
+                break;
+            }
+            
+            // Compute compile time difference here
+            // TODO
+
+            // No compile time generation? Then set the runtime array access flag
+            entity->flags |= CODEGEN_GLOBAL_ENTITY_ARRAY_ACCESS_RUNTIME;
+            break;
+        }
 
         entity = codegen_get_global_variable_for_node(node->exp.left, position_known_at_compile_time, sym_out);
         break;
@@ -353,6 +382,20 @@ void codegen_put_address_for_global_entity(struct codegen_entity *entity_out, st
     sprintf(entity_out->address, "%s", entity_out->global.sym->name);
 }
 
+void global_entity_flags_to_entity_flags(struct codegen_global_entity *entity, struct codegen_entity *entity_out)
+{
+    if (entity->flags & CODEGEN_GLOBAL_ENTITY_INDIRECTION)
+    {
+        entity_out->flags |= CODEGEN_ENTITY_FLAG_HAS_INDIRECTION;
+        entity_out->indirection.depth = entity->indirection.depth;
+    }
+
+    if (entity->flags & CODEGEN_GLOBAL_ENTITY_ARRAY_ACCESS_RUNTIME)
+    {
+        entity_out->flags |= CODEGEN_ENTITY_FLAG_ARRAY_ACCESS_RUNTIME;
+    }
+}
+
 int codegen_get_global_entity_for_node(struct node *node, struct codegen_entity *entity_out)
 {
     bool position_known_at_compile_time = false;
@@ -375,11 +418,8 @@ int codegen_get_global_entity_for_node(struct node *node, struct codegen_entity 
     if (position_known_at_compile_time)
         entity_out->flags |= CODEGEN_ENTITY_FLAG_COMPLETED_ADDRESS;
 
-    if (entity->flags & CODEGEN_GLOBAL_ENTITY_INDIRECTION)
-    {
-        entity_out->flags |= CODEGEN_ENTITY_FLAG_HAS_INDIRECTION;
-        entity_out->indirection.depth = entity->indirection.depth;
-    }
+    // Convert our global entity flags to ones compatible with codegen_entity.
+    global_entity_flags_to_entity_flags(entity, entity_out);
 
     codegen_put_address_for_global_entity(entity_out, entity);
 
@@ -891,6 +931,13 @@ void codegen_generate_assignment_expression(struct node *node)
 
         return;
     }
+    
+    if (assignment_operand_entity.flags & CODEGEN_ENTITY_FLAG_ARRAY_ACCESS_RUNTIME)
+    {
+       // TODO
+       asm_push("; NOT IMPLEMENTED YET!!!!");
+
+    }
 
     // Normal variable no pointer access? Then write the move
     asm_push("mov %s [%s], eax", codegen_byte_word_or_dword(assignment_operand_entity.node->var.type.size), assignment_operand_entity.address);
@@ -1252,7 +1299,7 @@ void codegen_generate_expressionable(struct node *node, struct history *history)
     }
 }
 
-static void codegen_generate_variable_for_array(struct node* node)
+static void codegen_generate_variable_for_array(struct node *node)
 {
     if (node->var.val != NULL)
     {
@@ -1262,7 +1309,6 @@ static void codegen_generate_variable_for_array(struct node* node)
 
     char tmp_buf[256];
     asm_push("%s: %s ", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf));
-
 }
 static void codegen_generate_global_variable_for_primitive(struct node *node)
 {
@@ -1387,7 +1433,7 @@ int codegen_stack_offset(struct node *node, int flags)
 void codegen_generate_scope_variable(struct node *node)
 {
     struct codegen_scope_entity *entity = codegen_new_scope_entity(node, node->var.aoffset, CODEGEN_SCOPE_ENTITY_LOCAL_STACK);
-    
+
     codegen_scope_push(entity, variable_size(node));
 
     // Scope variables have values, lets compute that

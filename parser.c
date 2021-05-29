@@ -50,7 +50,7 @@ struct op_precedence_group
  * Also end the collection of groups with a NULL pointer
  */
 static struct op_precedence_group op_precedence[TOTAL_OPERATOR_GROUPS] = {
-    {.operators = {"++", "--", "()", "(", "[", "]", ".", "->", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
+    {.operators = {"++", "--", "()", "[]", "(", "[", "]", ".", "->", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
     {.operators = {"*", "/", "%%", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
     {.operators = {"+", "-", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
     {.operators = {"<<", ">>", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
@@ -759,11 +759,41 @@ void parse_exp_normal(struct history *history)
     node_push(exp_node);
 }
 
+void parse_for_array(struct history* history)
+{
+   struct node *left_node = node_peek_or_null();
+    if (left_node)
+    {
+        node_pop();
+    }
+
+    expect_op("[");
+    parse_expressionable(history);
+    expect_sym(']');
+
+    struct node *exp_node = node_pop();
+    make_bracket_node(exp_node);
+
+    // Do we have a left node from earlier before we parsed the array
+    if (left_node)
+    {
+        // Ok we do so we must create an expression node, whose left node is the left node
+        // and whose right node is the array bracket node
+        struct node *bracket_node = node_pop();
+        make_exp_node(left_node, bracket_node, "[]");
+    }
+}
 void parse_exp(struct history *history)
 {
     if (S_EQ(token_peek_next()->sval, "("))
     {
         parse_for_parentheses();
+        return;
+    }
+
+    if (S_EQ(token_peek_next()->sval, "["))
+    {
+        parse_for_array(history);
         return;
     }
 

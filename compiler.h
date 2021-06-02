@@ -213,7 +213,87 @@ struct compile_process
         struct scope *root;
         struct scope *current;
     } scope;
+
+    // The future of "scope" The replacement.
+    struct resolver_process* resolver;
 };
+
+
+struct datatype
+{
+    int flags;
+    // The type this is i.e float, double, long
+    int type;
+    // The string equivilant for this type. Does not include unsigned or signed keywords.
+    // if the type is "unsigned int" here will be written only "int"
+    const char *type_str;
+
+    // The size in bytes of this datatype. Does not include array size. THis is the size
+    // of the primitive type or the structure size. Arrays not included!!!
+    size_t size;
+
+
+
+    // The pointer depth of this datatype
+    int pointer_depth;
+
+    // If this is a data type of structure or union then you can access one of the modifiers here
+    union
+    {
+        struct node* struct_node;
+        struct node* union_node;
+
+        struct array
+        {
+            struct array_brackets* brackets;
+            // This datatype size for the full array its self. 
+            // Calculation is datatype.size * EACH_INDEX.
+            size_t size;
+        } array;
+    };
+    
+    
+};
+
+
+
+struct resolver_scope
+{
+    struct vector* entities;
+
+    // The next scope.
+    struct resolver_scope* next;
+    // The previous scope.
+    struct resolver_scope* prev;
+
+};
+
+struct compile_process;
+struct resolver_process
+{
+    struct resolver_scopes
+    {
+        struct resolver_scope* root;
+        struct resolver_scope* current;
+    } scope;
+
+    struct compile_process* compiler;
+};
+
+struct resolver_entity
+{
+    struct datatype dtype;
+
+    // Can be NULL if no variable is present. otherwise equal to the var_node
+    // that was resolved.
+    struct node* node;
+
+
+    // Private data that can be stored by the creator of the resolver entity
+    void* private;
+
+};
+
 
 enum
 {
@@ -304,42 +384,6 @@ struct array_brackets
 {
     // Vector of node brackets.
     struct vector* n_brackets;
-};
-
-struct datatype
-{
-    int flags;
-    // The type this is i.e float, double, long
-    int type;
-    // The string equivilant for this type. Does not include unsigned or signed keywords.
-    // if the type is "unsigned int" here will be written only "int"
-    const char *type_str;
-
-    // The size in bytes of this datatype. Does not include array size. THis is the size
-    // of the primitive type or the structure size. Arrays not included!!!
-    size_t size;
-
-
-
-    // The pointer depth of this datatype
-    int pointer_depth;
-
-    // If this is a data type of structure or union then you can access one of the modifiers here
-    union
-    {
-        struct node* struct_node;
-        struct node* union_node;
-
-        struct array
-        {
-            struct array_brackets* brackets;
-            // This datatype size for the full array its self. 
-            // Calculation is datatype.size * EACH_INDEX.
-            size_t size;
-        } array;
-    };
-    
-    
 };
 
 
@@ -872,4 +916,28 @@ bool is_compile_computable(struct node* node);
  */
 
 int compute_array_offset(struct node* node, size_t single_element_size);
+
+
+// Resolver functions
+struct compile_process* resolver_compiler(struct resolver_process* process);
+struct resolver_scope* resolver_new_scope(struct resolver_process* resolver);
+void resolver_finish_scope(struct resolver_process* resolver);
+struct resolver_process* resolver_new_process(struct compile_process* compiler);
+struct resolver_entity* resolver_new_entity_for_var_node(struct resolver_process* process, struct node* var_node, void* private);
+struct resolver_entity* resolver_get_variable_in_scope(const char* var_name, struct resolver_scope* scope);
+struct resolver_entity* resolver_get_variable(struct resolver_process* resolver, const char* var_name);
+struct resolver_entity *resolver_get_variable_for_node(struct resolver_process* resolver, struct node *node);
+
+/**
+ * Attempts to peek through the tree at the given node and looks for a datatype
+ * that can be associated with the node entity.
+ * 
+ * For example if you had an array and you did array[50].
+ * 
+ * If you passed the array node here the datatype of "array" would be returned.
+ * 
+ * If you call this function on a function call then the return type of the function call will be returned
+ * the deepest possible type will be returned.
+ */
+struct datatype* resolver_get_datatype(struct node* node);
 #endif

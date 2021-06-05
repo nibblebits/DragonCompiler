@@ -62,6 +62,7 @@ struct resolver_entity* resolver_create_new_entity(struct datatype dtype, void* 
 
     entity->dtype = dtype;
     entity->private = private;
+    
     return entity;
 }
 

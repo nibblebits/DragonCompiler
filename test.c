@@ -1,5 +1,8 @@
-int array[20];
+int e;
+
 int main()
 {
-    array[2] = 10;
+    int a = 100;
+        int b = 100;
+
 }

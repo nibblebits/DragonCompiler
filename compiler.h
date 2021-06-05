@@ -269,6 +269,15 @@ struct resolver_scope
 };
 
 struct compile_process;
+
+
+//typedef void(*NEW_RESOLVER_ENTITY_CALLBACK)(struct node* var_node, struct resolver_entity* entity);
+
+struct resolver_callbacks
+{   
+   // NEW_RESOLVER_ENTITY_CALLBACK new_entity_function;
+};
+
 struct resolver_process
 {
     struct resolver_scopes
@@ -278,6 +287,9 @@ struct resolver_process
     } scope;
 
     struct compile_process* compiler;
+
+    // TODO.
+    struct resolver_callbacks callbacks;
 };
 
 struct resolver_entity

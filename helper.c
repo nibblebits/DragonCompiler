@@ -41,7 +41,7 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
     // struct a
     // {
     //   int c;
-    //   char b   
+    //   char b
     // }
     // Then we will read "b" then "c"
     if (flags & STRUCT_ACCESS_BACKWARDS)
@@ -52,7 +52,7 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
     }
 
     struct node *var_node_cur = vector_peek_ptr(struct_vars_vec);
-    struct node* var_node_last = NULL;
+    struct node *var_node_last = NULL;
     int position = last_pos;
     *var_node_out = NULL;
     while (var_node_cur)
@@ -70,8 +70,6 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
             {
                 position = align_value_treat_positive(position, variable_struct_largest_variable_node(var_node_cur)->var.type.size);
             }
-   
-
         }
 
         if (S_EQ(var_node_cur->var.name, var_name))
@@ -85,7 +83,6 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
         var_node_last = var_node_cur;
         var_node_cur = vector_peek_ptr(struct_vars_vec);
     }
-
 
     vector_unset_flag(struct_vars_vec, VECTOR_FLAG_PEEK_DECREMENT);
 
@@ -127,7 +124,7 @@ struct node *struct_for_access(struct compile_process *process, struct node *nod
     var_node = struct_for_access(process, node->exp.left, type_str, offset_out, flags);
     assert(var_node);
 
-    struct node* ret_node = NULL;
+    struct node *ret_node = NULL;
     // Start of structure must be aligned in memory correctly
     *offset_out = align_value_treat_positive(*offset_out, variable_struct_node(var_node)->_struct.body_n->body.largest_var_node->var.type.size);
     ret_node = struct_for_access(process, node->exp.right, var_node->var.type.type_str, offset_out, flags);
@@ -140,13 +137,12 @@ bool is_access_operator(const char *op)
     return S_EQ(op, "->") || S_EQ(op, ".");
 }
 
-bool is_array_operator(const char* op)
+bool is_array_operator(const char *op)
 {
     return S_EQ(op, "[]");
 }
 
-
-bool is_compile_computable(struct node* node)
+bool is_compile_computable(struct node *node)
 {
     return node->type == NODE_TYPE_NUMBER;
 }
@@ -303,21 +299,20 @@ void variable_align_offset(struct node *var_node, int *stack_offset_out)
     }
 }
 
-
-void var_node_set_offset(struct node* node, int offset)
+void var_node_set_offset(struct node *node, int offset)
 {
     assert(node->type == NODE_TYPE_VARIABLE);
     node->var.offset = offset;
 }
 
-int compute_sum_padding(struct vector* vec)
+int compute_sum_padding(struct vector *vec)
 {
     int padding = 0;
     int last_type = -1;
     bool mixed_types = false;
     vector_set_peek_pointer(vec, 0);
-    struct node* cur_node = vector_peek_ptr(vec);
-    struct node* last_node = NULL;
+    struct node *cur_node = vector_peek_ptr(vec);
+    struct node *last_node = NULL;
     while (cur_node)
     {
         if (cur_node->type != NODE_TYPE_VARIABLE)
@@ -332,24 +327,22 @@ int compute_sum_padding(struct vector* vec)
         cur_node = vector_peek_ptr(vec);
     }
 
-
-
     return padding;
 }
 
-int compute_sum_padding_for_body(struct node* node)
+int compute_sum_padding_for_body(struct node *node)
 {
     assert(node->type == NODE_TYPE_BODY);
     return compute_sum_padding(node->body.statements);
-}  
+}
 
-bool variable_node_is_primative(struct node* node)
+bool variable_node_is_primative(struct node *node)
 {
     assert(node->type == NODE_TYPE_VARIABLE);
     return node->var.type.type != DATA_TYPE_STRUCT && node->var.type.type != DATA_TYPE_UNION;
 }
 
-size_t variable_size(struct node* var_node)
+size_t variable_size(struct node *var_node)
 {
     if (var_node->var.type.flags & DATATYPE_FLAG_IS_ARRAY)
         return var_node->var.type.array.size;
@@ -357,18 +350,18 @@ size_t variable_size(struct node* var_node)
     return var_node->var.type.size;
 }
 
-struct node* node_from_sym(struct symbol* sym)
+struct node *node_from_sym(struct symbol *sym)
 {
     if (sym->type != SYMBOL_TYPE_NODE)
         return 0;
 
-    struct node* node = sym->data;
+    struct node *node = sym->data;
     return node;
 }
 
-struct node* node_from_symbol(struct compile_process* current_process, const char* name)
+struct node *node_from_symbol(struct compile_process *current_process, const char *name)
 {
-    struct symbol* sym = symresolver_get_symbol(current_process, name);
+    struct symbol *sym = symresolver_get_symbol(current_process, name);
     if (!sym)
     {
         return 0;
@@ -376,10 +369,9 @@ struct node* node_from_symbol(struct compile_process* current_process, const cha
     return node_from_sym(sym);
 }
 
-
-struct node* struct_node_for_name(struct compile_process* current_process, const char* struct_name)
+struct node *struct_node_for_name(struct compile_process *current_process, const char *struct_name)
 {
-    struct node* node = node_from_symbol(current_process, struct_name);
+    struct node *node = node_from_symbol(current_process, struct_name);
     if (!node)
         return NULL;
 
@@ -389,7 +381,7 @@ struct node* struct_node_for_name(struct compile_process* current_process, const
     return node;
 }
 
-struct node* variable_struct_node(struct node* var_node)
+struct node *variable_struct_node(struct node *var_node)
 {
     if (var_node->type != NODE_TYPE_VARIABLE)
     {
@@ -398,13 +390,13 @@ struct node* variable_struct_node(struct node* var_node)
 
     if (var_node->var.type.type != DATA_TYPE_STRUCT)
         return NULL;
-    
+
     return var_node->var.type.struct_node;
 }
 
-bool variable_struct_padded(struct node* var_node)
+bool variable_struct_padded(struct node *var_node)
 {
-    struct node* s_node = variable_struct_node(var_node);
+    struct node *s_node = variable_struct_node(var_node);
     if (!s_node)
     {
         return false;
@@ -413,8 +405,7 @@ bool variable_struct_padded(struct node* var_node)
     return s_node->_struct.body_n->body.padded;
 }
 
-
-struct node* body_largest_variable_node(struct node* body_node)
+struct node *body_largest_variable_node(struct node *body_node)
 {
     if (!body_node)
         return NULL;
@@ -427,39 +418,48 @@ struct node* body_largest_variable_node(struct node* body_node)
     return body_node->body.largest_var_node;
 }
 
-struct node* variable_struct_largest_variable_node(struct node* var_node)
+struct node *variable_struct_largest_variable_node(struct node *var_node)
 {
     return body_largest_variable_node(variable_struct_node(var_node)->_struct.body_n);
 }
 
-
-int compute_array_offset(struct node* node, size_t single_element_size)
+int compute_array_offset_with_multiplier(struct node *node, size_t single_element_size, size_t multiplier)
 {
     assert((node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op)) ||
-            node->type == NODE_TYPE_BRACKET);
+           node->type == NODE_TYPE_BRACKET);
 
     if (node->type == NODE_TYPE_EXPRESSION)
     {
         // bug check.
         assert(node->exp.right->type == NODE_TYPE_BRACKET);
-        int rel_offset = compute_array_offset(node->exp.right, single_element_size);
-        if (rel_offset == -1)
+        if (node->exp.left->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.left->exp.op))
         {
-            return -1;
+            multiplier = single_element_size;
         }
+
+        int rel_offset = compute_array_offset_with_multiplier(node->exp.right, single_element_size, multiplier * single_element_size);
         
-        return rel_offset * single_element_size;
+        return rel_offset;
     }
 
     // We can only deal with compile time computable static, const indexes
-    // Caller must ensure this before calling us. We will terminate fatally.
-    assert(is_compile_computable(node->bracket.inner));
-
-    // We only know how to deal with static content that are numbers..
-    if(node->bracket.inner->type != NODE_TYPE_NUMBER)
+    // If this is not the case we will fail this function.
+    if (!is_compile_computable(node->bracket.inner))
     {
         return -1;
     }
 
-    return node->bracket.inner->llnum;
+    // We only know how to deal with static content that are numbers..
+    if (node->bracket.inner->type != NODE_TYPE_NUMBER)
+    {
+        return -1;
+    }
+
+    return multiplier * node->bracket.inner->llnum;
 }
+
+int compute_array_offset(struct node *node, size_t single_element_size)
+{
+    return compute_array_offset_with_multiplier(node, single_element_size, 0);
+}
+

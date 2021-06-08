@@ -66,7 +66,6 @@ enum
     CODEGEN_SCOPE_FLAG_IS_LOCAL_STACK = 0b00000001
 };
 
-
 struct codegen_scope_data
 {
     int flags;
@@ -78,13 +77,11 @@ enum
     CODEGEN_ENTITY_FLAG_IS_LOCAL_STACK = 0b00000001
 };
 
-
-
 struct codegen_entity_data
 {
     // The address that can be addressed in assembly. I.e [ebp-4] [name]
     char address[60];
-    
+
     // The base address excluding any offset applied to it
     // I.e "ebp" for all stack variables.
     // I.e "variable_name" for global variables.
@@ -101,7 +98,7 @@ struct codegen_entity_data *codegen_entity_private(struct resolver_entity *entit
     return entity->private;
 }
 
-struct codegen_scope_data* codegen_scope_private(struct resolver_scope* scope)
+struct codegen_scope_data *codegen_scope_private(struct resolver_scope *scope)
 {
     return scope->private;
 }
@@ -178,10 +175,10 @@ struct codegen_entity_data *codegen_new_entity_data(struct node *var_node, int o
     return entity_data;
 }
 
-void codegen_entity_build_address_from_base(struct codegen_entity_data* data_out, struct codegen_entity_data* data_second)
+void codegen_entity_build_address_from_base(struct codegen_entity_data *data_out, struct codegen_entity_data *data_second)
 {
     memset(data_out->address, 0x00, sizeof(data_out->address));
-    sprintf(data_out->address, "%s+%i", data_out->base_address, data_out->offset+data_second->offset);
+    sprintf(data_out->address, "%s+%i", data_out->base_address, data_out->offset + data_second->offset);
 }
 
 struct resolver_entity *codegen_new_scope_entity(struct node *var_node, int offset, int flags)
@@ -192,7 +189,7 @@ struct resolver_entity *codegen_new_scope_entity(struct node *var_node, int offs
 
 void codegen_new_scope(int flags)
 {
-    struct codegen_scope_data* scope_data = calloc(sizeof(struct codegen_scope_data), 1);
+    struct codegen_scope_data *scope_data = calloc(sizeof(struct codegen_scope_data), 1);
     scope_data->flags |= flags;
     resolver_new_scope(current_process->resolver, scope_data);
 }
@@ -853,6 +850,7 @@ void codegen_generate_global_variable(struct node *node)
     if (node->var.type.flags & DATATYPE_FLAG_IS_ARRAY)
     {
         codegen_generate_variable_for_array(node);
+        codegen_new_scope_entity(node, 0, 0);
         return;
     }
 
@@ -1045,16 +1043,21 @@ void codegen_generate_root_node(struct node *node)
     }
 }
 
+void codegen_generate_data_section_part(struct node *node)
+{
+    if (node->type == NODE_TYPE_VARIABLE)
+    {
+        codegen_generate_global_variable(node);
+    }
+}
+
 void codegen_generate_data_section()
 {
     asm_push("section .data");
     struct node *node = NULL;
     while ((node = node_next()) != NULL)
     {
-        if (node->type == NODE_TYPE_VARIABLE)
-        {
-            codegen_generate_global_variable(node);
-        }
+        codegen_generate_data_section_part(node);
     }
 }
 /**
@@ -1081,8 +1084,8 @@ void codegen_generate_root()
  */
 void *codegen_new_struct_entity(struct node *var_node, struct resolver_entity *entity, int offset)
 {
-    struct resolver_scope* scope = entity->scope;
-    struct codegen_scope_data* private = scope->private;
+    struct resolver_scope *scope = entity->scope;
+    struct codegen_scope_data *private = scope->private;
     int flags = 0;
     if (private->flags & CODEGEN_SCOPE_FLAG_IS_LOCAL_STACK)
     {
@@ -1090,18 +1093,22 @@ void *codegen_new_struct_entity(struct node *var_node, struct resolver_entity *e
     }
 
     offset += codegen_entity_private(entity)->offset;
-    
-    struct codegen_entity_data* result_entity =  codegen_new_entity_data(entity->node, offset, flags);
+
+    struct codegen_entity_data *result_entity = codegen_new_entity_data(entity->node, offset, flags);
     return result_entity;
 }
 
-void codegen_delete_entity(struct resolver_entity* entity)
+void *codegen_new_array_entity(struct resolver_entity *array_entity, struct node *array_bracket_node)
+{
+    return codegen_new_entity_data(array_entity->node, codegen_entity_private(array_entity)->offset+compute_array_offset(array_bracket_node, array_entity->dtype.size), CODEGEN_ENTITY_FLAG_IS_LOCAL_STACK);
+}
+
+void codegen_delete_entity(struct resolver_entity *entity)
 {
     free(entity->private);
 }
 
-
-void codegen_delete_scope(struct resolver_scope* scope)
+void codegen_delete_scope(struct resolver_scope *scope)
 {
     free(scope->private);
 }
@@ -1113,7 +1120,7 @@ int codegen(struct compile_process *process)
     scope_create_root(process);
 
     vector_set_peek_pointer(process->node_tree_vec, 0);
-    process->resolver = resolver_new_process(process, &(struct resolver_callbacks){.new_struct_entity = codegen_new_struct_entity, .delete_entity=codegen_delete_entity, .delete_scope=codegen_delete_scope});
+    process->resolver = resolver_new_process(process, &(struct resolver_callbacks){.new_struct_entity = codegen_new_struct_entity, .new_array_entity = codegen_new_array_entity, .delete_entity = codegen_delete_entity, .delete_scope = codegen_delete_scope});
     // Global variables and down the tree locals... Global scope lets create it.
     codegen_new_scope(0);
     codegen_generate_data_section();

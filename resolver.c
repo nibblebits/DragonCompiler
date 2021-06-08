@@ -146,9 +146,21 @@ static struct resolver_entity *_resolver_get_variable_for_node(struct resolver_p
             break;
         }
 
+        if (is_array_operator(node->exp.op))
+        {
+            struct resolver_entity* array_left_entity = _resolver_get_variable_for_node(resolver, node->exp.left);
+            if (!array_left_entity)
+            {
+                return NULL;
+            }
+            entity = resolver_create_new_entity_for_var_node(resolver, array_left_entity->node, resolver->callbacks.new_array_entity(array_left_entity, node->exp.right));
+            break;
+        }
+
         entity = _resolver_get_variable_for_node(resolver, node->exp.left);
         break;
 
+    
     case NODE_TYPE_EXPRESSION_PARENTHESIS:
         entity = _resolver_get_variable_for_node(resolver, node->parenthesis.exp);
         break;

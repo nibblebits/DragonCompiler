@@ -143,7 +143,7 @@ struct parser_scope_entity *parser_new_scope_entity(struct node *node, int stack
 
 void parser_scope_offset_for_stack(struct node *node, struct history *history)
 {
-    int offset = -node->var.type.size;
+    int offset = -variable_size(node);
     struct parser_scope_entity *last_entity = parser_scope_last_entity();
 
     if (last_entity)
@@ -461,19 +461,21 @@ void make_bracket_node(struct node* inner_node)
 void parse_expressionable(struct history *history);
 void parse_for_parentheses();
 
-static void parser_append_size_for_node(size_t *variable_size, struct node *node)
+static void parser_append_size_for_node(size_t *_variable_size, struct node *node)
 {
     if (node->type == NODE_TYPE_VARIABLE)
     {
         // Ok we have a variable lets adjust the variable_size.
-        *variable_size += node->var.type.size;
+       // *variable_size += node->var.type.size;
+       // Test new with all possibilities.
+        *_variable_size += variable_size(node);
 
         // If this variable is a structure and we have padding then it must be 4-byte aligned
         // as we are a 32 bit C compiler..
         if (node->var.type.type == DATA_TYPE_STRUCT)
         {
             // Great we need to align to its largest datatype boundary ((Way to large, make a function for that mess))
-            *variable_size = align_value(*variable_size, variable_struct_node(node)->_struct.body_n->body.largest_var_node->var.type.size);
+            *_variable_size = align_value(*_variable_size, variable_struct_node(node)->_struct.body_n->body.largest_var_node->var.type.size);
         }
     }
 }

@@ -418,6 +418,23 @@ struct node *body_largest_variable_node(struct node *body_node)
     return body_node->body.largest_var_node;
 }
 
+static long compile_computable_value(struct node* node)
+{
+    long result = -1;
+    switch (node->type)
+    {
+        case NODE_TYPE_NUMBER:
+            result = node->llnum;
+        break;
+
+        default:
+            // Change to a function.. Terrible..
+            assert(0==1 && "Not compile computable, use is_compiler_computable next time!");
+    }
+
+    return result;
+}
+
 struct node *variable_struct_largest_variable_node(struct node *var_node)
 {
     return body_largest_variable_node(variable_struct_node(var_node)->_struct.body_n);
@@ -425,37 +442,15 @@ struct node *variable_struct_largest_variable_node(struct node *var_node)
 
 int compute_array_offset_with_multiplier(struct node *node, size_t single_element_size, size_t multiplier)
 {
-    assert((node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op)) ||
-           node->type == NODE_TYPE_BRACKET);
+    // Ignore multiplier for now... We ill jsut return single_element_size * by value
 
-    if (node->type == NODE_TYPE_EXPRESSION)
-    {
-        // bug check.
-        assert(node->exp.right->type == NODE_TYPE_BRACKET);
-        if (node->exp.left->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.left->exp.op))
-        {
-            multiplier = single_element_size;
-        }
-
-        int rel_offset = compute_array_offset_with_multiplier(node->exp.right, single_element_size, multiplier * single_element_size);
-        
-        return rel_offset;
-    }
-
-    // We can only deal with compile time computable static, const indexes
-    // If this is not the case we will fail this function.
     if (!is_compile_computable(node->bracket.inner))
     {
         return -1;
     }
 
-    // We only know how to deal with static content that are numbers..
-    if (node->bracket.inner->type != NODE_TYPE_NUMBER)
-    {
-        return -1;
-    }
+    return compile_computable_value(node->bracket.inner);
 
-    return multiplier * node->bracket.inner->llnum;
 }
 
 int compute_array_offset(struct node *node, size_t single_element_size)

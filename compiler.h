@@ -310,6 +310,18 @@ struct resolver_entity
  */
 typedef void*(*RESOLVER_NEW_STRUCT_ENTITY)(struct node* var_node, struct resolver_entity* entity, int offset);
 
+
+/**
+ * THis function pointer is called when we have an array expression processed
+ * by the resolver.
+ * 
+ * Should return private data for the array entity.
+ * 
+ * \param array_entity The entity that represents the array entity variable i.e abc[50] abc would be this entity
+ * \param array_bracket_node The bracket node of this array access i.e abc[50] would be [50]
+ */
+typedef void*(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_entity* array_entity, struct node* array_bracket_node);
+
 /**
  * User must delete the resolver scope private data. DO not delete the "scope" pointer!
  */
@@ -327,6 +339,11 @@ struct resolver_callbacks
     // in the resolver. The function in question is required to return a new entity representing
     // that structure variable.
     RESOLVER_NEW_STRUCT_ENTITY new_struct_entity;
+
+    /**
+     * Called when we need to create a new resolver_entity for the given array expression
+     */
+     RESOLVER_NEW_ARRAY_ENTITY new_array_entity;
 
     RESOLVER_DELETE_SCOPE delete_scope;
     RESOLVER_DELETE_ENTITY delete_entity;

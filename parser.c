@@ -518,7 +518,7 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
         parse_statement(history);
         stmt_node = node_pop();
 
-        if (stmt_node->type == NODE_TYPE_VARIABLE)
+        if (stmt_node->type == NODE_TYPE_VARIABLE && variable_node_is_primative(stmt_node))
         {
             if (!largest_primative_var_node ||
                 (largest_primative_var_node->var.type.size <= stmt_node->var.type.size))

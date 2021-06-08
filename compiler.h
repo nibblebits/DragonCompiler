@@ -266,16 +266,70 @@ struct resolver_scope
     // The previous scope.
     struct resolver_scope* prev;
 
+    // Private data for the resolver scope.
+    void* private;
+
 };
 
 struct compile_process;
 
 
-//typedef void(*NEW_RESOLVER_ENTITY_CALLBACK)(struct node* var_node, struct resolver_entity* entity);
+struct resolver_entity
+{
+    struct datatype dtype;
+
+    // Can be NULL if no variable is present. otherwise equal to the var_node
+    // that was resolved.
+    struct node* node;
+
+
+    // The scope that this entity belogns too.
+    struct resolver_scope* scope;
+
+    // Private data that can be stored by the creator of the resolver entity
+    void* private;
+
+};
+
+/**
+ * Resolver handler for new struct entities. The function must return the private data
+ * to be set in the resolver_entity
+ * 
+ * Caller must set the address in the private data to the correct compile time address.
+ * Use given offset and entity to compute absolute offset from root structure
+ * 
+ * This function is only called for the first structure entity that must be created
+ * in a sequence. For example:
+ * 
+ * struct dog a;
+ * a.b.c = 50; This function will only be called for "a.b"
+ * 
+ * \param var_node The variable node associated with this function call i.e "a.b" this would be "b's" variable
+ * \param entity The entity representing the giving structure whose var_node is apart of
+ * \param offset The offset relative to the structure represented by "entity".
+ */
+typedef void*(*RESOLVER_NEW_STRUCT_ENTITY)(struct node* var_node, struct resolver_entity* entity, int offset);
+
+/**
+ * User must delete the resolver scope private data. DO not delete the "scope" pointer!
+ */
+typedef void(*RESOLVER_DELETE_SCOPE)(struct resolver_scope* scope);
+
+/**
+ * User must delete the resolver entity private data. DO not delete the "entity pointer!!!"
+ */
+typedef void(*RESOLVER_DELETE_ENTITY)(struct resolver_entity* entity);
 
 struct resolver_callbacks
 {   
-   // NEW_RESOLVER_ENTITY_CALLBACK new_entity_function;
+    // Must not be NULL!
+    // This function pointer is called when their is access to a new structure expression 
+    // in the resolver. The function in question is required to return a new entity representing
+    // that structure variable.
+    RESOLVER_NEW_STRUCT_ENTITY new_struct_entity;
+
+    RESOLVER_DELETE_SCOPE delete_scope;
+    RESOLVER_DELETE_ENTITY delete_entity;
 };
 
 struct resolver_process
@@ -288,23 +342,11 @@ struct resolver_process
 
     struct compile_process* compiler;
 
-    // TODO.
     struct resolver_callbacks callbacks;
+
+    
 };
 
-struct resolver_entity
-{
-    struct datatype dtype;
-
-    // Can be NULL if no variable is present. otherwise equal to the var_node
-    // that was resolved.
-    struct node* node;
-
-
-    // Private data that can be stored by the creator of the resolver entity
-    void* private;
-
-};
 
 
 enum
@@ -932,9 +974,9 @@ int compute_array_offset(struct node* node, size_t single_element_size);
 
 // Resolver functions
 struct compile_process* resolver_compiler(struct resolver_process* process);
-struct resolver_scope* resolver_new_scope(struct resolver_process* resolver);
+struct resolver_scope* resolver_new_scope(struct resolver_process* resolver, void* private);
 void resolver_finish_scope(struct resolver_process* resolver);
-struct resolver_process* resolver_new_process(struct compile_process* compiler);
+struct resolver_process* resolver_new_process(struct compile_process* compiler, struct resolver_callbacks* callbacks);
 struct resolver_entity* resolver_new_entity_for_var_node(struct resolver_process* process, struct node* var_node, void* private);
 struct resolver_entity* resolver_get_variable_in_scope(const char* var_name, struct resolver_scope* scope);
 struct resolver_entity* resolver_get_variable(struct resolver_process* resolver, const char* var_name);

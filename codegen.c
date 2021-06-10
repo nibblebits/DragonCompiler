@@ -12,8 +12,6 @@ static struct expression_state blank_state = {};
 #define codegen_err(...) \
     compiler_error(current_process, __VA_ARGS__)
 
-struct codegen_scope_entity *codegen_get_scope_variable_for_node(struct node *node, bool *position_known_at_compile_time);
-void codegen_scope_entity_to_asm_address(struct codegen_scope_entity *entity, char *out);
 
 /**
  * Specifies current history for the given operation/expression
@@ -526,8 +524,10 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     // Left node = to assign
     // Right node = value
 
-    struct resolver_entity *left_entity = resolver_get_variable_for_node(current_process->resolver, node->exp.left);
-    assert(left_entity);
+    struct resolver_result *result = resolver_get_variable_for_node(current_process->resolver, node->exp.left);
+    assert(!resolver_result_failed(result));
+
+    struct resolver_entity *left_entity = resolver_result_entity(result);
 
     codegen_generate_expressionable(node->exp.right, history);
 
@@ -620,9 +620,11 @@ void _codegen_generate_exp_node(struct node *node, struct history *history)
     }
 
     // Can we locate a variable for the given expression?
-    struct resolver_entity *entity = resolver_get_variable_for_node(current_process->resolver, node);
-    if (entity)
+    struct resolver_result *result = resolver_get_variable_for_node(current_process->resolver, node);
+    struct resolver_entity *entity = NULL;
+    if (resolver_result_ok(result))
     {
+        entity = resolver_result_entity(result);
         codegen_generate_variable_access(node, entity, history);
         return;
     }
@@ -720,8 +722,10 @@ void codegen_handle_variable_access(struct node *access_node, struct resolver_en
 
 void codegen_generate_identifier(struct node *node, struct history *history)
 {
-    struct resolver_entity *entity = resolver_get_variable_for_node(current_process->resolver, node);
-    assert(entity);
+    struct resolver_result *result = resolver_get_variable_for_node(current_process->resolver, node);
+    assert(resolver_result_ok(result));
+    
+    struct resolver_entity *entity = resolver_result_entity(result);
     codegen_generate_variable_access(node, entity, history);
 }
 
@@ -1100,7 +1104,7 @@ void *codegen_new_struct_entity(struct node *var_node, struct resolver_entity *e
 
 void *codegen_new_array_entity(struct resolver_entity *array_entity, struct node *array_bracket_node)
 {
-    return codegen_new_entity_data(array_entity->node, codegen_entity_private(array_entity)->offset+compute_array_offset(array_bracket_node, array_entity->dtype.size), CODEGEN_ENTITY_FLAG_IS_LOCAL_STACK);
+    return codegen_new_entity_data(array_entity->node, codegen_entity_private(array_entity)->offset + compute_array_offset(array_bracket_node, array_entity->dtype.size), CODEGEN_ENTITY_FLAG_IS_LOCAL_STACK);
 }
 
 void codegen_delete_entity(struct resolver_entity *entity)

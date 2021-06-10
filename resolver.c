@@ -1,6 +1,35 @@
 #include "compiler.h"
 #include "helpers/vector.h"
 #include <assert.h>
+
+bool resolver_result_failed(struct resolver_result* result)
+{
+    return result->flags & RESOLVER_RESULT_FLAG_FAILED;
+}
+
+bool resolver_result_ok(struct resolver_result* result)
+{
+    return !resolver_result_failed(result);
+}
+
+struct resolver_entity* resolver_result_entity(struct resolver_result* result)
+{
+    if (resolver_result_failed(result))
+        return NULL;
+
+    return result->entity;
+}
+
+struct resolver_result* resolver_new_result(struct resolver_process* process)
+{
+    return calloc(sizeof(struct resolver_result), 1);
+}
+
+void resolver_result_free(struct resolver_result* result)
+{
+    free(result);
+}
+
 struct compile_process* resolver_compiler(struct resolver_process* process)
 {
     return process->compiler;
@@ -124,63 +153,76 @@ struct resolver_entity* resolver_get_variable(struct resolver_process* resolver,
     return entity;
 }
 
-static struct resolver_entity *_resolver_get_variable_for_node(struct resolver_process* resolver, struct node *node)
+static struct resolver_entity *_resolver_get_variable_for_node(struct resolver_process* resolver, struct node *node, struct resolver_result* result)
 {
-
-    struct resolver_entity *entity = NULL;
+    assert(result);
     switch (node->type)
     {
     case NODE_TYPE_EXPRESSION:
         if (is_access_operator(node->exp.op))
         {
-            struct resolver_entity* struct_left_entity = _resolver_get_variable_for_node(resolver, node->exp.left);
+            struct resolver_entity* struct_left_entity = _resolver_get_variable_for_node(resolver, node->exp.left, result);
             if (!struct_left_entity)
             {
-                // Cannot find scope entity? Perhaps its a global variable
                 return NULL;
             }
             int offset = 0;
             struct node *access_node = struct_for_access(resolver_compiler(resolver), node->exp.right, struct_left_entity->node->var.type.type_str, &offset, 0);
-            entity = resolver_create_new_entity_for_var_node(resolver, access_node, resolver->callbacks.new_struct_entity(access_node, struct_left_entity, offset));
+            result->entity = resolver_create_new_entity_for_var_node(resolver, access_node, resolver->callbacks.new_struct_entity(access_node, struct_left_entity, offset));
           
             break;
         }
 
         if (is_array_operator(node->exp.op))
         {
-            struct resolver_entity* array_left_entity = _resolver_get_variable_for_node(resolver, node->exp.left);
+            struct resolver_entity* array_left_entity = _resolver_get_variable_for_node(resolver, node->exp.left, result);
             if (!array_left_entity)
             {
                 return NULL;
             }
-            entity = resolver_create_new_entity_for_var_node(resolver, array_left_entity->node, resolver->callbacks.new_array_entity(array_left_entity, node->exp.right));
+           // if (!is_compile_computable(node->exp.right))
+            {
+                // Ok we cannot do anything more therefore the closest possible entity
+                // is array_left_entity, the rest will need to be computed at runtime.
+             //   result->entity = array_left_entity;
+               // break;
+            }
+
+            result->entity = resolver_create_new_entity_for_var_node(resolver, array_left_entity->node, resolver->callbacks.new_array_entity(array_left_entity, node->exp.right));
             break;
         }
 
-        entity = _resolver_get_variable_for_node(resolver, node->exp.left);
+        result->entity = _resolver_get_variable_for_node(resolver, node->exp.left, result);
         break;
 
     
     case NODE_TYPE_EXPRESSION_PARENTHESIS:
-        entity = _resolver_get_variable_for_node(resolver, node->parenthesis.exp);
+        result->entity = _resolver_get_variable_for_node(resolver, node->parenthesis.exp, result);
         break;
 
     case NODE_TYPE_UNARY:
-        entity = _resolver_get_variable_for_node(resolver, node->unary.operand);
+        result->entity = _resolver_get_variable_for_node(resolver, node->unary.operand, result);
         break;
 
     case NODE_TYPE_IDENTIFIER:
-        entity = resolver_get_variable(resolver, node->sval);
+        result->entity = resolver_get_variable(resolver, node->sval);
         break;
     }
+    
+    if (!result->entity)
+    {
+        result->flags |= RESOLVER_RESULT_FLAG_FAILED;
+    }
 
-    return entity;
+    return result->entity;
 }
 
 
-struct resolver_entity *resolver_get_variable_for_node(struct resolver_process* resolver, struct node *node)
+struct resolver_result *resolver_get_variable_for_node(struct resolver_process* resolver, struct node *node)
 {
-    return _resolver_get_variable_for_node(resolver, node);
+    struct resolver_result* result = resolver_new_result(resolver);
+    _resolver_get_variable_for_node(resolver, node, result);
+    return result;
 }   
 
 /**

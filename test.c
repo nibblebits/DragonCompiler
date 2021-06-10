@@ -1,21 +1,16 @@
-struct elf
-{
-    char arr[50];
-};
+
+int e = 10;
+int z = 20;
 
 struct dog
 {
-    char k;
-    struct elf e;
-    char m;
-
+    int a;
+char arr[50];
 
 };
-int e = 10;
+
+struct dog d;
 int main()
 {
-   struct dog d;
-   e = d.e.arr[20];
-
-
+    e = d.arr[49];
 }

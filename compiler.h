@@ -365,6 +365,26 @@ struct resolver_process
 };
 
 
+enum
+{
+    // This bit is set if the result failed for some reason.
+    // We was not able to locate the variable in question
+    // at some point during the resolving we hit a variable that didnt exist
+    // or had an error ...
+    RESOLVER_RESULT_FLAG_FAILED = 0b00000001,
+    // THis bit is set if the full address has been computed
+    // no runtime extras need to be done...
+    RESOLVER_RESULT_FLAG_COMPILE_TIME_FRIENDLY=0b00000010
+};
+
+struct resolver_result
+{
+    // The entity of this result
+    struct resolver_entity* entity;
+    int flags;
+};
+
+
 
 enum
 {
@@ -990,6 +1010,13 @@ int compute_array_offset(struct node* node, size_t single_element_size);
 
 
 // Resolver functions
+
+struct resolver_result* resolver_new_result(struct resolver_process* process);
+void resolver_result_free(struct resolver_result* result);
+bool resolver_result_failed(struct resolver_result* result);
+bool resolver_result_ok(struct resolver_result* result);
+
+struct resolver_entity* resolver_result_entity(struct resolver_result* result);
 struct compile_process* resolver_compiler(struct resolver_process* process);
 struct resolver_scope* resolver_new_scope(struct resolver_process* resolver, void* private);
 void resolver_finish_scope(struct resolver_process* resolver);
@@ -997,7 +1024,7 @@ struct resolver_process* resolver_new_process(struct compile_process* compiler, 
 struct resolver_entity* resolver_new_entity_for_var_node(struct resolver_process* process, struct node* var_node, void* private);
 struct resolver_entity* resolver_get_variable_in_scope(const char* var_name, struct resolver_scope* scope);
 struct resolver_entity* resolver_get_variable(struct resolver_process* resolver, const char* var_name);
-struct resolver_entity *resolver_get_variable_for_node(struct resolver_process* resolver, struct node *node);
+struct resolver_result *resolver_get_variable_for_node(struct resolver_process* resolver, struct node *node);
 
 /**
  * Attempts to peek through the tree at the given node and looks for a datatype

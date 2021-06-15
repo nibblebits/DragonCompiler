@@ -2,15 +2,29 @@
 int e = 10;
 int z = 20;
 
+struct ant
+{
+    int m;
+    int e;
+};
+
+struct elf
+{
+    int k;
+    int z;
+    struct ant* ii;
+};
+
 struct dog
 {
     int a;
-char arr[50];
-
+    int k;
+    struct elf* b;
 };
 
-struct dog d;
+struct dog* d;
 int main()
 {
-    e = d.arr[49];
+    z = d[1].k;
+
 }

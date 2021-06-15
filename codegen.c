@@ -513,10 +513,17 @@ const char *codegen_byte_word_or_dword(size_t size)
     return type;
 }
 
-void codegen_generate_variable_access(struct node *node, struct resolver_entity *entity, struct history *history)
+void codegen_generate_variable_access(struct node *node, struct resolver_result *result, struct history *history)
 {
-    const char *reg_to_use = "eax";
-    codegen_gen_mov_or_math(reg_to_use, node, history->flags, entity);
+    struct resolver_entity *entity = resolver_result_entity_root(result);
+    codegen_gen_mov_or_math("eax", node, history->flags, entity);
+    entity = resolver_result_entity_next(entity);
+    while (entity)
+    {
+        asm_push("mov eax, [eax+%i]", codegen_entity_private(entity)->offset);
+        entity = resolver_result_entity_next(entity);
+    }
+
 }
 
 void codegen_generate_assignment_expression(struct node *node, struct history *history)
@@ -524,10 +531,10 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     // Left node = to assign
     // Right node = value
 
-    struct resolver_result *result = resolver_get_variable_for_node(current_process->resolver, node->exp.left);
+    struct resolver_result *result = resolver_follow(current_process->resolver, node->exp.left);
     assert(!resolver_result_failed(result));
 
-    struct resolver_entity *left_entity = resolver_result_entity(result);
+    struct resolver_entity *left_entity = resolver_result_entity_root(result);
 
     codegen_generate_expressionable(node->exp.right, history);
 
@@ -620,12 +627,12 @@ void _codegen_generate_exp_node(struct node *node, struct history *history)
     }
 
     // Can we locate a variable for the given expression?
-    struct resolver_result *result = resolver_get_variable_for_node(current_process->resolver, node);
+    struct resolver_result *result = resolver_follow(current_process->resolver, node);
     struct resolver_entity *entity = NULL;
     if (resolver_result_ok(result))
     {
         entity = resolver_result_entity(result);
-        codegen_generate_variable_access(node, entity, history);
+        codegen_generate_variable_access(node, result, history);
         return;
     }
 
@@ -722,11 +729,11 @@ void codegen_handle_variable_access(struct node *access_node, struct resolver_en
 
 void codegen_generate_identifier(struct node *node, struct history *history)
 {
-    struct resolver_result *result = resolver_get_variable_for_node(current_process->resolver, node);
+    struct resolver_result *result = resolver_follow(current_process->resolver, node);
     assert(resolver_result_ok(result));
     
     struct resolver_entity *entity = resolver_result_entity(result);
-    codegen_generate_variable_access(node, entity, history);
+    codegen_generate_variable_access(node, result, history);
 }
 
 static bool is_comma_operator(struct node *node)
@@ -1086,19 +1093,10 @@ void codegen_generate_root()
  * 
  * I.e "a.b.c" will only be called for "b". "c will call another function
  */
-void *codegen_new_struct_entity(struct node *var_node, struct resolver_entity *entity, int offset)
+void *codegen_new_struct_entity(struct node *var_node, struct struct_access_details* details, int flags)
 {
-    struct resolver_scope *scope = entity->scope;
-    struct codegen_scope_data *private = scope->private;
-    int flags = 0;
-    if (private->flags & CODEGEN_SCOPE_FLAG_IS_LOCAL_STACK)
-    {
-        flags |= CODEGEN_ENTITY_FLAG_IS_LOCAL_STACK;
-    }
-
-    offset += codegen_entity_private(entity)->offset;
-
-    struct codegen_entity_data *result_entity = codegen_new_entity_data(entity->node, offset, flags);
+    int entity_flags = 0;
+    struct codegen_entity_data *result_entity = codegen_new_entity_data(details->first_node, details->offset, entity_flags);
     return result_entity;
 }
 

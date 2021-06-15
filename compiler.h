@@ -6,7 +6,11 @@
 #include <memory.h>
 #include <string.h>
 #include <stdbool.h>
+#include <assert.h>
+
 #include "helpers/vector.h"
+
+#define FAIL_ERR(message) assert(0==1 && message)
 
 // 16 byte alignment for C programs.
 #define C_STACK_ALIGNMENT 16
@@ -123,7 +127,37 @@ enum
      * Signifies that any structure access should be calculated backwards,
      * this is useful for calculating offsets for structures on the stack
      */
-    STRUCT_ACCESS_BACKWARDS = 0b00000001
+    STRUCT_ACCESS_BACKWARDS = 0b00000001,
+    /**
+     * This bit is set for when you access "struct_offset" but do not care about
+     * the offset that is returned. But you might care about the variable that gets returned
+     */
+    STRUCT_STOP_AT_POINTER_ACCESS = 0b00000010
+};
+enum
+{
+    STRUCT_ACCESS_DETAILS_FLAG_NOT_FINISHED = 0b00000001
+};
+
+struct struct_access_details
+{
+    int flags;
+    /**
+     * The next node you should pass to the struct_for_access function when you call it next
+     */
+    struct node* next_node;
+    
+    /**
+     * The first node in this structure query
+     */
+    struct node* first_node;
+
+    /**
+     * The calculated offset to be used to access the data in memory of this structure access
+     * with a memory address base of 0. To be added to stack address or global address memory
+     * to locate actual location.
+     */
+    int offset;
 };
 
 enum
@@ -273,9 +307,14 @@ struct resolver_scope
 
 struct compile_process;
 
-
+enum
+{
+    RESOLVER_ENTITY_COMPILE_TIME_ENTITY = 0b00000001,
+};
 struct resolver_entity
 {
+    int flags;
+
     struct datatype dtype;
 
     // Can be NULL if no variable is present. otherwise equal to the var_node
@@ -283,12 +322,30 @@ struct resolver_entity
     struct node* node;
 
 
-    // The scope that this entity belogns too.
+    // The scope that this entity belongs too.
     struct resolver_scope* scope;
 
+    // The result this entity is apart of, NULL if no result is binded
+    struct resolver_result* result;
+
+    // The resolver process for this entity
+    struct resolver_process* resolver;
+    
     // Private data that can be stored by the creator of the resolver entity
     void* private;
 
+    // The next entity in the list
+    struct resolver_entity* next;
+    // The previous entity in the list.
+    struct resolver_entity* prev;
+
+};
+
+enum
+{
+    // This flag is set if the new structure entity should offset
+    // from the last entities base address.
+    NEW_STRUCT_ENTITY_FLAG_LAST_ENTITY_USE_BASE = 0b00000001
 };
 
 /**
@@ -305,10 +362,10 @@ struct resolver_entity
  * a.b.c = 50; This function will only be called for "a.b"
  * 
  * \param var_node The variable node associated with this function call i.e "a.b" this would be "b's" variable
- * \param entity The entity representing the giving structure whose var_node is apart of
- * \param offset The offset relative to the structure represented by "entity".
+ * \param details The details of the structure query. Use them to help compute private data for the new struct entity
+ * \param flags The flags to guide this new structure entity to be created.
  */
-typedef void*(*RESOLVER_NEW_STRUCT_ENTITY)(struct node* var_node, struct resolver_entity* entity, int offset);
+typedef void*(*RESOLVER_NEW_STRUCT_ENTITY)(struct node* var_node, struct struct_access_details* details, int flags);
 
 
 /**
@@ -374,13 +431,15 @@ enum
     RESOLVER_RESULT_FLAG_FAILED = 0b00000001,
     // THis bit is set if the full address has been computed
     // no runtime extras need to be done...
-    RESOLVER_RESULT_FLAG_COMPILE_TIME_FRIENDLY=0b00000010
+    RESOLVER_RESULT_FLAG_RUNTIME_NEEDED_TO_FINISH_PATH=0b00000010
 };
 
 struct resolver_result
 {
-    // The entity of this result
+    // The root entity of this result
     struct resolver_entity* entity;
+    // The last processed entity in the list
+    struct resolver_entity* last_entity;
     int flags;
 };
 
@@ -532,6 +591,12 @@ enum
     // Since it is the only function argument. However in this case test(50*a) the number node
     // of "50" would have this flag set as its apart of an expression.
     NODE_FLAG_INSIDE_EXPRESSION  = 0b00000001,
+    // This flag is set if this node is a cloned node
+    // cloned nodes can be modified freely and modifying a cloned node
+    // does not affect the original node.
+    // As cloned nodes do not guarantee to be apart of the tree, it is important the cloner
+    // be responsible for the memory.
+    NODE_FLAG_CLONED = 0b00000010
 };
 
 
@@ -851,8 +916,7 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
  * 
  * Likewise if only "a" was provided then the "a" variable node in the test structure would be returned.
  */
-struct node *struct_for_access(struct compile_process *process, struct node *node, const char *type_str, int *offset_out, int flags);
-
+struct node *struct_for_access(struct resolver_process *process, struct node *node, const char *type_str, int flags, struct struct_access_details* details_out);
 /**
  * Finds the first node of the given type.
  * 
@@ -892,6 +956,12 @@ bool node_is_root_expression(struct node* node);
  * a->b.k
  */
 bool is_access_operator(const char *op);
+
+
+/**
+ * Returns true if this node represents an access node expression
+ */
+bool is_access_node(struct node* node);
 
 
 /**
@@ -1016,6 +1086,20 @@ void resolver_result_free(struct resolver_result* result);
 bool resolver_result_failed(struct resolver_result* result);
 bool resolver_result_ok(struct resolver_result* result);
 
+/**
+ * Returns true if the resolver entity requires additional
+ * runtime code to compute real offset.
+ * False if this entity can be computed at compile time
+ */
+bool resolver_entity_runtime_required(struct resolver_entity* entity);
+
+/**
+ * Returns true if the resolver result is completed and no more processing
+ * has to be done to find a working path
+ */
+bool resolver_result_finished(struct resolver_result* result);
+
+
 struct resolver_entity* resolver_result_entity(struct resolver_result* result);
 struct compile_process* resolver_compiler(struct resolver_process* process);
 struct resolver_scope* resolver_new_scope(struct resolver_process* resolver, void* private);
@@ -1024,7 +1108,9 @@ struct resolver_process* resolver_new_process(struct compile_process* compiler, 
 struct resolver_entity* resolver_new_entity_for_var_node(struct resolver_process* process, struct node* var_node, void* private);
 struct resolver_entity* resolver_get_variable_in_scope(const char* var_name, struct resolver_scope* scope);
 struct resolver_entity* resolver_get_variable(struct resolver_process* resolver, const char* var_name);
-struct resolver_result *resolver_get_variable_for_node(struct resolver_process* resolver, struct node *node);
+struct resolver_result *resolver_follow(struct resolver_process* resolver, struct node *node);
+struct resolver_entity* resolver_result_entity_root(struct resolver_result* result);
+struct resolver_entity* resolver_result_entity_next(struct resolver_entity* entity);
 
 /**
  * Attempts to peek through the tree at the given node and looks for a datatype
@@ -1038,4 +1124,10 @@ struct resolver_result *resolver_get_variable_for_node(struct resolver_process* 
  * the deepest possible type will be returned.
  */
 struct datatype* resolver_get_datatype(struct node* node);
+
+
+// Node
+
+struct node* node_clone(struct node* node);
+
 #endif

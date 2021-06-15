@@ -58,7 +58,7 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
     while (var_node_cur)
     {
         *var_node_out = var_node_cur;
-
+        // If the STRUCT_NO_OFFSET flag is set then we must not recalculate any positions.
         if (var_node_last)
         {
             position += var_node_last->var.type.size;
@@ -108,28 +108,94 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
  * 
  * Likewise if only "a" was provided then the "a" variable node in the test structure would be returned.
  * 
- * \param offset_out This is set to the offset based on the access pattern. I.e "a.b.c.d.e.f" would take all those additional structure variables into account for calculating the offset
  */
-struct node *struct_for_access(struct compile_process *process, struct node *node, const char *type_str, int *offset_out, int flags)
+struct node *_struct_for_access(struct resolver_process *process, struct node *node, const char *type_str, int flags, struct struct_access_details* details_out)
 {
     assert((node->type == NODE_TYPE_EXPRESSION && is_access_operator(node->exp.op)) || node->type == NODE_TYPE_IDENTIFIER);
+    assert(details_out);
 
     struct node *var_node = NULL;
     if (node->type == NODE_TYPE_IDENTIFIER)
     {
-        *offset_out = struct_offset(process, type_str, node->sval, &var_node, *offset_out, flags);
+        // No type? Then we have not located the first variable yet.
+        if (type_str == NULL)
+        {
+            var_node = resolver_get_variable(process, node->sval)->node;
+            details_out->first_node = var_node;
+            return var_node;
+        }
+
+        details_out->offset = struct_offset(resolver_compiler(process), type_str, node->sval, &var_node, details_out->offset, flags);
+        if (!details_out->first_node)
+        {
+            details_out->first_node = var_node;
+        }
         return var_node;
     }
 
-    var_node = struct_for_access(process, node->exp.left, type_str, offset_out, flags);
-    assert(var_node);
+    var_node = _struct_for_access(process, node->exp.left, type_str, flags, details_out);
+    if (details_out->flags & STRUCT_ACCESS_DETAILS_FLAG_NOT_FINISHED)
+    {
+        // We have to clone the node and swap the branches 
+        // i.e currently we might have [a.b]->c so we want the next_node to be seen as
+        // [b->c] rather than just .b
+        struct node* cloned_node = node_clone(node);
+        cloned_node->exp.left = node->exp.left->exp.right;
+        details_out->next_node = cloned_node;
+        return var_node;
+    }
+
+
+
+    // Since we have pointer access and the pointer access flag is set
+    // We must not continue.
+    if (S_EQ(node->exp.op, "->") 
+        && flags & STRUCT_STOP_AT_POINTER_ACCESS)
+    {
+        details_out->next_node = node->exp.right;
+        details_out->flags |= STRUCT_ACCESS_DETAILS_FLAG_NOT_FINISHED;
+        return var_node;
+    }
+
 
     struct node *ret_node = NULL;
     // Start of structure must be aligned in memory correctly
-    *offset_out = align_value_treat_positive(*offset_out, variable_struct_node(var_node)->_struct.body_n->body.largest_var_node->var.type.size);
-    ret_node = struct_for_access(process, node->exp.right, var_node->var.type.type_str, offset_out, flags);
+    details_out->offset = align_value_treat_positive(details_out->offset, variable_struct_node(var_node)->_struct.body_n->body.largest_var_node->var.type.size);
+    ret_node = _struct_for_access(process, node->exp.right, var_node->var.type.type_str, flags, details_out);
 
     return ret_node;
+}
+
+
+
+/**
+ * Returns the node for the structure access expression.
+ * 
+ * For example if you had the structure "test" and "abc"
+ * struct abc
+ * {
+ *    int z;
+ * }
+ *
+ * struct test
+ * {
+ *   struct abc a;
+ * }
+ * 
+ * and your expression node was "a.z" and your type_str was "test" you would have 
+ * the node for variable "z" returned.
+ * 
+ * Likewise if only "a" was provided then the "a" variable node in the test structure would be returned.
+ * 
+ */
+struct node *struct_for_access(struct resolver_process *process, struct node *node, const char *type_str, int flags, struct struct_access_details* details_out)
+{
+    memset(details_out, 0, sizeof(struct struct_access_details));
+    return _struct_for_access(process, node, type_str, flags, details_out);
+}
+bool is_access_node(struct node* node)
+{
+    return node->type == NODE_TYPE_EXPRESSION && is_access_operator(node->exp.op);
 }
 
 bool is_access_operator(const char *op)
@@ -142,9 +208,54 @@ bool is_array_operator(const char *op)
     return S_EQ(op, "[]");
 }
 
+static bool is_exp_compile_computable(struct node *node)
+{
+    if (S_EQ(node->exp.op, "->"))
+    {
+        return false;
+    }
+
+    if (!is_compile_computable(node->exp.left))
+    {
+        return false;
+    }
+
+    if (!is_compile_computable(node->exp.right))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool is_compile_computable_unary(struct node *node)
+{
+    if (op_is_indirection(node->unary.op))
+    {
+        return false;
+    }
+
+    return is_compile_computable(node->unary.operand);
+}
+
 bool is_compile_computable(struct node *node)
 {
-    return node->type == NODE_TYPE_NUMBER;
+    switch (node->type)
+    {
+    case NODE_TYPE_EXPRESSION:
+        return is_exp_compile_computable(node);
+        break;
+
+    case NODE_TYPE_BRACKET:
+        return is_compile_computable(node->bracket.inner);
+        break;
+
+    case NODE_TYPE_UNARY:
+        return is_compile_computable_unary(node);
+        break;
+    }
+
+    return node->type == NODE_TYPE_NUMBER || node->type == NODE_TYPE_IDENTIFIER;
 }
 
 bool is_access_operator_node(struct node *node)
@@ -350,24 +461,6 @@ size_t variable_size(struct node *var_node)
     return var_node->var.type.size;
 }
 
-struct node *node_from_sym(struct symbol *sym)
-{
-    if (sym->type != SYMBOL_TYPE_NODE)
-        return 0;
-
-    struct node *node = sym->data;
-    return node;
-}
-
-struct node *node_from_symbol(struct compile_process *current_process, const char *name)
-{
-    struct symbol *sym = symresolver_get_symbol(current_process, name);
-    if (!sym)
-    {
-        return 0;
-    }
-    return node_from_sym(sym);
-}
 
 struct node *struct_node_for_name(struct compile_process *current_process, const char *struct_name)
 {
@@ -418,18 +511,18 @@ struct node *body_largest_variable_node(struct node *body_node)
     return body_node->body.largest_var_node;
 }
 
-static long compile_computable_value(struct node* node)
+static long compile_computable_value(struct node *node)
 {
     long result = -1;
     switch (node->type)
     {
-        case NODE_TYPE_NUMBER:
-            result = node->llnum;
+    case NODE_TYPE_NUMBER:
+        result = node->llnum;
         break;
 
-        default:
-            // Change to a function.. Terrible..
-            assert(0==1 && "Not compile computable, use is_compiler_computable next time!");
+    default:
+        // Change to a function.. Terrible..
+        assert(0 == 1 && "Not compile computable, use is_compiler_computable next time!");
     }
 
     return result;
@@ -450,11 +543,9 @@ int compute_array_offset_with_multiplier(struct node *node, size_t single_elemen
     }
 
     return compile_computable_value(node->bracket.inner);
-
 }
 
 int compute_array_offset(struct node *node, size_t single_element_size)
 {
     return compute_array_offset_with_multiplier(node, single_element_size, 0);
 }
-

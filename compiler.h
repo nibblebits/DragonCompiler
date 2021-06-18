@@ -351,33 +351,25 @@ enum
 /**
  * Resolver handler for new struct entities. The function must return the private data
  * to be set in the resolver_entity
- * 
- * Caller must set the address in the private data to the correct compile time address.
- * Use given offset and entity to compute absolute offset from root structure
- * 
- * This function is only called for the first structure entity that must be created
- * in a sequence. For example:
- * 
- * struct dog a;
- * a.b.c = 50; This function will only be called for "a.b"
- * 
- * \param var_node The variable node associated with this function call i.e "a.b" this would be "b's" variable
- * \param details The details of the structure query. Use them to help compute private data for the new struct entity
- * \param flags The flags to guide this new structure entity to be created.
  */
-typedef void*(*RESOLVER_NEW_STRUCT_ENTITY)(struct node* var_node, struct struct_access_details* details, int flags);
+typedef void*(*RESOLVER_NEW_STRUCT_ENTITY)(struct resolver_result* result, struct node* var_node, int offset, int flags);
 
+/**
+ * Used to merge two struct entities, generally their offsets for example. Receiver should merge them
+ * so that they become one.
+ * 
+ * Should return private data for the merged entities
+ */
+typedef void*(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result* result, struct resolver_entity* left_entity, struct resolver_entity* right_entity);
 
 /**
  * THis function pointer is called when we have an array expression processed
  * by the resolver.
  * 
- * Should return private data for the array entity.
- * 
- * \param array_entity The entity that represents the array entity variable i.e abc[50] abc would be this entity
- * \param array_bracket_node The bracket node of this array access i.e abc[50] would be [50]
+ * \param array_var_entity the Variable entity representing the array access. I.e a[5] this would be "a"
+ * \param index The numerical index in the array we are computing for, we need an array private that represents all you need for this given index
  */
-typedef void*(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_entity* array_entity, struct node* array_bracket_node);
+typedef void*(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_result* result, struct resolver_entity* array_var_entity, int index);
 
 /**
  * User must delete the resolver scope private data. DO not delete the "scope" pointer!
@@ -396,6 +388,7 @@ struct resolver_callbacks
     // in the resolver. The function in question is required to return a new entity representing
     // that structure variable.
     RESOLVER_NEW_STRUCT_ENTITY new_struct_entity;
+    RESOLVER_MERGE_STRUCT_ENTITY merge_struct_entity;
 
     /**
      * Called when we need to create a new resolver_entity for the given array expression
@@ -436,6 +429,13 @@ enum
 
 struct resolver_result
 {
+    // The first entity of this resolver result, it is never destroyed or removed
+    // even when popping from the result. Use this as a base to know how the expression started
+    struct resolver_entity* first_entity_const;
+
+    // This variable is equal to the last structure entity in the given resolution.
+    struct resolver_entity* last_struct_entity;
+    
     // The root entity of this result
     struct resolver_entity* entity;
     // The last processed entity in the list
@@ -957,6 +957,7 @@ bool node_is_root_expression(struct node* node);
  */
 bool is_access_operator(const char *op);
 
+bool is_array_node(struct node* node);
 
 /**
  * Returns true if this node represents an access node expression
@@ -1107,7 +1108,7 @@ void resolver_finish_scope(struct resolver_process* resolver);
 struct resolver_process* resolver_new_process(struct compile_process* compiler, struct resolver_callbacks* callbacks);
 struct resolver_entity* resolver_new_entity_for_var_node(struct resolver_process* process, struct node* var_node, void* private);
 struct resolver_entity* resolver_get_variable_in_scope(const char* var_name, struct resolver_scope* scope);
-struct resolver_entity* resolver_get_variable(struct resolver_process* resolver, const char* var_name);
+struct resolver_entity *resolver_get_variable(struct resolver_result* result, struct resolver_process *resolver, const char *var_name);
 struct resolver_result *resolver_follow(struct resolver_process* resolver, struct node *node);
 struct resolver_entity* resolver_result_entity_root(struct resolver_result* result);
 struct resolver_entity* resolver_result_entity_next(struct resolver_entity* entity);
@@ -1129,5 +1130,7 @@ struct datatype* resolver_get_datatype(struct node* node);
 // Node
 
 struct node* node_clone(struct node* node);
+const char* node_var_type_str(struct node* var_node);
+const char* node_var_name(struct node* var_node);
 
 #endif

@@ -3,6 +3,16 @@
 #include "helpers/vector.h"
 
 
+const char* node_var_type_str(struct node* var_node)
+{
+    return var_node->var.type.type_str;
+}
+
+const char* node_var_name(struct node* var_node)
+{
+    return var_node->var.name;
+}
+
 struct vector* node_vector_clone(struct vector* vec)
 {
     struct vector* new_vector = vector_create(sizeof(struct node*));

@@ -57,6 +57,52 @@ void resolver_result_free(struct resolver_result *result)
     free(result);
 }
 
+static void resolver_runtime_needed(struct resolver_result *result, struct resolver_entity *last_entity)
+{
+    result->entity = last_entity;
+    result->flags &= ~RESOLVER_RESULT_FLAG_RUNTIME_NEEDED_TO_FINISH_PATH;
+}
+
+void resolver_result_entity_push(struct resolver_result *result, struct resolver_entity *entity)
+{
+    if (!result->first_entity_const)
+    {
+        result->first_entity_const = entity;
+    }
+
+    if (!result->last_entity)
+    {
+        result->entity = entity;
+        result->last_entity = entity;
+        return;
+    }
+
+    result->last_entity->next = entity;
+    entity->prev = result->last_entity;
+    result->last_entity = entity;
+}
+
+struct resolver_entity *resolver_result_peek(struct resolver_result *result)
+{
+    return result->last_entity;
+}
+
+struct resolver_entity *resolver_result_pop(struct resolver_result *result)
+{
+    struct resolver_entity *entity = result->last_entity;
+
+    if (result->entity == result->last_entity)
+    {
+        result->entity = result->last_entity->prev;
+        result->last_entity = result->last_entity->prev;
+        return entity;
+    }
+
+    result->last_entity = result->last_entity->prev;
+    return entity;
+}
+
+
 struct compile_process *resolver_compiler(struct resolver_process *process)
 {
     return process->compiler;
@@ -162,10 +208,19 @@ struct resolver_entity *resolver_get_variable_in_scope(const char *var_name, str
     return current;
 }
 
-struct resolver_entity *resolver_get_variable(struct resolver_process *resolver, const char *var_name)
+struct resolver_entity *resolver_get_variable(struct resolver_result* result, struct resolver_process *resolver, const char *var_name)
 {
     struct resolver_entity *entity = NULL;
     struct resolver_scope *scope = resolver->scope.current;
+
+    // We may need to get a variable from a structure if we are currently in a structure
+    // during this resolusion
+    if(result->last_struct_entity && result->last_struct_entity->node->var.type.type == DATA_TYPE_STRUCT)
+    {
+        struct node* out_node = NULL;
+        int offset = struct_offset(resolver_compiler(resolver), node_var_type_str(result->last_struct_entity->node), var_name, &out_node, 0, 0);
+        return resolver_new_entity_for_var_node(resolver, out_node, resolver->callbacks.new_struct_entity(result, out_node, offset, 0));
+    }
     while (scope)
     {
         entity = resolver_get_variable_in_scope(var_name, scope);
@@ -178,48 +233,9 @@ struct resolver_entity *resolver_get_variable(struct resolver_process *resolver,
     return entity;
 }
 
-static void resolver_runtime_needed(struct resolver_result *result, struct resolver_entity *last_entity)
-{
-    result->entity = last_entity;
-    result->flags &= ~RESOLVER_RESULT_FLAG_RUNTIME_NEEDED_TO_FINISH_PATH;
-}
-
-void resolver_result_entity_push(struct resolver_result *result, struct resolver_entity *entity)
-{
-    if (!result->last_entity)
-    {
-        result->entity = entity;
-        result->last_entity = entity;
-        return;
-    }
-
-    result->last_entity->next = entity;
-    entity->prev = result->last_entity;
-    result->last_entity = entity;
-}
-
-struct resolver_entity *resolver_result_peek(struct resolver_result *result)
-{
-    return result->last_entity;
-}
-
-struct resolver_entity *resolver_result_pop(struct resolver_result *result)
-{
-    struct resolver_entity *entity = result->last_entity;
-
-    if (result->entity == result->last_entity)
-    {
-        result->entity = result->last_entity->prev;
-        result->last_entity = result->last_entity->prev;
-        return entity;
-    }
-
-    result->last_entity = result->last_entity->prev;
-    return entity;
-}
 static void resolver_follow_part(struct resolver_process *resolver, struct node *node, struct resolver_result *result);
 
-static struct resolver_entity *resolver_follow_struct_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+/*static struct resolver_entity *resolver_follow_struct_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
      const char* type_str = NULL;
     if (resolver_result_peek(result))
@@ -241,13 +257,82 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
 
     return entity;
 }
+*/
 
+static struct resolver_entity *resolver_follow_struct_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+{
+    struct resolver_entity* result_entity = NULL;
+    resolver_follow_part(resolver, node->exp.left, result);
+    resolver_follow_part(resolver, node->exp.right, result);
 
+    // Pop off the left node and right node so we can merge the offsets.
+    struct resolver_entity* right_entity = resolver_result_pop(result);
+    struct resolver_entity* left_entity = resolver_result_pop(result);
+
+    // Set the last structure entity that is known
+    result->last_struct_entity = left_entity;
+
+    if (S_EQ(node->exp.op, "->"))
+    {
+       resolver_result_entity_push(result, left_entity);
+       resolver_result_entity_push(result, right_entity);
+       result_entity = right_entity;
+       return result_entity;
+    }
+    
+    result_entity = resolver_new_entity_for_var_node(resolver, right_entity->node, resolver->callbacks.merge_struct_entity(result, left_entity, right_entity));
+    // Push the right entity back to the stack as it has been merged with the left_entity
+    resolver_result_entity_push(result, result_entity);
+
+    return result_entity;
+}
+
+static struct resolver_entity* resolver_follow_array(struct resolver_process* resolver, struct node* node, struct resolver_result* result)
+{  
+    // Left entity is the variable prior to the array access i.e a[5]
+    resolver_follow_part(resolver, node->exp.left, result);
+    struct resolver_entity* left_entity = resolver_result_pop(result);
+    // Now for the right entity, if its just a number then we can merge the offsets, otherwise
+    // it will need to be computed at runtime
+
+    struct node* right_operand = node->exp.right->bracket.inner;
+    if (right_operand->type == NODE_TYPE_NUMBER)
+    {
+        struct resolver_entity* entity = resolver_create_new_entity_for_var_node(resolver, left_entity->node, resolver->callbacks.new_array_entity(result, left_entity, right_operand->llnum));
+        resolver_result_entity_push(result, entity);
+        return entity;
+    }
+
+    FAIL_ERR("Only static indexes supported right now");
+
+}
 static struct resolver_entity *resolver_follow_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     struct resolver_entity *entity = NULL;
+    if (is_access_node(node))
+    {
+        entity = resolver_follow_struct_exp(resolver, node, result);
+    }
+    else if(is_array_node(node))
+    {
+        entity = resolver_follow_array(resolver, node, result);
+    }
 
-    return resolver_follow_struct_exp(resolver, node, result);
+    return entity;
+}
+
+struct resolver_entity* resolver_follow_identifier(struct resolver_process* resolver, struct node* node, struct resolver_result* result)
+{
+    struct resolver_entity* entity = resolver_get_variable(result, resolver, node->sval);
+    resolver_result_entity_push(result, entity);
+
+    if (entity->node->var.type.type == DATA_TYPE_STRUCT)
+    {
+        // Set the last structure entity that is known
+        result->last_struct_entity = entity;
+    }
+    return entity;
+
 }
 static void resolver_follow_part(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
@@ -255,20 +340,13 @@ static void resolver_follow_part(struct resolver_process *resolver, struct node 
     switch (node->type)
     {
     case NODE_TYPE_IDENTIFIER:
-        if (resolver_result_peek(result))
-        {
-            // We have part of this result already computed therefore lets treat it as an expression
-            resolver_follow_exp(resolver, node, result);
-            break;
-        }
-
-        entity = resolver_entity_clone(resolver_get_variable(resolver, node->sval));
-        resolver_result_entity_push(result, entity);
+        entity = resolver_follow_identifier(resolver, node, result);
         break;
 
     case NODE_TYPE_EXPRESSION:
         entity = resolver_follow_exp(resolver, node, result);
         break;
+        
     }
 
     if (entity)

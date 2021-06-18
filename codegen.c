@@ -1093,16 +1093,24 @@ void codegen_generate_root()
  * 
  * I.e "a.b.c" will only be called for "b". "c will call another function
  */
-void *codegen_new_struct_entity(struct node *var_node, struct struct_access_details* details, int flags)
+void *codegen_new_struct_entity(struct resolver_result* result, struct node *var_node, int offset, int flags)
 {
     int entity_flags = 0;
-    struct codegen_entity_data *result_entity = codegen_new_entity_data(details->first_node, details->offset, entity_flags);
+    struct codegen_entity_data *result_entity = codegen_new_entity_data(result->first_entity_const->node, offset, entity_flags);
     return result_entity;
 }
 
-void *codegen_new_array_entity(struct resolver_entity *array_entity, struct node *array_bracket_node)
+void* codegen_merge_struct_entity(struct resolver_result* result, struct resolver_entity* left_entity, struct resolver_entity* right_entity)
 {
-    return codegen_new_entity_data(array_entity->node, codegen_entity_private(array_entity)->offset + compute_array_offset(array_bracket_node, array_entity->dtype.size), CODEGEN_ENTITY_FLAG_IS_LOCAL_STACK);
+    int left_offset = codegen_entity_private(left_entity)->offset;
+    int right_offset = codegen_entity_private(right_entity)->offset;
+    return codegen_new_entity_data(result->first_entity_const->node, left_offset+right_offset, 0);
+}
+
+void *codegen_new_array_entity(struct resolver_result* result, struct resolver_entity *array_entity, int offset)
+{
+    return codegen_new_entity_data(array_entity->node, offset * array_entity->node->var.type.size, 0);
+
 }
 
 void codegen_delete_entity(struct resolver_entity *entity)
@@ -1122,7 +1130,7 @@ int codegen(struct compile_process *process)
     scope_create_root(process);
 
     vector_set_peek_pointer(process->node_tree_vec, 0);
-    process->resolver = resolver_new_process(process, &(struct resolver_callbacks){.new_struct_entity = codegen_new_struct_entity, .new_array_entity = codegen_new_array_entity, .delete_entity = codegen_delete_entity, .delete_scope = codegen_delete_scope});
+    process->resolver = resolver_new_process(process, &(struct resolver_callbacks){.new_struct_entity = codegen_new_struct_entity, .merge_struct_entity=codegen_merge_struct_entity, .new_array_entity = codegen_new_array_entity, .delete_entity = codegen_delete_entity, .delete_scope = codegen_delete_scope});
     // Global variables and down the tree locals... Global scope lets create it.
     codegen_new_scope(0);
     codegen_generate_data_section();

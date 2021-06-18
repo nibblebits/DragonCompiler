@@ -10,21 +10,20 @@ struct ant
 
 struct elf
 {
-    int k;
-    int z;
-    struct ant* ii;
+    char m;
+    char e;
 };
 
 struct dog
 {
     int a;
     int k;
-    struct elf* b;
+    struct elf b;
 };
 
-struct dog* d;
+struct dog d[6];
 int main()
 {
-    z = d[1].k;
+    z = d[0].k;
 
 }

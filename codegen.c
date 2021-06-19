@@ -520,7 +520,7 @@ void codegen_generate_variable_access(struct node *node, struct resolver_result 
     entity = resolver_result_entity_next(entity);
     while (entity)
     {
-        asm_push("mov eax, [eax+%i]", codegen_entity_private(entity)->offset);
+       asm_push("mov eax, [eax+%i]", codegen_entity_private(entity)->offset);
         entity = resolver_result_entity_next(entity);
     }
 
@@ -1096,7 +1096,7 @@ void codegen_generate_root()
 void *codegen_new_struct_entity(struct resolver_result* result, struct node *var_node, int offset, int flags)
 {
     int entity_flags = 0;
-    struct codegen_entity_data *result_entity = codegen_new_entity_data(result->first_entity_const->node, offset, entity_flags);
+    struct codegen_entity_data *result_entity = codegen_new_entity_data(result->last_struct_entity->node, offset, entity_flags);
     return result_entity;
 }
 
@@ -1107,9 +1107,10 @@ void* codegen_merge_struct_entity(struct resolver_result* result, struct resolve
     return codegen_new_entity_data(result->first_entity_const->node, left_offset+right_offset, 0);
 }
 
-void *codegen_new_array_entity(struct resolver_result* result, struct resolver_entity *array_entity, int offset)
+void *codegen_new_array_entity(struct resolver_result* result, struct resolver_entity *array_entity, int index)
 {
-    return codegen_new_entity_data(array_entity->node, offset * array_entity->node->var.type.size, 0);
+    int final_offset = codegen_entity_private(array_entity)->offset+(index * array_entity->node->var.type.size);
+    return codegen_new_entity_data(array_entity->node, final_offset, 0);
 
 }
 

@@ -269,8 +269,15 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
     struct resolver_entity* right_entity = resolver_result_pop(result);
     struct resolver_entity* left_entity = resolver_result_pop(result);
 
-    // Set the last structure entity that is known
-    result->last_struct_entity = left_entity;
+    if (is_array_node(node->exp.left) && is_access_node_with_op(node->exp.right, "->"))
+    {
+        struct resolver_entity* extra_entity = resolver_result_pop(result);
+        result_entity = resolver_new_entity_for_var_node(resolver, left_entity->node, resolver->callbacks.merge_struct_entity(result, extra_entity, left_entity));
+        resolver_result_entity_push(result, result_entity);
+        resolver_result_entity_push(result, right_entity);
+
+        return result_entity;
+    }
 
     if (S_EQ(node->exp.op, "->"))
     {
@@ -281,6 +288,7 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
     }
     
     result_entity = resolver_new_entity_for_var_node(resolver, right_entity->node, resolver->callbacks.merge_struct_entity(result, left_entity, right_entity));
+    
     // Push the right entity back to the stack as it has been merged with the left_entity
     resolver_result_entity_push(result, result_entity);
 
@@ -292,6 +300,7 @@ static struct resolver_entity* resolver_follow_array(struct resolver_process* re
     // Left entity is the variable prior to the array access i.e a[5]
     resolver_follow_part(resolver, node->exp.left, result);
     struct resolver_entity* left_entity = resolver_result_pop(result);
+
     // Now for the right entity, if its just a number then we can merge the offsets, otherwise
     // it will need to be computed at runtime
 
@@ -304,7 +313,7 @@ static struct resolver_entity* resolver_follow_array(struct resolver_process* re
     }
 
     FAIL_ERR("Only static indexes supported right now");
-
+    return NULL;
 }
 static struct resolver_entity *resolver_follow_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
@@ -323,7 +332,7 @@ static struct resolver_entity *resolver_follow_exp(struct resolver_process *reso
 
 struct resolver_entity* resolver_follow_identifier(struct resolver_process* resolver, struct node* node, struct resolver_result* result)
 {
-    struct resolver_entity* entity = resolver_get_variable(result, resolver, node->sval);
+    struct resolver_entity* entity = resolver_entity_clone(resolver_get_variable(result, resolver, node->sval));
     resolver_result_entity_push(result, entity);
 
     if (entity->node->var.type.type == DATA_TYPE_STRUCT)

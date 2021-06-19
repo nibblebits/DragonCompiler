@@ -214,6 +214,12 @@ bool is_access_node(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_access_operator(node->exp.op);
 }
 
+
+bool is_access_node_with_op(struct node *node, const char* op)
+{
+    return is_access_node(node) && S_EQ(node->exp.op, op);
+}
+
 bool is_access_operator(const char *op)
 {
     return S_EQ(op, "->") || S_EQ(op, ".");

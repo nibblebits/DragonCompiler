@@ -461,6 +461,8 @@ void make_bracket_node(struct node* inner_node)
 void parse_expressionable(struct history *history);
 void parse_for_parentheses();
 
+
+#warning "Bug, variable_struct_node points to uninitialized value"
 static void parser_append_size_for_node(size_t *_variable_size, struct node *node)
 {
     if (node->type == NODE_TYPE_VARIABLE)

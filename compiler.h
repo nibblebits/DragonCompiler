@@ -10,7 +10,7 @@
 
 #include "helpers/vector.h"
 
-#define FAIL_ERR(message) assert(0==1 && message)
+#define FAIL_ERR(message) assert(0 == 1 && message)
 
 // 16 byte alignment for C programs.
 #define C_STACK_ALIGNMENT 16
@@ -45,8 +45,8 @@
     case '&':                           \
     case '(':                           \
     case '[':                           \
-    case ',':                            \
-    case '.'                           \
+    case ',':                           \
+    case '.'
 
 #define NUMERIC_CASE \
     case '0':        \
@@ -109,16 +109,14 @@ enum
     EXPRESSIPON_IS_DIVISION = 0b0000000001000000,
     EXPRESSION_IN_FUNCTION_CALL = 0b0000000010000000,
     EXPRESSION_INDIRECTION = 0b0000000100000000,
-    EXPRESSION_GET_ADDRESS =0b0000001000000000
+    EXPRESSION_GET_ADDRESS = 0b0000001000000000
 
 };
 
-#define EXPRESSION_UNINHERITABLE_FLAGS \
-      (EXPRESSION_FLAG_RIGHT_NODE | EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS | \
-      EXPRESSION_IS_ADDITION | EXPRESSION_IS_SUBTRACTION | EXPRESSION_IS_MULTIPLICATION | \
-      EXPRESSIPON_IS_DIVISION)
-
-
+#define EXPRESSION_UNINHERITABLE_FLAGS                                                   \
+    (EXPRESSION_FLAG_RIGHT_NODE | EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS |                \
+     EXPRESSION_IS_ADDITION | EXPRESSION_IS_SUBTRACTION | EXPRESSION_IS_MULTIPLICATION | \
+     EXPRESSIPON_IS_DIVISION)
 
 // Flags for structure access functions.
 enum
@@ -145,12 +143,12 @@ struct struct_access_details
     /**
      * The next node you should pass to the struct_for_access function when you call it next
      */
-    struct node* next_node;
-    
+    struct node *next_node;
+
     /**
      * The first node in this structure query
      */
-    struct node* first_node;
+    struct node *first_node;
 
     /**
      * The calculated offset to be used to access the data in memory of this structure access
@@ -249,9 +247,8 @@ struct compile_process
     } scope;
 
     // The future of "scope" The replacement.
-    struct resolver_process* resolver;
+    struct resolver_process *resolver;
 };
-
 
 struct datatype
 {
@@ -266,43 +263,36 @@ struct datatype
     // of the primitive type or the structure size. Arrays not included!!!
     size_t size;
 
-
-
     // The pointer depth of this datatype
     int pointer_depth;
 
     // If this is a data type of structure or union then you can access one of the modifiers here
     union
     {
-        struct node* struct_node;
-        struct node* union_node;
-
-        struct array
-        {
-            struct array_brackets* brackets;
-            // This datatype size for the full array its self. 
-            // Calculation is datatype.size * EACH_INDEX.
-            size_t size;
-        } array;
+        struct node *struct_node;
+        struct node *union_node;
     };
-    
-    
+
+    struct array
+    {
+        struct array_brackets *brackets;
+        // This datatype size for the full array its self.
+        // Calculation is datatype.size * EACH_INDEX.
+        size_t size;
+    } array;
 };
-
-
 
 struct resolver_scope
 {
-    struct vector* entities;
+    struct vector *entities;
 
     // The next scope.
-    struct resolver_scope* next;
+    struct resolver_scope *next;
     // The previous scope.
-    struct resolver_scope* prev;
+    struct resolver_scope *prev;
 
     // Private data for the resolver scope.
-    void* private;
-
+    void *private;
 };
 
 struct compile_process;
@@ -319,26 +309,24 @@ struct resolver_entity
 
     // Can be NULL if no variable is present. otherwise equal to the var_node
     // that was resolved.
-    struct node* node;
-
+    struct node *node;
 
     // The scope that this entity belongs too.
-    struct resolver_scope* scope;
+    struct resolver_scope *scope;
 
     // The result this entity is apart of, NULL if no result is binded
-    struct resolver_result* result;
+    struct resolver_result *result;
 
     // The resolver process for this entity
-    struct resolver_process* resolver;
-    
+    struct resolver_process *resolver;
+
     // Private data that can be stored by the creator of the resolver entity
-    void* private;
+    void *private;
 
     // The next entity in the list
-    struct resolver_entity* next;
+    struct resolver_entity *next;
     // The previous entity in the list.
-    struct resolver_entity* prev;
-
+    struct resolver_entity *prev;
 };
 
 enum
@@ -352,7 +340,7 @@ enum
  * Resolver handler for new struct entities. The function must return the private data
  * to be set in the resolver_entity
  */
-typedef void*(*RESOLVER_NEW_STRUCT_ENTITY)(struct resolver_result* result, struct node* var_node, int offset, int flags);
+typedef void *(*RESOLVER_NEW_STRUCT_ENTITY)(struct resolver_result *result, struct node *var_node, int offset, int flags);
 
 /**
  * Used to merge two struct entities, generally their offsets for example. Receiver should merge them
@@ -360,7 +348,7 @@ typedef void*(*RESOLVER_NEW_STRUCT_ENTITY)(struct resolver_result* result, struc
  * 
  * Should return private data for the merged entities
  */
-typedef void*(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result* result, struct resolver_entity* left_entity, struct resolver_entity* right_entity);
+typedef void *(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity);
 
 /**
  * THis function pointer is called when we have an array expression processed
@@ -369,22 +357,22 @@ typedef void*(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result* result, str
  * \param array_var_entity the Variable entity representing the array access. I.e a[5] this would be "a"
  * \param index The numerical index in the array we are computing for, we need an array private that represents all you need for this given index
  */
-typedef void*(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_result* result, struct resolver_entity* array_var_entity, int index);
+typedef void *(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_result *result, struct resolver_entity *array_var_entity, int index);
 
 /**
  * User must delete the resolver scope private data. DO not delete the "scope" pointer!
  */
-typedef void(*RESOLVER_DELETE_SCOPE)(struct resolver_scope* scope);
+typedef void (*RESOLVER_DELETE_SCOPE)(struct resolver_scope *scope);
 
 /**
  * User must delete the resolver entity private data. DO not delete the "entity pointer!!!"
  */
-typedef void(*RESOLVER_DELETE_ENTITY)(struct resolver_entity* entity);
+typedef void (*RESOLVER_DELETE_ENTITY)(struct resolver_entity *entity);
 
 struct resolver_callbacks
-{   
+{
     // Must not be NULL!
-    // This function pointer is called when their is access to a new structure expression 
+    // This function pointer is called when their is access to a new structure expression
     // in the resolver. The function in question is required to return a new entity representing
     // that structure variable.
     RESOLVER_NEW_STRUCT_ENTITY new_struct_entity;
@@ -393,7 +381,7 @@ struct resolver_callbacks
     /**
      * Called when we need to create a new resolver_entity for the given array expression
      */
-     RESOLVER_NEW_ARRAY_ENTITY new_array_entity;
+    RESOLVER_NEW_ARRAY_ENTITY new_array_entity;
 
     RESOLVER_DELETE_SCOPE delete_scope;
     RESOLVER_DELETE_ENTITY delete_entity;
@@ -403,17 +391,14 @@ struct resolver_process
 {
     struct resolver_scopes
     {
-        struct resolver_scope* root;
-        struct resolver_scope* current;
+        struct resolver_scope *root;
+        struct resolver_scope *current;
     } scope;
 
-    struct compile_process* compiler;
+    struct compile_process *compiler;
 
     struct resolver_callbacks callbacks;
-
-    
 };
-
 
 enum
 {
@@ -424,26 +409,24 @@ enum
     RESOLVER_RESULT_FLAG_FAILED = 0b00000001,
     // THis bit is set if the full address has been computed
     // no runtime extras need to be done...
-    RESOLVER_RESULT_FLAG_RUNTIME_NEEDED_TO_FINISH_PATH=0b00000010
+    RESOLVER_RESULT_FLAG_RUNTIME_NEEDED_TO_FINISH_PATH = 0b00000010
 };
 
 struct resolver_result
 {
     // The first entity of this resolver result, it is never destroyed or removed
     // even when popping from the result. Use this as a base to know how the expression started
-    struct resolver_entity* first_entity_const;
+    struct resolver_entity *first_entity_const;
 
     // This variable is equal to the last structure entity in the given resolution.
-    struct resolver_entity* last_struct_entity;
-    
+    struct resolver_entity *last_struct_entity;
+
     // The root entity of this result
-    struct resolver_entity* entity;
+    struct resolver_entity *entity;
     // The last processed entity in the list
-    struct resolver_entity* last_entity;
+    struct resolver_entity *last_entity;
     int flags;
 };
-
-
 
 enum
 {
@@ -476,11 +459,10 @@ struct token
     };
 };
 
-
 struct sizeable_node
 {
     size_t size;
-    struct node* node;
+    struct node *node;
 };
 
 enum
@@ -510,11 +492,11 @@ enum
 
 enum
 {
-    DATATYPE_FLAG_IS_SIGNED =  0b00000001,
-    DATATYPE_FLAG_IS_STATIC =  0b00000010,
-    DATATYPE_FLAG_IS_CONST  =  0b00000100,
+    DATATYPE_FLAG_IS_SIGNED = 0b00000001,
+    DATATYPE_FLAG_IS_STATIC = 0b00000010,
+    DATATYPE_FLAG_IS_CONST = 0b00000100,
     DATATYPE_FLAG_IS_POINTER = 0b00001000,
-    DATATYPE_FLAG_IS_ARRAY =   0b00010000
+    DATATYPE_FLAG_IS_ARRAY = 0b00010000
 };
 
 enum
@@ -529,13 +511,11 @@ enum
     DATA_TYPE_UNION
 };
 
-
 struct array_brackets
 {
     // Vector of node brackets.
-    struct vector* n_brackets;
+    struct vector *n_brackets;
 };
-
 
 /**
  * Scopes are composed of a hireachy of variable nodes
@@ -590,7 +570,7 @@ enum
     // For example the node that represents decimal 50 would not have this flag set test(50)
     // Since it is the only function argument. However in this case test(50*a) the number node
     // of "50" would have this flag set as its apart of an expression.
-    NODE_FLAG_INSIDE_EXPRESSION  = 0b00000001,
+    NODE_FLAG_INSIDE_EXPRESSION = 0b00000001,
     // This flag is set if this node is a cloned node
     // cloned nodes can be modified freely and modifying a cloned node
     // does not affect the original node.
@@ -598,8 +578,6 @@ enum
     // be responsible for the memory.
     NODE_FLAG_CLONED = 0b00000010
 };
-
-
 
 struct node
 {
@@ -622,7 +600,7 @@ struct node
         struct parenthesis
         {
             // The expression between the brackets ()
-            struct node* exp;
+            struct node *exp;
         } parenthesis;
 
         // Represents unary expressions i.e "~abc", "-a", "-90"
@@ -630,8 +608,8 @@ struct node
         {
             // In the case of indirection the "op" variable will only equal to one "*"
             // you can find the depth in the indirection structure within.
-            const char* op;
-            struct node* operand;
+            const char *op;
+            struct node *operand;
 
             union
             {
@@ -644,12 +622,12 @@ struct node
                 } indirection;
             };
         } unary;
-        
+
         // Represents a C structure in the tree.
         struct _struct
         {
-            const char* name;
-            struct node* body_n;
+            const char *name;
+            struct node *body_n;
         } _struct;
 
         struct function
@@ -686,8 +664,8 @@ struct node
 
             // Equal to the largest variable declaration node in the given body
             // NULL if no variable node exists within the body.
-            struct node* largest_var_node;
-      
+            struct node *largest_var_node;
+
         } body;
 
         struct variable
@@ -729,7 +707,7 @@ struct node
         {
             // The inner expression for the given bracket.
             // i.e [50] inner would be NODE_TYPE_NUMBER that contains a node that represents number 50
-            struct node* inner;
+            struct node *inner;
         } bracket;
 
         union statement
@@ -824,7 +802,7 @@ struct scope *scope_new(struct compile_process *process, int flags);
 void scope_finish(struct compile_process *process);
 
 struct scope *scope_create_root(struct compile_process *process);
-void scope_free_root(struct compile_process* process);
+void scope_free_root(struct compile_process *process);
 
 /**
  * Pushes an element to the current scope
@@ -845,7 +823,7 @@ void scope_iteration_end(struct scope *scope);
 /**
  * Returns the current scope for the code generator
  */
-struct scope* scope_current(struct compile_process* process);
+struct scope *scope_current(struct compile_process *process);
 
 /**
  * Registers a symbol to the symbol table
@@ -856,18 +834,16 @@ struct symbol *symresolver_register_symbol(struct compile_process *process, cons
  */
 struct symbol *symresolver_get_symbol(struct compile_process *process, const char *name);
 
-
 /**
  * Gets the node from the symbol data
  */
-struct node* symresolver_node(struct symbol* sym);
+struct node *symresolver_node(struct symbol *sym);
 
 /**
  * Builds a symbol for the given node.
  * Note: The node must be fully parsed and initialized
  */
-void symresolver_build_for_node(struct compile_process* process, struct node* node);
-
+void symresolver_build_for_node(struct compile_process *process, struct node *node);
 
 /**
  * Helper routines helper.c
@@ -916,7 +892,7 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
  * 
  * Likewise if only "a" was provided then the "a" variable node in the test structure would be returned.
  */
-struct node *struct_for_access(struct resolver_process *process, struct node *node, const char *type_str, int flags, struct struct_access_details* details_out);
+struct node *struct_for_access(struct resolver_process *process, struct node *node, const char *type_str, int flags, struct struct_access_details *details_out);
 /**
  * Finds the first node of the given type.
  * 
@@ -925,7 +901,7 @@ struct node *struct_for_access(struct resolver_process *process, struct node *no
  * the right operand of the expression i.e a.E then you would find that the node of "b"
  * would be returned
  */
-struct node* first_node_of_type(struct node* node, int type);
+struct node *first_node_of_type(struct node *node, int type);
 
 /**
  * If the node provided has the same type we are looking for then its self is returned
@@ -944,9 +920,9 @@ struct node *first_node_of_type_from_left(struct node *node, int type, int depth
 /**
  * Returns true if the given node is apart of an expression
  */
-bool node_in_expression(struct node* node);
+bool node_in_expression(struct node *node);
 
-bool node_is_root_expression(struct node* node);
+bool node_is_root_expression(struct node *node);
 
 /**
  * Returns true if the given operator is an access operator.
@@ -957,20 +933,24 @@ bool node_is_root_expression(struct node* node);
  */
 bool is_access_operator(const char *op);
 
-bool is_array_node(struct node* node);
+bool is_array_node(struct node *node);
 
 /**
  * Returns true if this node represents an access node expression
  */
-bool is_access_node(struct node* node);
+bool is_access_node(struct node *node);
 
+/**
+ * Returns true if this is an access node and it uses the given operator
+ */
+bool is_access_node_with_op(struct node *node, const char *op);
 
 /**
  * Just like is_access_operator except it checks on a node basis rather than operator
  */
-bool is_access_operator_node(struct node* node);
+bool is_access_operator_node(struct node *node);
 
-bool op_is_indirection(const char* op);
+bool op_is_indirection(const char *op);
 
 int align_value(int val, int to);
 
@@ -985,18 +965,17 @@ int align_value_treat_positive(int val, int to);
  */
 void variable_align_offset(struct node *var_node, int *stack_offset_out);
 
-void var_node_set_offset(struct node* node, int offset);
+void var_node_set_offset(struct node *node, int offset);
 
 /**
  * Sums all the padding for a vector of variable nodes.
  * Non variable nodes are ignored
  */
-int compute_sum_padding(struct vector* vec);
+int compute_sum_padding(struct vector *vec);
 /**
  * Sums all the padding for a body of variable nodes, non variable nodes are ignored
  */
-int compute_sum_padding_for_body(struct node* node);
-
+int compute_sum_padding_for_body(struct node *node);
 
 /**
  * Calculates padding for the given value. Pads to "to"
@@ -1006,12 +985,11 @@ int padding(int val, int to);
 /**
  * Returns true if the given variable node is a primative variable
  */
-bool variable_node_is_primative(struct node* node);
+bool variable_node_is_primative(struct node *node);
 
-
-struct node* node_from_symbol(struct compile_process* current_process, const char* name);
-struct node* node_from_sym(struct symbol* sym);
-struct node* struct_node_for_name(struct compile_process* current_process, const char* struct_name);
+struct node *node_from_symbol(struct compile_process *current_process, const char *name);
+struct node *node_from_sym(struct symbol *sym);
+struct node *struct_node_for_name(struct compile_process *current_process, const char *struct_name);
 
 /**
  * Returns a node that has the given structure for the provided var_node.
@@ -1022,37 +1000,34 @@ struct node* struct_node_for_name(struct compile_process* current_process, const
  * Calling this function would return the structure node that represents struct "abc" giving
  * accessing to its entire body and attributes.
  */
-struct node* variable_struct_node(struct node* var_node);
-
+struct node *variable_struct_node(struct node *var_node);
 
 /**
  * Returns true if the given node is a variable node that is a structure variable and
  * that structures memory is padded. Otherwise false.
  */
-bool variable_struct_padded(struct node* var_node);
-
+bool variable_struct_padded(struct node *var_node);
 
 /**
  * Returns the largest variable node for the given structure, otherwise NULL.
  */
-struct node* variable_struct_largest_variable_node(struct node* var_node);
+struct node *variable_struct_largest_variable_node(struct node *var_node);
 
 /**
  * Returns the largest variable declaration inside the provided body.
  * Largest being the variable that takes up the most room. Primitive variables only.
  */
-struct node* body_largest_variable_node(struct node* body_node);
-
+struct node *body_largest_variable_node(struct node *body_node);
 
 /**
  * Array
  * 
  */
 
-struct array_brackets* array_brackets_new();
-void array_brackets_free(struct array_brackets* brackets);
-void array_brackets_add(struct array_brackets* brackets, struct node* bracket_node);
-size_t array_brackets_calculate_size(struct datatype* type, struct array_brackets* brackets);
+struct array_brackets *array_brackets_new();
+void array_brackets_free(struct array_brackets *brackets);
+void array_brackets_add(struct array_brackets *brackets, struct node *bracket_node);
+size_t array_brackets_calculate_size(struct datatype *type, struct array_brackets *brackets);
 
 /**
  * Returns the full variable size for the given var_node. The full size in memory
@@ -1060,15 +1035,14 @@ size_t array_brackets_calculate_size(struct datatype* type, struct array_bracket
  * 
  * I.e short abc[8]; will return 8*2;
  */
-size_t variable_size(struct node* var_node);
+size_t variable_size(struct node *var_node);
 
-bool is_array_operator(const char* op);
+bool is_array_operator(const char *op);
 
 /**
  * Returns true if the address can be caclulated at compile time
  */
-bool is_compile_computable(struct node* node);
-
+bool is_compile_computable(struct node *node);
 
 /**
  * Computes the array offset for the given expression node or array bracket node.
@@ -1077,41 +1051,39 @@ bool is_compile_computable(struct node* node);
  * \param single_element_size THe size of the type of the array. I.e an array of ints would be "4"
  */
 
-int compute_array_offset(struct node* node, size_t single_element_size);
-
+int compute_array_offset(struct node *node, size_t single_element_size);
 
 // Resolver functions
 
-struct resolver_result* resolver_new_result(struct resolver_process* process);
-void resolver_result_free(struct resolver_result* result);
-bool resolver_result_failed(struct resolver_result* result);
-bool resolver_result_ok(struct resolver_result* result);
+struct resolver_result *resolver_new_result(struct resolver_process *process);
+void resolver_result_free(struct resolver_result *result);
+bool resolver_result_failed(struct resolver_result *result);
+bool resolver_result_ok(struct resolver_result *result);
 
 /**
  * Returns true if the resolver entity requires additional
  * runtime code to compute real offset.
  * False if this entity can be computed at compile time
  */
-bool resolver_entity_runtime_required(struct resolver_entity* entity);
+bool resolver_entity_runtime_required(struct resolver_entity *entity);
 
 /**
  * Returns true if the resolver result is completed and no more processing
  * has to be done to find a working path
  */
-bool resolver_result_finished(struct resolver_result* result);
+bool resolver_result_finished(struct resolver_result *result);
 
-
-struct resolver_entity* resolver_result_entity(struct resolver_result* result);
-struct compile_process* resolver_compiler(struct resolver_process* process);
-struct resolver_scope* resolver_new_scope(struct resolver_process* resolver, void* private);
-void resolver_finish_scope(struct resolver_process* resolver);
-struct resolver_process* resolver_new_process(struct compile_process* compiler, struct resolver_callbacks* callbacks);
-struct resolver_entity* resolver_new_entity_for_var_node(struct resolver_process* process, struct node* var_node, void* private);
-struct resolver_entity* resolver_get_variable_in_scope(const char* var_name, struct resolver_scope* scope);
-struct resolver_entity *resolver_get_variable(struct resolver_result* result, struct resolver_process *resolver, const char *var_name);
-struct resolver_result *resolver_follow(struct resolver_process* resolver, struct node *node);
-struct resolver_entity* resolver_result_entity_root(struct resolver_result* result);
-struct resolver_entity* resolver_result_entity_next(struct resolver_entity* entity);
+struct resolver_entity *resolver_result_entity(struct resolver_result *result);
+struct compile_process *resolver_compiler(struct resolver_process *process);
+struct resolver_scope *resolver_new_scope(struct resolver_process *resolver, void *private);
+void resolver_finish_scope(struct resolver_process *resolver);
+struct resolver_process *resolver_new_process(struct compile_process *compiler, struct resolver_callbacks *callbacks);
+struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private);
+struct resolver_entity *resolver_get_variable_in_scope(const char *var_name, struct resolver_scope *scope);
+struct resolver_entity *resolver_get_variable(struct resolver_result *result, struct resolver_process *resolver, const char *var_name);
+struct resolver_result *resolver_follow(struct resolver_process *resolver, struct node *node);
+struct resolver_entity *resolver_result_entity_root(struct resolver_result *result);
+struct resolver_entity *resolver_result_entity_next(struct resolver_entity *entity);
 
 /**
  * Attempts to peek through the tree at the given node and looks for a datatype
@@ -1124,13 +1096,12 @@ struct resolver_entity* resolver_result_entity_next(struct resolver_entity* enti
  * If you call this function on a function call then the return type of the function call will be returned
  * the deepest possible type will be returned.
  */
-struct datatype* resolver_get_datatype(struct node* node);
-
+struct datatype *resolver_get_datatype(struct node *node);
 
 // Node
 
-struct node* node_clone(struct node* node);
-const char* node_var_type_str(struct node* var_node);
-const char* node_var_name(struct node* var_node);
+struct node *node_clone(struct node *node);
+const char *node_var_type_str(struct node *var_node);
+const char *node_var_name(struct node *var_node);
 
 #endif

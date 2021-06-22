@@ -23,9 +23,9 @@ struct dog
 
 };
 
-struct dog d[4];
+int abc[3][2][4];
 int main()
 {
-    z = d[1].b->kk;
+    z = abc[2][1][3];
 
 }

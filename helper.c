@@ -3,6 +3,7 @@
  */
 
 #include "compiler.h"
+#include "helpers/vector.h"
 #include <assert.h>
 
 /**
@@ -138,7 +139,7 @@ struct node *_struct_for_access(struct resolver_process *process, struct node *n
         // No type? Then we have not located the first variable yet.
         if (type_str == NULL)
         {
-         //   var_node = resolver_get_variable(process, node->sval)->node;
+            //   var_node = resolver_get_variable(process, node->sval)->node;
             details_out->first_node = var_node;
             return var_node;
         }
@@ -214,8 +215,7 @@ bool is_access_node(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_access_operator(node->exp.op);
 }
 
-
-bool is_access_node_with_op(struct node *node, const char* op)
+bool is_access_node_with_op(struct node *node, const char *op)
 {
     return is_access_node(node) && S_EQ(node->exp.op, op);
 }
@@ -574,4 +574,25 @@ int compute_array_offset_with_multiplier(struct node *node, size_t single_elemen
 int compute_array_offset(struct node *node, size_t single_element_size)
 {
     return compute_array_offset_with_multiplier(node, single_element_size, 0);
+}
+
+int array_offset(struct datatype *dtype, int index, int index_value)
+{
+    if (index == vector_count(dtype->array.brackets->n_brackets)-1)
+        return index_value * dtype->size;
+
+    vector_set_peek_pointer(dtype->array.brackets->n_brackets, index+1);
+    
+    int size_sum = index_value;
+    struct node *bracket_node = vector_peek_ptr(dtype->array.brackets->n_brackets);
+    while (bracket_node)
+    {
+        assert(bracket_node->bracket.inner->type == NODE_TYPE_NUMBER);
+        int declared_index = bracket_node->bracket.inner->llnum;
+        int size_value = declared_index;
+        size_sum *= size_value;
+        bracket_node = vector_peek_ptr(dtype->array.brackets->n_brackets);
+    }
+
+    return size_sum * dtype->size;
 }

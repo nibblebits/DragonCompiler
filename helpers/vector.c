@@ -108,6 +108,17 @@ void* vector_peek_ptr(struct vector* vector)
     return *ptr;
 }
 
+void* vector_peek_ptr_at(struct vector* vector, int index)
+{
+    void** ptr = vector_at(vector, index);
+    if (!ptr)
+    {
+        return NULL;
+    }
+
+    return *ptr;
+}
+
 void* vector_back_ptr(struct vector* vector)
 {
     void** ptr = vector_back(vector);

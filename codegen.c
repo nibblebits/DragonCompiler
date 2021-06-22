@@ -1107,9 +1107,10 @@ void* codegen_merge_struct_entity(struct resolver_result* result, struct resolve
     return codegen_new_entity_data(result->first_entity_const->node, left_offset+right_offset, 0);
 }
 
-void *codegen_new_array_entity(struct resolver_result* result, struct resolver_entity *array_entity, int index)
+void *codegen_new_array_entity(struct resolver_result* result, struct resolver_entity *array_entity, int index_val, int index)
 {
-    int final_offset = codegen_entity_private(array_entity)->offset+(index * array_entity->node->var.type.size);
+    int index_offset = array_offset(&array_entity->dtype, index, index_val);
+    int final_offset = codegen_entity_private(array_entity)->offset + index_offset;
     return codegen_new_entity_data(array_entity->node, final_offset, 0);
 
 }

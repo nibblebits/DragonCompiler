@@ -307,8 +307,9 @@ static struct resolver_entity* resolver_follow_array(struct resolver_process* re
     struct node* right_operand = node->exp.right->bracket.inner;
     if (right_operand->type == NODE_TYPE_NUMBER)
     {
-        struct resolver_entity* entity = resolver_create_new_entity_for_var_node(resolver, left_entity->node, resolver->callbacks.new_array_entity(result, left_entity, right_operand->llnum));
+        struct resolver_entity* entity = resolver_create_new_entity_for_var_node(resolver, left_entity->node, resolver->callbacks.new_array_entity(result, left_entity, right_operand->llnum, result->last_array_index));
         resolver_result_entity_push(result, entity);
+        result->last_array_index++;
         return entity;
     }
 

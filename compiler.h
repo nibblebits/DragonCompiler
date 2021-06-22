@@ -355,9 +355,10 @@ typedef void *(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result *result, st
  * by the resolver.
  * 
  * \param array_var_entity the Variable entity representing the array access. I.e a[5] this would be "a"
+*  \param index_val numerical value passed to this index.
  * \param index The numerical index in the array we are computing for, we need an array private that represents all you need for this given index
  */
-typedef void *(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_result *result, struct resolver_entity *array_var_entity, int index);
+typedef void *(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_result *result, struct resolver_entity *array_var_entity, int index_val, int index);
 
 /**
  * User must delete the resolver scope private data. DO not delete the "scope" pointer!
@@ -420,6 +421,9 @@ struct resolver_result
 
     // This variable is equal to the last structure entity in the given resolution.
     struct resolver_entity *last_struct_entity;
+
+    // The last array index processed in this result.
+    int last_array_index;
 
     // The root entity of this result
     struct resolver_entity *entity;
@@ -1052,7 +1056,7 @@ bool is_compile_computable(struct node *node);
  */
 
 int compute_array_offset(struct node *node, size_t single_element_size);
-
+int array_offset(struct datatype *dtype, int index, int index_value);
 // Resolver functions
 
 struct resolver_result *resolver_new_result(struct resolver_process *process);

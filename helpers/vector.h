@@ -31,6 +31,7 @@ struct vector
 struct vector* vector_create(size_t esize);
 void vector_free(struct vector* vector);
 void* vector_at(struct vector* vector, int index);
+void* vector_peek_ptr_at(struct vector* vector, int index);
 void* vector_peek_no_increment(struct vector* vector);
 void* vector_peek(struct vector* vector);
 void vector_set_flag(struct vector* vector, int flag);

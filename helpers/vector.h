@@ -51,7 +51,11 @@ void* vector_back(struct vector* vector);
 void* vector_back_ptr(struct vector* vector);
 void* vector_back_ptr_or_null(struct vector* vector);
 
+/**
+ * Returns true if this vector is empty
+ */
 bool vector_empty(struct vector* vector);
+void vector_clear(struct vector* vector);
 
 int vector_count(struct vector* vector);
 #endif

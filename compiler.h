@@ -410,7 +410,21 @@ enum
     RESOLVER_RESULT_FLAG_FAILED = 0b00000001,
     // THis bit is set if the full address has been computed
     // no runtime extras need to be done...
-    RESOLVER_RESULT_FLAG_RUNTIME_NEEDED_TO_FINISH_PATH = 0b00000010
+    RESOLVER_RESULT_FLAG_RUNTIME_NEEDED_TO_FINISH_PATH = 0b00000010,
+
+    // True if we are currently resolving an array in this part of the expression
+    RESOLVER_RESULT_FLAG_PROCESSING_ARRAY_ENTITIES = 0b00000100
+};
+
+/**
+ * Temporary structure to help guide array data.
+ */
+struct resolver_array_data
+{
+    // Holds nodes of type resolver_entity, representing array entities.
+    // That are currently being processed.
+    // Used to help guide the algorithm in calculating static offset.
+    struct vector* array_entities;
 };
 
 struct resolver_result
@@ -422,8 +436,8 @@ struct resolver_result
     // This variable is equal to the last structure entity in the given resolution.
     struct resolver_entity *last_struct_entity;
 
-    // The last array index processed in this result.
-    int last_array_index;
+    struct resolver_array_data array_data;
+
 
     // The root entity of this result
     struct resolver_entity *entity;

@@ -161,6 +161,14 @@ bool vector_empty(struct vector* vector)
     return vector_count(vector) == 0;
 }
 
+void vector_clear(struct vector* vector)
+{
+    while(vector_count(vector))
+    {
+        vector_pop(vector);
+    }
+}
+
 void* vector_back_or_null(struct vector* vector)
 {
     // We can't go back or we will access an invalid element

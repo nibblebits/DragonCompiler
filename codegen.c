@@ -189,7 +189,13 @@ void codegen_new_scope(int flags)
 {
     struct codegen_scope_data *scope_data = calloc(sizeof(struct codegen_scope_data), 1);
     scope_data->flags |= flags;
-    resolver_new_scope(current_process->resolver, scope_data);
+
+    int resolver_scope_flags = 0;
+    if (flags & CODEGEN_SCOPE_FLAG_IS_LOCAL_STACK)
+    {
+        resolver_scope_flags |= RESOLVER_SCOPE_FLAG_IS_STACK;
+    }
+    resolver_new_scope(current_process->resolver, scope_data, resolver_scope_flags);
 }
 
 void codegen_finish_scope()
@@ -889,6 +895,7 @@ void codegen_generate_global_variable(struct node *node)
     }
     assert(node->type == NODE_TYPE_VARIABLE);
     codegen_new_scope_entity(node, 0, 0);
+
 }
 
 size_t codegen_compute_stack_size(struct vector *vec)
@@ -1093,25 +1100,36 @@ void codegen_generate_root()
  * 
  * I.e "a.b.c" will only be called for "b". "c will call another function
  */
-void *codegen_new_struct_entity(struct resolver_result* result, struct node *var_node, int offset, int flags)
+void *codegen_new_struct_entity(struct resolver_result* result, struct node *var_node, int offset, struct resolver_scope* scope)
 {
-    int entity_flags = 0;
-    struct codegen_entity_data *result_entity = codegen_new_entity_data(result->last_struct_entity->node, offset, entity_flags);
+    int entity_flags = 0x00;
+    if (scope->flags & RESOLVER_SCOPE_FLAG_IS_STACK)
+    {
+        entity_flags |= CODEGEN_SCOPE_FLAG_IS_LOCAL_STACK;
+    }
+
+    struct codegen_entity_data *result_entity = codegen_new_entity_data(result->identifier->node, offset, entity_flags);
     return result_entity;
 }
 
-void* codegen_merge_struct_entity(struct resolver_result* result, struct resolver_entity* left_entity, struct resolver_entity* right_entity)
+void* codegen_merge_struct_entity(struct resolver_result* result, struct resolver_entity* left_entity, struct resolver_entity* right_entity, struct resolver_scope* scope)
 {
+    int entity_flags = 0x00;
+    if (scope->flags & RESOLVER_SCOPE_FLAG_IS_STACK)
+    {
+        entity_flags |= CODEGEN_SCOPE_FLAG_IS_LOCAL_STACK;
+    }
+    
     int left_offset = codegen_entity_private(left_entity)->offset;
     int right_offset = codegen_entity_private(right_entity)->offset;
-    return codegen_new_entity_data(result->first_entity_const->node, left_offset+right_offset, 0);
+    return codegen_new_entity_data(result->first_entity_const->node, left_offset+right_offset, entity_flags);
 }
 
 void *codegen_new_array_entity(struct resolver_result* result, struct resolver_entity *array_entity, int index_val, int index)
 {
     int index_offset = array_offset(&array_entity->dtype, index, index_val);
     int final_offset = codegen_entity_private(array_entity)->offset + index_offset;
-    return codegen_new_entity_data(array_entity->node, final_offset, 0);
+    return codegen_new_entity_data(result->identifier->node, final_offset, 0);
 
 }
 

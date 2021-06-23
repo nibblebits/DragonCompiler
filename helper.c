@@ -81,7 +81,7 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
         // If the STRUCT_NO_OFFSET flag is set then we must not recalculate any positions.
         if (var_node_last)
         {
-            position += var_node_last->var.type.size;
+            position += variable_size(var_node_last);
             if (variable_node_is_primative(var_node_cur))
             {
                 position = align_value_treat_positive(position, var_node_cur->var.type.size);

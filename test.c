@@ -16,16 +16,17 @@ struct elf
 
 struct dog
 {
-    int k;
-    int e;
-    int z;
-    struct elf* b;
-
+    int e[4];
+    struct elf b;
 };
 
-int abc[3][2][4];
+
+struct dog sdog;
 int main()
 {
-    z = abc[2][1][3];
+    int z;
+    int e;
+
+    z = sdog.b.e;
 
 }

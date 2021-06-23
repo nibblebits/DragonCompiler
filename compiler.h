@@ -282,8 +282,17 @@ struct datatype
     } array;
 };
 
+enum
+{
+    // Represents this resolver scope is a stack scope not a global scope.
+    // I.e stack variables are present not global variables.
+    RESOLVER_SCOPE_FLAG_IS_STACK = 0b00000001
+};
 struct resolver_scope
 {
+    // Flags for the resolver scope that describe it.
+    int flags;
+
     struct vector *entities;
 
     // The next scope.
@@ -293,14 +302,17 @@ struct resolver_scope
 
     // Private data for the resolver scope.
     void *private;
+    
 };
 
 struct compile_process;
 
 enum
 {
-    RESOLVER_ENTITY_COMPILE_TIME_ENTITY = 0b00000001,
+    RESOLVER_ENTITY_FLAG_COMPILE_TIME_ENTITY = 0b00000001,
+    RESOLVER_ENTITY_FLAG_IS_STACK = 0b00000010,
 };
+
 struct resolver_entity
 {
     int flags;
@@ -340,7 +352,7 @@ enum
  * Resolver handler for new struct entities. The function must return the private data
  * to be set in the resolver_entity
  */
-typedef void *(*RESOLVER_NEW_STRUCT_ENTITY)(struct resolver_result *result, struct node *var_node, int offset, int flags);
+typedef void *(*RESOLVER_NEW_STRUCT_ENTITY)(struct resolver_result *result, struct node *var_node, int offset, struct resolver_scope* scope);
 
 /**
  * Used to merge two struct entities, generally their offsets for example. Receiver should merge them
@@ -348,7 +360,7 @@ typedef void *(*RESOLVER_NEW_STRUCT_ENTITY)(struct resolver_result *result, stru
  * 
  * Should return private data for the merged entities
  */
-typedef void *(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity);
+typedef void *(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity, struct resolver_scope* scope);
 
 /**
  * THis function pointer is called when we have an array expression processed
@@ -433,8 +445,11 @@ struct resolver_result
     // even when popping from the result. Use this as a base to know how the expression started
     struct resolver_entity *first_entity_const;
 
-    // This variable is equal to the last structure entity in the given resolution.
-    struct resolver_entity *last_struct_entity;
+    // This variable represents the variable of the start of this expression
+    struct resolver_entity *identifier;
+
+    // Equal to the last structure entity discovered.
+    struct resolver_entity* last_struct_entity;
 
     struct resolver_array_data array_data;
 
@@ -1093,7 +1108,7 @@ bool resolver_result_finished(struct resolver_result *result);
 
 struct resolver_entity *resolver_result_entity(struct resolver_result *result);
 struct compile_process *resolver_compiler(struct resolver_process *process);
-struct resolver_scope *resolver_new_scope(struct resolver_process *resolver, void *private);
+struct resolver_scope *resolver_new_scope(struct resolver_process *resolver, void *private, int flags);
 void resolver_finish_scope(struct resolver_process *resolver);
 struct resolver_process *resolver_new_process(struct compile_process *compiler, struct resolver_callbacks *callbacks);
 struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private);

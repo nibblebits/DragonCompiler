@@ -1146,4 +1146,7 @@ struct node *node_clone(struct node *node);
 const char *node_var_type_str(struct node *var_node);
 const char *node_var_name(struct node *var_node);
 
+
+// Preprocessor
+int preprocessor_run(struct compile_process* compiler, const char* file);
 #endif

@@ -311,6 +311,7 @@ enum
 {
     RESOLVER_ENTITY_FLAG_COMPILE_TIME_ENTITY = 0b00000001,
     RESOLVER_ENTITY_FLAG_IS_STACK = 0b00000010,
+    RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME = 0b00000100
 };
 
 struct resolver_entity
@@ -335,6 +336,14 @@ struct resolver_entity
     // Private data that can be stored by the creator of the resolver entity
     void *private;
 
+    union
+    {
+        struct resolver_array_runtime
+        {
+            struct node* index_node;
+        } array_runtime;
+    };
+    
     // The next entity in the list
     struct resolver_entity *next;
     // The previous entity in the list.

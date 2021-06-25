@@ -12,7 +12,6 @@ static struct expression_state blank_state = {};
 #define codegen_err(...) \
     compiler_error(current_process, __VA_ARGS__)
 
-
 /**
  * Specifies current history for the given operation/expression
  */
@@ -522,14 +521,33 @@ const char *codegen_byte_word_or_dword(size_t size)
 void codegen_generate_variable_access(struct node *node, struct resolver_result *result, struct history *history)
 {
     struct resolver_entity *entity = resolver_result_entity_root(result);
-    codegen_gen_mov_or_math("eax", node, history->flags, entity);
+    assert(entity);
+
+    if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
+    {
+        // This entity represents array access that requires runtime assistance
+        codegen_generate_expressionable(entity->array_runtime.index_node, history);
+        register_unset_flag(REGISTER_EAX_IS_USED);
+        asm_push("mov eax, [%s+eax]", codegen_entity_private(entity)->address);
+    }
+    else
+    {
+        codegen_gen_mov_or_math("eax", node, history->flags, entity);
+    }
+
     entity = resolver_result_entity_next(entity);
     while (entity)
     {
-       asm_push("mov eax, [eax+%i]", codegen_entity_private(entity)->offset);
+        if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
+        {
+            codegen_generate_expressionable(entity->array_runtime.index_node, history);
+            register_unset_flag(REGISTER_EAX_IS_USED);
+        }
+
+        asm_push("mov eax, [eax+%i]", codegen_entity_private(entity)->offset);
+
         entity = resolver_result_entity_next(entity);
     }
-
 }
 
 void codegen_generate_assignment_expression(struct node *node, struct history *history)
@@ -737,7 +755,7 @@ void codegen_generate_identifier(struct node *node, struct history *history)
 {
     struct resolver_result *result = resolver_follow(current_process->resolver, node);
     assert(resolver_result_ok(result));
-    
+
     struct resolver_entity *entity = resolver_result_entity(result);
     codegen_generate_variable_access(node, result, history);
 }
@@ -895,7 +913,6 @@ void codegen_generate_global_variable(struct node *node)
     }
     assert(node->type == NODE_TYPE_VARIABLE);
     codegen_new_scope_entity(node, 0, 0);
-
 }
 
 size_t codegen_compute_stack_size(struct vector *vec)
@@ -1100,7 +1117,7 @@ void codegen_generate_root()
  * 
  * I.e "a.b.c" will only be called for "b". "c will call another function
  */
-void *codegen_new_struct_entity(struct resolver_result* result, struct node *var_node, int offset, struct resolver_scope* scope)
+void *codegen_new_struct_entity(struct resolver_result *result, struct node *var_node, int offset, struct resolver_scope *scope)
 {
     int entity_flags = 0x00;
     if (scope->flags & RESOLVER_SCOPE_FLAG_IS_STACK)
@@ -1112,25 +1129,24 @@ void *codegen_new_struct_entity(struct resolver_result* result, struct node *var
     return result_entity;
 }
 
-void* codegen_merge_struct_entity(struct resolver_result* result, struct resolver_entity* left_entity, struct resolver_entity* right_entity, struct resolver_scope* scope)
+void *codegen_merge_struct_entity(struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity, struct resolver_scope *scope)
 {
     int entity_flags = 0x00;
     if (scope->flags & RESOLVER_SCOPE_FLAG_IS_STACK)
     {
         entity_flags |= CODEGEN_SCOPE_FLAG_IS_LOCAL_STACK;
     }
-    
+
     int left_offset = codegen_entity_private(left_entity)->offset;
     int right_offset = codegen_entity_private(right_entity)->offset;
-    return codegen_new_entity_data(result->first_entity_const->node, left_offset+right_offset, entity_flags);
+    return codegen_new_entity_data(result->first_entity_const->node, left_offset + right_offset, entity_flags);
 }
 
-void *codegen_new_array_entity(struct resolver_result* result, struct resolver_entity *array_entity, int index_val, int index)
+void *codegen_new_array_entity(struct resolver_result *result, struct resolver_entity *array_entity, int index_val, int index)
 {
     int index_offset = array_offset(&array_entity->dtype, index, index_val);
     int final_offset = codegen_entity_private(array_entity)->offset + index_offset;
     return codegen_new_entity_data(result->identifier->node, final_offset, 0);
-
 }
 
 void codegen_delete_entity(struct resolver_entity *entity)
@@ -1150,7 +1166,7 @@ int codegen(struct compile_process *process)
     scope_create_root(process);
 
     vector_set_peek_pointer(process->node_tree_vec, 0);
-    process->resolver = resolver_new_process(process, &(struct resolver_callbacks){.new_struct_entity = codegen_new_struct_entity, .merge_struct_entity=codegen_merge_struct_entity, .new_array_entity = codegen_new_array_entity, .delete_entity = codegen_delete_entity, .delete_scope = codegen_delete_scope});
+    process->resolver = resolver_new_process(process, &(struct resolver_callbacks){.new_struct_entity = codegen_new_struct_entity, .merge_struct_entity = codegen_merge_struct_entity, .new_array_entity = codegen_new_array_entity, .delete_entity = codegen_delete_entity, .delete_scope = codegen_delete_scope});
     // Global variables and down the tree locals... Global scope lets create it.
     codegen_new_scope(0);
     codegen_generate_data_section();

@@ -60,7 +60,7 @@ void resolver_result_free(struct resolver_result *result)
     free(result);
 }
 
-static struct resolver_scope* resolver_process_scope_current(struct resolver_process* process)
+static struct resolver_scope *resolver_process_scope_current(struct resolver_process *process)
 {
     return process->scope.current;
 }
@@ -267,7 +267,7 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
     struct resolver_entity *right_entity = resolver_result_pop(result);
     struct resolver_entity *left_entity = resolver_result_pop(result);
 
-    struct resolver_scope* var_scope = result->identifier->scope;
+    struct resolver_scope *var_scope = result->identifier->scope;
 
     if (is_array_node(node->exp.left) && is_access_node_with_op(node->exp.right, "->"))
     {
@@ -295,6 +295,12 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
     return result_entity;
 }
 
+static void resolver_array_push(struct resolver_result *result, struct resolver_entity *entity)
+{
+    resolver_result_entity_push(result, entity);
+    vector_push(resolver_array_data_vec(result), &entity);
+}
+
 static struct resolver_entity *resolver_follow_array(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     bool first_array_bracket = result->flags & RESOLVER_RESULT_FLAG_PROCESSING_ARRAY_ENTITIES;
@@ -306,15 +312,28 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
     struct resolver_entity *entity = NULL;
     int last_array_index = vector_count(resolver_array_data_vec(result));
     struct node *right_operand = node->exp.right->bracket.inner;
-    if (right_operand->type == NODE_TYPE_NUMBER)
+    if (left_entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
+    {
+        // Push the left entity back to the stack
+        resolver_result_entity_push(result, left_entity);
+        entity = resolver_entity_clone(left_entity);
+        entity->array_runtime.index_node = right_operand;
+    }
+    else if (right_operand->type == NODE_TYPE_NUMBER)
     {
         entity = resolver_create_new_entity_for_var_node(resolver, result->identifier->node, resolver->callbacks.new_array_entity(result, left_entity, right_operand->llnum, last_array_index));
-        resolver_result_entity_push(result, entity);
-        vector_push(resolver_array_data_vec(result), &entity);
     }
-
+    else
+    {
+        // This needs to be computed at runtime.
+        entity = left_entity;
+        entity->flags |= RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME;
+        // Set the index node expression so caller knows how to resolve this.
+        entity->array_runtime.index_node = right_operand;
+    }
+    
+    resolver_array_push(result, entity);
     //[[sdog.e][]1]]
-
 
     if (first_array_bracket)
     {

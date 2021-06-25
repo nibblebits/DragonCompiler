@@ -1,7 +1,4 @@
 
-int e = 10;
-int z = 20;
-
 struct ant
 {
     int m;
@@ -12,21 +9,22 @@ struct elf
 {
     char e;
     char kk;
+    int mm[10];
 };
 
 struct dog
 {
     int e[4];
-    struct elf b;
+    struct elf* b;
 };
 
 
-struct dog sdog;
+int z = 10;
+char a[20][4];
 int main()
 {
-    int z;
-    int e;
 
-    z = sdog.b.e;
+    z = a[z][5];
+    
 
 }

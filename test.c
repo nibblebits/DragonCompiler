@@ -20,11 +20,13 @@ struct dog
 
 
 int z = 10;
-char a[20][4];
+char a[20][4][5];
+
+
 int main()
 {
-
-    z = a[z][5];
+    
+    z = a[z][1][1];
     
 
 }

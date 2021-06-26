@@ -171,6 +171,12 @@ struct resolver_process *resolver_new_process(struct compile_process *compiler, 
     return process;
 }
 
+
+bool resolver_entity_has_array_multiplier(struct resolver_entity* entity)
+{
+    return entity->array_runtime.multiplier > 1;
+}
+
 struct resolver_entity *resolver_create_new_entity(struct datatype dtype, void *private)
 {
     struct resolver_entity *entity = calloc(sizeof(struct resolver_entity), 1);
@@ -314,10 +320,8 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
     struct node *right_operand = node->exp.right->bracket.inner;
     if (left_entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
     {
-        // Push the left entity back to the stack
-        resolver_result_entity_push(result, left_entity);
-        entity = resolver_entity_clone(left_entity);
-        entity->array_runtime.index_node = right_operand;
+        resolver->callbacks.join_array_entity_index(result, left_entity, right_operand->llnum, last_array_index);
+        entity = left_entity;
     }
     else if (right_operand->type == NODE_TYPE_NUMBER)
     {
@@ -330,8 +334,9 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
         entity->flags |= RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME;
         // Set the index node expression so caller knows how to resolve this.
         entity->array_runtime.index_node = right_operand;
+        entity->array_runtime.multiplier = array_multiplier(&entity->dtype, last_array_index, 1);
     }
-    
+
     resolver_array_push(result, entity);
     //[[sdog.e][]1]]
 

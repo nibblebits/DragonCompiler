@@ -341,6 +341,7 @@ struct resolver_entity
         struct resolver_array_runtime
         {
             struct node* index_node;
+            int multiplier;
         } array_runtime;
     };
     
@@ -381,6 +382,13 @@ typedef void *(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result *result, st
  */
 typedef void *(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_result *result, struct resolver_entity *array_var_entity, int index_val, int index);
 
+
+/**
+ * Used for when you need to join a calculated result with a previous entity.
+ * Rather than creating a new entity like RESOLVER_NEW_ARRAY_ENTITY we join the result with the previous one
+ */
+typedef void(*RESOLVER_JOIN_ARRAY_ENTITY_WITH_NEW_INDEX)(struct resolver_result* result, struct resolver_entity* join_entity, int index_val, int index);
+
 /**
  * User must delete the resolver scope private data. DO not delete the "scope" pointer!
  */
@@ -404,6 +412,7 @@ struct resolver_callbacks
      * Called when we need to create a new resolver_entity for the given array expression
      */
     RESOLVER_NEW_ARRAY_ENTITY new_array_entity;
+    RESOLVER_JOIN_ARRAY_ENTITY_WITH_NEW_INDEX join_array_entity_index;
 
     RESOLVER_DELETE_SCOPE delete_scope;
     RESOLVER_DELETE_ENTITY delete_entity;
@@ -1095,12 +1104,24 @@ bool is_compile_computable(struct node *node);
 
 int compute_array_offset(struct node *node, size_t single_element_size);
 int array_offset(struct datatype *dtype, int index, int index_value);
+
+/**
+ * Returns the multipler for a given array index. How much you need to multiply by
+ * to get to the offset part.
+ */
+int array_multiplier(struct datatype* dtype, int index, int index_value);
 // Resolver functions
 
 struct resolver_result *resolver_new_result(struct resolver_process *process);
 void resolver_result_free(struct resolver_result *result);
 bool resolver_result_failed(struct resolver_result *result);
 bool resolver_result_ok(struct resolver_result *result);
+
+/**
+ * Returns true if this entity has an array multiplier that must
+ * be computed at runtime.
+ */
+bool resolver_entity_has_array_multiplier(struct resolver_entity* entity);
 
 /**
  * Returns true if the resolver entity requires additional

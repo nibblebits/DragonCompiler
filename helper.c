@@ -576,12 +576,9 @@ int compute_array_offset(struct node *node, size_t single_element_size)
     return compute_array_offset_with_multiplier(node, single_element_size, 0);
 }
 
-int array_offset(struct datatype *dtype, int index, int index_value)
+int array_multiplier(struct datatype* dtype, int index, int index_value)
 {
-    if (index == vector_count(dtype->array.brackets->n_brackets)-1)
-        return index_value * dtype->size;
-
-    vector_set_peek_pointer(dtype->array.brackets->n_brackets, index+1);
+     vector_set_peek_pointer(dtype->array.brackets->n_brackets, index+1);
     
     int size_sum = index_value;
     struct node *bracket_node = vector_peek_ptr(dtype->array.brackets->n_brackets);
@@ -594,5 +591,14 @@ int array_offset(struct datatype *dtype, int index, int index_value)
         bracket_node = vector_peek_ptr(dtype->array.brackets->n_brackets);
     }
 
-    return size_sum * dtype->size;
+    return size_sum;
+}
+
+int array_offset(struct datatype *dtype, int index, int index_value)
+{
+    if (index == vector_count(dtype->array.brackets->n_brackets)-1)
+        return index_value * dtype->size;
+
+   
+    return array_multiplier(dtype, index, index_value) * dtype->size;
 }

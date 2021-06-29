@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 static bool vector_in_bounds_for_at(struct vector* vector, int index)
 {
@@ -87,6 +88,7 @@ void* vector_peek(struct vector* vector)
     return ptr;
 }
 
+
 void vector_set_flag(struct vector* vector, int flag)
 {
     vector->flags |= flag;
@@ -144,6 +146,46 @@ void vector_push(struct vector* vector, void* elem)
     vector->count++;
 }
 
+int vector_fread(struct vector* vector, int amount, FILE* fp)
+{
+    size_t read_amount = fread(vector->data, 1, 1, fp);
+    while(read_amount)
+    {
+        vector_push(vector, &read_amount);
+        read_amount = fread(vector->data, 1, 1, fp);
+    }
+
+    return 0;
+}
+
+const char* vector_string(struct vector* vec)
+{
+    return vec->data;
+}
+
+void* vector_data_position(struct vector* vector, int index)
+{
+    return vector->data+(index*vector->esize);
+}
+
+void* vector_data_end(struct vector* vector)
+{
+    return vector->data + (vector->esize * vector->count);
+}
+
+void vector_peek_pop(struct vector* vector)
+{
+    // Popping at a peek is an akward one
+    // we will need to shift all the elements to the left, annoying...
+    // This will also invalidate any pointers pointing directly to the vector data
+
+    void* dst_pos = vector_data_position(vector, vector->pindex);
+    void* next_element_pos = dst_pos + vector->esize;
+    void* end_pos = vector_data_end(vector);
+    size_t total = (size_t)end_pos - (size_t)next_element_pos;
+    memcpy(dst_pos, next_element_pos, total);
+    vector->count -=1;
+}
 
 void vector_pop(struct vector* vector)
 {
@@ -154,6 +196,11 @@ void vector_pop(struct vector* vector)
     vector->count -=1;
 
     vector_assert_bounds_for_pop(vector, vector->rindex);
+}
+
+void* vector_data_ptr(struct vector* vector)
+{
+    return vector->data;
 }
 
 bool vector_empty(struct vector* vector)

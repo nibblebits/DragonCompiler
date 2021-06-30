@@ -194,6 +194,25 @@ struct expression_state
     };
 };
 
+
+struct preprocessor_definition
+{
+    // The name of this definition i.e #define ABC . ABC would be the name
+    const char* name;
+
+    // A vector of definition value tokens, values can be multiple lines
+    // Values can also be multiple tokens.
+    // vector of "struct token"
+    struct vector* value;
+
+};
+
+struct preprocessor
+{   
+
+    // Vector of preprocessor definitions struct preprocessor_definition*
+    struct vector* definitions;
+};
 /**
  * This file represents a compilation process
  */
@@ -245,6 +264,10 @@ struct compile_process
         struct scope *root;
         struct scope *current;
     } scope;
+
+
+    // The preprocessor for this compiler instance.
+    struct preprocessor* preprocessor;
 
     // The future of "scope" The replacement.
     struct resolver_process *resolver;
@@ -494,6 +517,7 @@ enum
     TOKEN_TYPE_NUMBER,
     TOKEN_TYPE_STRING,
     TOKEN_TYPE_COMMENT,
+    TOKEN_TYPE_NEWLINE
 };
 
 struct token
@@ -1095,6 +1119,13 @@ bool is_array_operator(const char *op);
  */
 bool is_compile_computable(struct node *node);
 
+
+/**
+ * Returns true if the given character is one of the provided delims
+ * \param c The character to check
+ * \param delims A const char string of many delimieters. One byte per delimieter
+ */
+bool char_is_delim(char c, const char* delims);
 /**
  * Computes the array offset for the given expression node or array bracket node.
  * 
@@ -1167,7 +1198,23 @@ struct node *node_clone(struct node *node);
 const char *node_var_type_str(struct node *var_node);
 const char *node_var_name(struct node *var_node);
 
+// Token
+
+bool token_is_operator(struct token* token, const char *op);
+bool token_is_keyword(struct token* token, const char *keyword);
+bool token_is_symbol(struct token* token, char sym);
 
 // Preprocessor
 int preprocessor_run(struct compile_process* compiler, const char* file);
+
+/**
+ * Initializes the preprocessor
+ */
+void preprocessor_initialize(struct preprocessor* preprocessor);
+
+/**
+ * Creates a new preprocessor instance
+ */
+struct preprocessor* preprocessor_create();
+
 #endif

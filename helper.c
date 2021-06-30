@@ -602,3 +602,15 @@ int array_offset(struct datatype *dtype, int index, int index_value)
    
     return array_multiplier(dtype, index, index_value) * dtype->size;
 }
+
+bool char_is_delim(char c, const char* delims)
+{
+    int len = strlen(delims);
+    for (int i = 0; i < len; i++)
+    {
+        if (c == delims[i])
+            return true;
+    }
+
+    return false;
+}

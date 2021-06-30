@@ -189,9 +189,11 @@ static struct token *token_make_string()
     return token_create(&(struct token){TOKEN_TYPE_STRING, .sval = buffer_ptr(buf)});
 }
 
-static void *token_ignore_newline()
+
+static struct token* token_make_newline()
 {
-    assert_next_char('\n');
+    nextc();
+    return token_create(&(struct token){TOKEN_TYPE_NEWLINE});
 }
 
 static const char *read_op()
@@ -414,8 +416,10 @@ static struct token *read_next_token()
         token = token_make_string();
         break;
 
-    // Spaces, new lines and tabs are ignored..
     case '\n':
+        token = token_make_newline();
+        break;
+    // Spaces, tabs are ignored..
     case ' ':
     case '\t':
         nextc();

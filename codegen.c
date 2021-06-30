@@ -530,14 +530,36 @@ void codegen_generate_variable_access(struct node *node, struct resolver_result 
 
     if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
     {
-        // This entity represents array access that requires runtime assistance
-        codegen_generate_expressionable(entity->array_runtime.index_node, history);
-        register_unset_flag(REGISTER_EAX_IS_USED);
-        if (resolver_entity_has_array_multiplier(entity))
+        struct resolver_entity* last_entity = NULL;
+        int count = 0;
+        while (entity)
         {
-            asm_push("imul eax, %i", entity->array_runtime.multiplier);
+            last_entity = entity;
+            if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
+            {
+                // This entity represents array access that requires runtime assistance
+                codegen_generate_expressionable(entity->array_runtime.index_node, history);
+                register_unset_flag(REGISTER_EAX_IS_USED);
+                if (resolver_entity_has_array_multiplier(entity))
+                {
+                    asm_push("imul eax, %i", entity->array_runtime.multiplier);
+                }
+                asm_push("push eax");
+
+            }
+            entity = resolver_result_entity_next(entity);
+            count++;
         }
-        asm_push("mov eax, [%s+eax]", codegen_entity_private(entity)->address);
+
+        asm_push("mov eax, 0");
+        for (int i = 0; i < count; i++)
+        {
+            asm_push("pop ecx");
+            asm_push("add eax, ecx");
+
+        }
+        asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
+        return;
     }
     else
     {

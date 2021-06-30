@@ -48,6 +48,7 @@ void* vector_peek_ptr(struct vector* vector);
 void vector_set_peek_pointer(struct vector* vector, int index);
 void vector_set_peek_pointer_end(struct vector* vector);
 void vector_push(struct vector* vector, void* elem);
+void vector_push_at(struct vector *vector, int index, void *ptr);
 void vector_pop(struct vector* vector);
 void vector_peek_pop(struct vector* vector);
 

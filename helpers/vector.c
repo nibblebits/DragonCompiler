@@ -6,25 +6,24 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-static bool vector_in_bounds_for_at(struct vector* vector, int index)
+static bool vector_in_bounds_for_at(struct vector *vector, int index)
 {
     return (index >= 0 && index < vector->rindex);
 }
 
-
-static bool vector_in_bounds_for_pop(struct vector* vector, int index)
+static bool vector_in_bounds_for_pop(struct vector *vector, int index)
 {
     return (index >= 0 && index < vector->mindex);
 }
 
-static void vector_assert_bounds_for_pop(struct vector* vector, int index)
+static void vector_assert_bounds_for_pop(struct vector *vector, int index)
 {
-    assert (vector_in_bounds_for_pop(vector, index));
+    assert(vector_in_bounds_for_pop(vector, index));
 }
 
-struct vector* vector_create(size_t esize)
+struct vector *vector_create(size_t esize)
 {
-    struct vector* vector = calloc(sizeof(struct vector), 1);
+    struct vector *vector = calloc(sizeof(struct vector), 1);
     vector->data = malloc(esize * VECTOR_ELEMENT_INCREMENT);
     vector->mindex = VECTOR_ELEMENT_INCREMENT;
     vector->rindex = 0;
@@ -33,53 +32,63 @@ struct vector* vector_create(size_t esize)
     vector->count = 0;
 }
 
-void vector_free(struct vector* vector)
+void vector_free(struct vector *vector)
 {
     free(vector->data);
     free(vector);
 }
 
-void vector_resize(struct vector* vector)
+void vector_resize_for_index(struct vector *vector, int start_index, int total_elements)
 {
-    if (vector->rindex < vector->mindex)
+    if (start_index + total_elements < vector->mindex)
     {
-        // No resize required.., we dont allow you to resize lower to avoid
-        // protential mistakes and dereferenced pointers.
+        // Nothing to resize
         return;
     }
-    vector->data = realloc(vector->data, ((vector->rindex + VECTOR_ELEMENT_INCREMENT) * vector->esize));
+    vector->data = realloc(vector->data, ((start_index + total_elements + VECTOR_ELEMENT_INCREMENT) * vector->esize));
+    vector->mindex = start_index + total_elements;
 }
 
-
-void* vector_at(struct vector* vector, int index)
+void vector_resize_for(struct vector *vector, int total_elements)
 {
-    return vector->data+(index * vector->esize);
+    vector_resize_for_index(vector, vector->rindex, total_elements);
 }
 
-void vector_set_peek_pointer(struct vector* vector, int index)
+void vector_resize(struct vector *vector)
+{
+    // Zero elements as we want to see if we have already overflowed the index
+    vector_resize_for(vector, 0);
+}
+
+void *vector_at(struct vector *vector, int index)
+{
+    return vector->data + (index * vector->esize);
+}
+
+void vector_set_peek_pointer(struct vector *vector, int index)
 {
     vector->pindex = index;
 }
 
-void vector_set_peek_pointer_end(struct vector* vector)
+void vector_set_peek_pointer_end(struct vector *vector)
 {
-    vector_set_peek_pointer(vector, vector->rindex-1);
+    vector_set_peek_pointer(vector, vector->rindex - 1);
 }
 
-void* vector_peek_no_increment(struct vector* vector)
+void *vector_peek_no_increment(struct vector *vector)
 {
     if (!vector_in_bounds_for_at(vector, vector->pindex))
     {
         return NULL;
     }
 
-    void* ptr = vector_at(vector, vector->pindex);
+    void *ptr = vector_at(vector, vector->pindex);
     return ptr;
 }
 
-void* vector_peek(struct vector* vector)
+void *vector_peek(struct vector *vector)
 {
-    void* ptr = vector_peek_no_increment(vector);
+    void *ptr = vector_peek_no_increment(vector);
     if (vector->flags & VECTOR_FLAG_PEEK_DECREMENT)
         vector->pindex--;
     else
@@ -88,20 +97,19 @@ void* vector_peek(struct vector* vector)
     return ptr;
 }
 
-
-void vector_set_flag(struct vector* vector, int flag)
+void vector_set_flag(struct vector *vector, int flag)
 {
     vector->flags |= flag;
 }
 
-void vector_unset_flag(struct vector* vector, int flag)
+void vector_unset_flag(struct vector *vector, int flag)
 {
     vector->flags &= ~flag;
 }
 
-void* vector_peek_ptr(struct vector* vector)
+void *vector_peek_ptr(struct vector *vector)
 {
-    void** ptr = vector_peek(vector);
+    void **ptr = vector_peek(vector);
     if (!ptr)
     {
         return NULL;
@@ -110,9 +118,9 @@ void* vector_peek_ptr(struct vector* vector)
     return *ptr;
 }
 
-void* vector_peek_ptr_at(struct vector* vector, int index)
+void *vector_peek_ptr_at(struct vector *vector, int index)
 {
-    void** ptr = vector_at(vector, index);
+    void **ptr = vector_at(vector, index);
     if (!ptr)
     {
         return NULL;
@@ -121,9 +129,9 @@ void* vector_peek_ptr_at(struct vector* vector, int index)
     return *ptr;
 }
 
-void* vector_back_ptr(struct vector* vector)
+void *vector_back_ptr(struct vector *vector)
 {
-    void** ptr = vector_back(vector);
+    void **ptr = vector_back(vector);
     if (!ptr)
     {
         return NULL;
@@ -132,24 +140,24 @@ void* vector_back_ptr(struct vector* vector)
     return *ptr;
 }
 
-void vector_push(struct vector* vector, void* elem)
-{   
+void vector_push(struct vector *vector, void *elem)
+{
     if (vector->rindex >= vector->mindex)
     {
         vector_resize(vector);
     }
-    
-    void* ptr = vector_at(vector, vector->rindex);
+
+    void *ptr = vector_at(vector, vector->rindex);
     memcpy(ptr, elem, vector->esize);
 
     vector->rindex++;
     vector->count++;
 }
 
-int vector_fread(struct vector* vector, int amount, FILE* fp)
+int vector_fread(struct vector *vector, int amount, FILE *fp)
 {
     size_t read_amount = fread(vector->data, 1, 1, fp);
-    while(read_amount)
+    while (read_amount)
     {
         vector_push(vector, &read_amount);
         read_amount = fread(vector->data, 1, 1, fp);
@@ -158,79 +166,147 @@ int vector_fread(struct vector* vector, int amount, FILE* fp)
     return 0;
 }
 
-const char* vector_string(struct vector* vec)
+const char *vector_string(struct vector *vec)
 {
     return vec->data;
 }
 
-void* vector_data_position(struct vector* vector, int index)
+void *vector_data_end(struct vector *vector)
 {
-    return vector->data+(index*vector->esize);
+    return vector->data + vector->rindex * vector->esize;
 }
 
-void* vector_data_end(struct vector* vector)
+size_t vector_elements_left(struct vector *vector, int index)
 {
-    return vector->data + (vector->esize * vector->count);
+    return vector->count - index;
 }
 
-void vector_peek_pop(struct vector* vector)
+int vector_elements_until_end(struct vector *vector, int index)
+{
+    return vector->count - index;
+}
+
+size_t vector_total_size(struct vector *vector)
+{
+    return vector->count * vector->esize;
+}
+
+void vector_shift_right_in_bounds(struct vector *vector, int index, int amount)
+{
+    vector_resize_for_index(vector, index, amount);
+    int eindex = (index + amount);
+    size_t bytes_to_move = vector_elements_until_end(vector, index) * vector->esize;
+    memcpy(vector_at(vector, eindex), vector_at(vector, index), bytes_to_move);
+    memset(vector_at(vector, index), 0x00, amount * vector->esize);
+
+    vector->rindex += amount;
+    vector->count += amount;
+}
+
+void vector_stretch(struct vector* vector, int index)
+{
+    if (index < vector->rindex)
+        return;
+
+    vector_resize_for_index(vector, index, 0);
+    vector->count = index;
+    vector->rindex = index;
+}
+
+void vector_shift_right(struct vector *vector, int index, int amount)
+{
+    if (index+amount <= vector->rindex)
+    {
+        vector_shift_right_in_bounds(vector, index, amount);
+        return;
+    }
+
+    // We don't need to shift anything because we are out of bounds
+    // lets stretch the vector up to index+amount
+    vector_stretch(vector, index+amount);
+}
+
+void vector_pop_at(struct vector *vector, int index)
+{
+    void *dst_pos = vector_at(vector, index);
+    void *next_element_pos = dst_pos + vector->esize;
+    void *end_pos = vector_data_end(vector);
+    size_t total = (size_t)end_pos - (size_t)next_element_pos;
+    memcpy(dst_pos, next_element_pos, total);
+    vector->count -= 1;
+    vector->rindex -= 1;
+}
+
+void vector_peek_pop(struct vector *vector)
 {
     // Popping at a peek is an akward one
     // we will need to shift all the elements to the left, annoying...
     // This will also invalidate any pointers pointing directly to the vector data
-
-    void* dst_pos = vector_data_position(vector, vector->pindex);
-    void* next_element_pos = dst_pos + vector->esize;
-    void* end_pos = vector_data_end(vector);
-    size_t total = (size_t)end_pos - (size_t)next_element_pos;
-    memcpy(dst_pos, next_element_pos, total);
-    vector->count -=1;
+    vector_pop_at(vector, vector->pindex);
 }
 
-void vector_pop(struct vector* vector)
+void vector_push_at(struct vector *vector, int index, void *ptr)
+{
+    vector_shift_right(vector, index, 1);
+
+    void *data_ptr = vector_at(vector, index);
+    memcpy(data_ptr, ptr, vector->esize);
+}
+
+int vector_insert(struct vector *vector_dst, struct vector *vector_src)
+{
+    if (vector_dst->esize != vector_src->esize)
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+void vector_pop(struct vector *vector)
 {
 
     // Popping from the vector will just decrement the index, no need to free memory
     // the next push will overwrite it.
-    vector->rindex -=1;
-    vector->count -=1;
+    vector->rindex -= 1;
+    vector->count -= 1;
 
     vector_assert_bounds_for_pop(vector, vector->rindex);
 }
 
-void* vector_data_ptr(struct vector* vector)
+void *vector_data_ptr(struct vector *vector)
 {
     return vector->data;
 }
 
-bool vector_empty(struct vector* vector)
+bool vector_empty(struct vector *vector)
 {
     return vector_count(vector) == 0;
 }
 
-void vector_clear(struct vector* vector)
+void vector_clear(struct vector *vector)
 {
-    while(vector_count(vector))
+    while (vector_count(vector))
     {
         vector_pop(vector);
     }
 }
 
-void* vector_back_or_null(struct vector* vector)
+void *vector_back_or_null(struct vector *vector)
 {
     // We can't go back or we will access an invalid element
     // out of bounds...
-    if (!vector_in_bounds_for_at(vector, vector->rindex-1))
+    if (!vector_in_bounds_for_at(vector, vector->rindex - 1))
     {
         return NULL;
     }
 
-    return vector_at(vector, vector->rindex-1);
+    return vector_at(vector, vector->rindex - 1);
 }
 
-void* vector_back_ptr_or_null(struct vector* vector)
+void *vector_back_ptr_or_null(struct vector *vector)
 {
-    void** ptr = vector_back_or_null(vector);
+    void **ptr = vector_back_or_null(vector);
     if (ptr)
     {
         return *ptr;
@@ -239,14 +315,14 @@ void* vector_back_ptr_or_null(struct vector* vector)
     return NULL;
 }
 
-void* vector_back(struct vector* vector)
+void *vector_back(struct vector *vector)
 {
-    vector_assert_bounds_for_pop(vector, vector->rindex-1);
+    vector_assert_bounds_for_pop(vector, vector->rindex - 1);
 
-    return vector_at(vector, vector->rindex-1);
+    return vector_at(vector, vector->rindex - 1);
 }
 
-int vector_count(struct vector* vector)
+int vector_count(struct vector *vector)
 {
     return vector->count;
 }

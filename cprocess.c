@@ -18,6 +18,7 @@ struct compile_process* compile_process_create(const char* filename)
     process->node_tree_vec = vector_create(sizeof(struct node*));
     process->generator.states.expr = vector_create(sizeof(struct expression_state*));
     process->symbol_tbl = vector_create(sizeof(struct symbol*));
+    process->preprocessor = preprocessor_create();
     return process;
 }
 

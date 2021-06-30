@@ -254,30 +254,44 @@ static bool parser_is_unary_operator(const char *op)
 
 static struct token *token_next()
 {
+    struct token *next_token = vector_peek_no_increment(current_process->token_vec);
+    while (next_token && next_token->type == TOKEN_TYPE_NEWLINE)
+    {
+        vector_peek(current_process->token_vec);
+        // The parser does not care about new lines, only the preprocessor has to care about that
+        next_token = vector_peek_no_increment(current_process->token_vec);
+    }
     return vector_peek(current_process->token_vec);
 }
 
 static struct token *token_peek_next()
 {
+    struct token *next_token = vector_peek_no_increment(current_process->token_vec);
+    while (next_token && next_token->type == TOKEN_TYPE_NEWLINE)
+    {
+        vector_peek(current_process->token_vec);
+        // The parser does not care about new lines, only the preprocessor has to care about that
+        next_token = vector_peek_no_increment(current_process->token_vec);
+    }
     return vector_peek_no_increment(current_process->token_vec);
 }
 
 static bool token_next_is_operator(const char *op)
 {
     struct token *token = token_peek_next();
-    return token && token->type == TOKEN_TYPE_OPERATOR && S_EQ(token->sval, op);
+    return token_is_operator(token, op);
 }
 
 static bool token_next_is_keyword(const char *keyword)
 {
     struct token *token = token_peek_next();
-    return token && token->type == TOKEN_TYPE_KEYWORD && S_EQ(token->sval, keyword);
+    return token_is_keyword(token, keyword);
 }
 
 static bool token_next_is_symbol(char sym)
 {
     struct token *token = token_peek_next();
-    return token && token->type == TOKEN_TYPE_SYMBOL && token->cval == sym;
+    return token_is_symbol(token, sym);
 }
 
 static struct token *token_next_expected(int type)
@@ -453,14 +467,13 @@ void make_variable_node(struct datatype *datatype, struct token *name_token, str
     node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type = *datatype, .var.name = name_token->sval, .var.val = value_node});
 }
 
-void make_bracket_node(struct node* inner_node)
+void make_bracket_node(struct node *inner_node)
 {
-    node_create(&(struct node){NODE_TYPE_BRACKET, .bracket.inner=inner_node});
+    node_create(&(struct node){NODE_TYPE_BRACKET, .bracket.inner = inner_node});
 }
 
 void parse_expressionable(struct history *history);
 void parse_for_parentheses();
-
 
 #warning "Bug, variable_struct_node points to uninitialized value"
 static void parser_append_size_for_node(size_t *_variable_size, struct node *node)
@@ -468,8 +481,8 @@ static void parser_append_size_for_node(size_t *_variable_size, struct node *nod
     if (node->type == NODE_TYPE_VARIABLE)
     {
         // Ok we have a variable lets adjust the variable_size.
-       // *variable_size += node->var.type.size;
-       // Test new with all possibilities.
+        // *variable_size += node->var.type.size;
+        // Test new with all possibilities.
         *_variable_size += variable_size(node);
 
         // If this variable is a structure and we have padding then it must be 4-byte aligned
@@ -763,9 +776,9 @@ void parse_exp_normal(struct history *history)
     node_push(exp_node);
 }
 
-void parse_for_array(struct history* history)
+void parse_for_array(struct history *history)
 {
-   struct node *left_node = node_peek_or_null();
+    struct node *left_node = node_peek_or_null();
     if (left_node)
     {
         node_pop();
@@ -1023,7 +1036,7 @@ struct array_brackets *parse_array_brackets(struct history *history)
 void parse_variable(struct datatype *dtype, struct token *name_token, struct history *history)
 {
     struct node *value_node = NULL;
-    struct array_brackets* brackets = NULL;
+    struct array_brackets *brackets = NULL;
     if (token_next_is_operator("["))
     {
         // We have an array declaration by the looks of it.

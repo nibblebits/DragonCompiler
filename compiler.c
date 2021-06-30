@@ -75,6 +75,12 @@ int compile_file(const char *filename)
     if (lex(process) != LEXICAL_ANALYSIS_ALL_OK)
         return COMPILER_FAILED_WITH_ERRORS;
 
+    if (preprocessor_run(process, filename) != 0)
+    {
+        return COMPILER_FAILED_WITH_ERRORS;
+    }
+    
+    
     // Symbol resolution is now done during parsing..
     if (parse(process) != PARSE_ALL_OK)
         return COMPILER_FAILED_WITH_ERRORS;

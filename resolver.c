@@ -171,8 +171,7 @@ struct resolver_process *resolver_new_process(struct compile_process *compiler, 
     return process;
 }
 
-
-bool resolver_entity_has_array_multiplier(struct resolver_entity* entity)
+bool resolver_entity_has_array_multiplier(struct resolver_entity *entity)
 {
     return entity->array_runtime.multiplier > 1;
 }
@@ -318,7 +317,36 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
     struct resolver_entity *entity = NULL;
     int last_array_index = vector_count(resolver_array_data_vec(result));
     struct node *right_operand = node->exp.right->bracket.inner;
-    if (left_entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
+
+    //[[[a[]z][]z][]1]]
+
+    if (right_operand->type != NODE_TYPE_NUMBER)
+    {
+        if (left_entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
+        {
+            // We have left entity as an array for runtime as well, therefore we must
+            // maintain left_entity as a seperate instance
+            resolver_array_push(result, left_entity);
+
+            entity = resolver_entity_clone(left_entity);  
+            
+            entity->flags |= RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME;
+            // Set the index node expression so caller knows how to resolve this.
+            entity->array_runtime.index_node = right_operand;
+            entity->array_runtime.multiplier = array_multiplier(&entity->dtype, last_array_index, 1);
+            
+        }
+        else
+        {
+            // This needs to be computed at runtime.
+            entity = left_entity;
+            entity->flags |= RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME;
+            // Set the index node expression so caller knows how to resolve this.
+            entity->array_runtime.index_node = right_operand;
+            entity->array_runtime.multiplier = array_multiplier(&entity->dtype, last_array_index, 1);
+        }
+    }
+    else if (left_entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
     {
         resolver->callbacks.join_array_entity_index(result, left_entity, right_operand->llnum, last_array_index);
         entity = left_entity;
@@ -326,15 +354,6 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
     else if (right_operand->type == NODE_TYPE_NUMBER)
     {
         entity = resolver_create_new_entity_for_var_node(resolver, result->identifier->node, resolver->callbacks.new_array_entity(result, left_entity, right_operand->llnum, last_array_index));
-    }
-    else
-    {
-        // This needs to be computed at runtime.
-        entity = left_entity;
-        entity->flags |= RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME;
-        // Set the index node expression so caller knows how to resolve this.
-        entity->array_runtime.index_node = right_operand;
-        entity->array_runtime.multiplier = array_multiplier(&entity->dtype, last_array_index, 1);
     }
 
     resolver_array_push(result, entity);

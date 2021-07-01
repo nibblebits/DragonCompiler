@@ -76,4 +76,6 @@ int vector_fread(struct vector* vector, int amount, FILE* fp);
  * Returns a void pointer pointing to the data of this vector
  */
 void* vector_data_ptr(struct vector* vector);
+
+int vector_insert(struct vector *vector_dst, struct vector *vector_src, int dst_index);
 #endif

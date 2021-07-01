@@ -191,19 +191,23 @@ size_t vector_total_size(struct vector *vector)
     return vector->count * vector->esize;
 }
 
-void vector_shift_right_in_bounds(struct vector *vector, int index, int amount)
+void vector_shift_right_in_bounds_no_increment(struct vector *vector, int index, int amount)
 {
     vector_resize_for_index(vector, index, amount);
     int eindex = (index + amount);
     size_t bytes_to_move = vector_elements_until_end(vector, index) * vector->esize;
     memcpy(vector_at(vector, eindex), vector_at(vector, index), bytes_to_move);
     memset(vector_at(vector, index), 0x00, amount * vector->esize);
+}
 
+void vector_shift_right_in_bounds(struct vector *vector, int index, int amount)
+{
+    vector_shift_right_in_bounds_no_increment(vector, index, amount);
     vector->rindex += amount;
     vector->count += amount;
 }
 
-void vector_stretch(struct vector* vector, int index)
+void vector_stretch(struct vector *vector, int index)
 {
     if (index < vector->rindex)
         return;
@@ -215,7 +219,7 @@ void vector_stretch(struct vector* vector, int index)
 
 void vector_shift_right(struct vector *vector, int index, int amount)
 {
-    if (index+amount <= vector->rindex)
+    if (index < vector->rindex)
     {
         vector_shift_right_in_bounds(vector, index, amount);
         return;
@@ -224,6 +228,7 @@ void vector_shift_right(struct vector *vector, int index, int amount)
     // We don't need to shift anything because we are out of bounds
     // lets stretch the vector up to index+amount
     vector_stretch(vector, index+amount);
+    vector_shift_right_in_bounds_no_increment(vector, index, amount);
 }
 
 void vector_pop_at(struct vector *vector, int index)
@@ -245,6 +250,14 @@ void vector_peek_pop(struct vector *vector)
     vector_pop_at(vector, vector->pindex);
 }
 
+void vector_push_multiple_at(struct vector *vector, int dst_index, void *ptr, int total)
+{
+    vector_shift_right(vector, dst_index, total);
+    void *dst_ptr = vector_at(vector, dst_index);
+    size_t total_bytes = total * vector->esize;
+    memcpy(dst_ptr, ptr, total_bytes);
+}
+
 void vector_push_at(struct vector *vector, int index, void *ptr)
 {
     vector_shift_right(vector, index, 1);
@@ -253,12 +266,14 @@ void vector_push_at(struct vector *vector, int index, void *ptr)
     memcpy(data_ptr, ptr, vector->esize);
 }
 
-int vector_insert(struct vector *vector_dst, struct vector *vector_src)
+int vector_insert(struct vector *vector_dst, struct vector *vector_src, int dst_index)
 {
     if (vector_dst->esize != vector_src->esize)
     {
         return -1;
     }
+
+    vector_push_multiple_at(vector_dst, dst_index, vector_at(vector_src, 0), vector_count(vector_src));
 
     return 0;
 }

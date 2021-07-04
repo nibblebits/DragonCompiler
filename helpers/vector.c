@@ -21,7 +21,7 @@ static void vector_assert_bounds_for_pop(struct vector *vector, int index)
     assert(vector_in_bounds_for_pop(vector, index));
 }
 
-struct vector *vector_create(size_t esize)
+struct vector* vector_create_no_saves(size_t esize)
 {
     struct vector *vector = calloc(sizeof(struct vector), 1);
     vector->data = malloc(esize * VECTOR_ELEMENT_INCREMENT);
@@ -32,10 +32,29 @@ struct vector *vector_create(size_t esize)
     vector->count = 0;
 }
 
+size_t vector_element_size(struct vector* vector)
+{
+    return vector->esize;
+}
+
+struct vector *vector_create(size_t esize)
+{
+    struct vector* vec = vector_create_no_saves(esize);
+    vec->saves = vector_create_no_saves(sizeof(struct vector));
+    return vec;
+}
+
+
 void vector_free(struct vector *vector)
 {
     free(vector->data);
     free(vector);
+}
+
+
+int vector_current_index(struct vector* vector)
+{
+    return vector->rindex;
 }
 
 void vector_resize_for_index(struct vector *vector, int start_index, int total_elements)
@@ -140,6 +159,30 @@ void *vector_back_ptr(struct vector *vector)
     return *ptr;
 }
 
+void vector_save(struct vector* vector)
+{   
+    // Let's save the state of this vector to its self
+    struct vector tmp_vec = *vector;
+    // We not allowed to modify the saves so set it to NULL
+    // when we push it to the save stack.
+    tmp_vec.saves = NULL;
+    vector_push(vector->saves, &tmp_vec);
+}
+
+void vector_restore(struct vector* vector)
+{
+    struct vector save_vec = *((struct vector*)(vector_back(vector->saves)));
+    save_vec.saves = vector->saves;
+    *vector = save_vec;
+    vector_pop(vector->saves);
+}
+
+void vector_save_purge(struct vector* vector)
+{
+    vector_pop(vector->saves);
+}
+
+
 void vector_push(struct vector *vector, void *elem)
 {
     if (vector->rindex >= vector->mindex)
@@ -215,6 +258,13 @@ void vector_stretch(struct vector *vector, int index)
     vector_resize_for_index(vector, index, 0);
     vector->count = index;
     vector->rindex = index;
+}
+
+int vector_pop_at_data_address(struct vector* vector, void* address)
+{
+    int index = (address - vector->data) / vector->esize;
+    vector_pop_at(vector, index);
+    return index;
 }
 
 void vector_shift_right(struct vector *vector, int index, int amount)

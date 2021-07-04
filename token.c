@@ -15,3 +15,8 @@ bool token_is_symbol(struct token* token, char sym)
 {
     return token && token->type == TOKEN_TYPE_SYMBOL && token->cval == sym;
 }
+
+ bool token_is_identifier(struct token* token, const char* iden)
+ {
+     return token && token->type == TOKEN_TYPE_IDENTIFIER && S_EQ(token->sval, iden);
+ }

@@ -27,6 +27,14 @@ struct vector
     int count;
     int flags;
     size_t esize;
+
+
+    // Vector of struct vector, holds saves of this vector. YOu can save the internal state
+    // at all times with vector_save
+    // Data is not restored and is permenant, save does not respect data, only pointers
+    // and variables are saved. Useful to temporarily push the vector state
+    // and restore it later.
+    struct vector* saves;
 };
 
 
@@ -78,4 +86,40 @@ int vector_fread(struct vector* vector, int amount, FILE* fp);
 void* vector_data_ptr(struct vector* vector);
 
 int vector_insert(struct vector *vector_dst, struct vector *vector_src, int dst_index);
+
+/**
+ * Pops the element at the given data address.
+ * \param vector The vector to pop an element on
+ * \param address The address that is part of the vector->data range to pop off.
+ * \return Returns the index that we popped off.
+ */
+int vector_pop_at_data_address(struct vector* vector, void* address);
+
+void vector_pop_at(struct vector *vector, int index);
+
+/**
+ * Returns the current index that a vector_push would push too
+ */
+int vector_current_index(struct vector* vector);
+
+/**
+ * Saves the state of the vector
+ */
+void vector_save(struct vector* vector);
+/**
+ * Restores the state of the vector
+ */
+void vector_restore(struct vector* vector);
+
+/**
+ * Purges the last save state as if it never happend
+ */
+void vector_save_purge(struct vector* vector);
+
+
+
+/**
+ * Returns the element size per element in this vector
+ */
+size_t vector_element_size(struct vector* vector);
 #endif

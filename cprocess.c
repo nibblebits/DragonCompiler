@@ -14,6 +14,7 @@ struct compile_process* compile_process_create(const char* filename)
     memset(process, 0, sizeof(struct compile_process));
     process->cfile = file;
     process->token_vec = vector_create(sizeof(struct token));
+    process->token_vec_original = vector_create(sizeof(struct token));
     process->node_vec = vector_create(sizeof(struct node*));
     process->node_tree_vec = vector_create(sizeof(struct node*));
     process->generator.states.expr = vector_create(sizeof(struct expression_state*));

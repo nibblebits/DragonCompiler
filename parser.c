@@ -891,7 +891,7 @@ void parse_for_parentheses()
 
 void parse_for_symbol()
 {
-    struct token *token = token_peek_next();
+
     parse_err("not supported yet");
 }
 

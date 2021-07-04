@@ -448,7 +448,7 @@ int lex(struct compile_process *process)
     struct token *token = read_next_token();
     while (token)
     {
-        vector_push(process->token_vec, token);
+        vector_push(process->token_vec_original, token);
         token = read_next_token();
     }
 

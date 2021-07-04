@@ -194,24 +194,25 @@ struct expression_state
     };
 };
 
-
 struct preprocessor_definition
 {
     // The name of this definition i.e #define ABC . ABC would be the name
-    const char* name;
+    const char *name;
 
     // A vector of definition value tokens, values can be multiple lines
     // Values can also be multiple tokens.
     // vector of "struct token"
-    struct vector* value;
-
+    struct vector *value;
 };
 
 struct preprocessor
-{   
+{
 
     // Vector of preprocessor definitions struct preprocessor_definition*
-    struct vector* definitions;
+    struct vector *definitions;
+
+    // Used for parsing expressions.
+    struct expressionable *expressionable;
 };
 /**
  * This file represents a compilation process
@@ -224,8 +225,15 @@ struct compile_process
     // Current line position information.
     struct pos pos;
 
+    // The original untampered token vector
+    // This contains definitions, and source code tokens
+    // The preprocessor will go through this vector and populate the "token_vec"
+    // after it is done.
+    struct vector *token_vec_original;
+
     // Stack of tokens that have undergone lexcial analysis.
     // Vector of struct <struct token> individual tokens (not pointers)
+    // This is the final output preprocessed tokens.
     struct vector *token_vec;
 
     // Contains pointers to the root of the tree
@@ -265,9 +273,8 @@ struct compile_process
         struct scope *current;
     } scope;
 
-
     // The preprocessor for this compiler instance.
-    struct preprocessor* preprocessor;
+    struct preprocessor *preprocessor;
 
     // The future of "scope" The replacement.
     struct resolver_process *resolver;
@@ -325,7 +332,6 @@ struct resolver_scope
 
     // Private data for the resolver scope.
     void *private;
-    
 };
 
 struct compile_process;
@@ -363,11 +369,11 @@ struct resolver_entity
     {
         struct resolver_array_runtime
         {
-            struct node* index_node;
+            struct node *index_node;
             int multiplier;
         } array_runtime;
     };
-    
+
     // The next entity in the list
     struct resolver_entity *next;
     // The previous entity in the list.
@@ -385,7 +391,7 @@ enum
  * Resolver handler for new struct entities. The function must return the private data
  * to be set in the resolver_entity
  */
-typedef void *(*RESOLVER_NEW_STRUCT_ENTITY)(struct resolver_result *result, struct node *var_node, int offset, struct resolver_scope* scope);
+typedef void *(*RESOLVER_NEW_STRUCT_ENTITY)(struct resolver_result *result, struct node *var_node, int offset, struct resolver_scope *scope);
 
 /**
  * Used to merge two struct entities, generally their offsets for example. Receiver should merge them
@@ -393,7 +399,7 @@ typedef void *(*RESOLVER_NEW_STRUCT_ENTITY)(struct resolver_result *result, stru
  * 
  * Should return private data for the merged entities
  */
-typedef void *(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity, struct resolver_scope* scope);
+typedef void *(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity, struct resolver_scope *scope);
 
 /**
  * THis function pointer is called when we have an array expression processed
@@ -405,12 +411,11 @@ typedef void *(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result *result, st
  */
 typedef void *(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_result *result, struct resolver_entity *array_var_entity, int index_val, int index);
 
-
 /**
  * Used for when you need to join a calculated result with a previous entity.
  * Rather than creating a new entity like RESOLVER_NEW_ARRAY_ENTITY we join the result with the previous one
  */
-typedef void(*RESOLVER_JOIN_ARRAY_ENTITY_WITH_NEW_INDEX)(struct resolver_result* result, struct resolver_entity* join_entity, int index_val, int index);
+typedef void (*RESOLVER_JOIN_ARRAY_ENTITY_WITH_NEW_INDEX)(struct resolver_result *result, struct resolver_entity *join_entity, int index_val, int index);
 
 /**
  * User must delete the resolver scope private data. DO not delete the "scope" pointer!
@@ -477,7 +482,7 @@ struct resolver_array_data
     // Holds nodes of type resolver_entity, representing array entities.
     // That are currently being processed.
     // Used to help guide the algorithm in calculating static offset.
-    struct vector* array_entities;
+    struct vector *array_entities;
 };
 
 struct resolver_result
@@ -490,10 +495,9 @@ struct resolver_result
     struct resolver_entity *identifier;
 
     // Equal to the last structure entity discovered.
-    struct resolver_entity* last_struct_entity;
+    struct resolver_entity *last_struct_entity;
 
     struct resolver_array_data array_data;
-
 
     // The root entity of this result
     struct resolver_entity *entity;
@@ -1119,13 +1123,12 @@ bool is_array_operator(const char *op);
  */
 bool is_compile_computable(struct node *node);
 
-
 /**
  * Returns true if the given character is one of the provided delims
  * \param c The character to check
  * \param delims A const char string of many delimieters. One byte per delimieter
  */
-bool char_is_delim(char c, const char* delims);
+bool char_is_delim(char c, const char *delims);
 /**
  * Computes the array offset for the given expression node or array bracket node.
  * 
@@ -1140,7 +1143,7 @@ int array_offset(struct datatype *dtype, int index, int index_value);
  * Returns the multipler for a given array index. How much you need to multiply by
  * to get to the offset part.
  */
-int array_multiplier(struct datatype* dtype, int index, int index_value);
+int array_multiplier(struct datatype *dtype, int index, int index_value);
 // Resolver functions
 
 struct resolver_result *resolver_new_result(struct resolver_process *process);
@@ -1152,7 +1155,7 @@ bool resolver_result_ok(struct resolver_result *result);
  * Returns true if this entity has an array multiplier that must
  * be computed at runtime.
  */
-bool resolver_entity_has_array_multiplier(struct resolver_entity* entity);
+bool resolver_entity_has_array_multiplier(struct resolver_entity *entity);
 
 /**
  * Returns true if the resolver entity requires additional
@@ -1200,21 +1203,92 @@ const char *node_var_name(struct node *var_node);
 
 // Token
 
-bool token_is_operator(struct token* token, const char *op);
-bool token_is_keyword(struct token* token, const char *keyword);
-bool token_is_symbol(struct token* token, char sym);
+bool token_is_operator(struct token *token, const char *op);
+bool token_is_keyword(struct token *token, const char *keyword);
+bool token_is_symbol(struct token *token, char sym);
+bool token_is_identifier(struct token *token, const char *iden);
 
 // Preprocessor
-int preprocessor_run(struct compile_process* compiler, const char* file);
+int preprocessor_run(struct compile_process *compiler, const char *file);
 
 /**
  * Initializes the preprocessor
  */
-void preprocessor_initialize(struct preprocessor* preprocessor);
+void preprocessor_initialize(struct preprocessor *preprocessor);
 
 /**
  * Creates a new preprocessor instance
  */
-struct preprocessor* preprocessor_create();
+struct preprocessor *preprocessor_create();
+
+// Expressionable system, parses expressions
+
+enum
+{
+    EXPRESSIONABLE_GENERIC_TYPE_NUMBER,
+    EXPRESSIONABLE_GENERIC_TYPE_IDENTIFIER,
+    EXPRESSIONABLE_GENERIC_TYPE_PARENTHESES,
+    EXPRESSIONABLE_GENERIC_TYPE_EXPRESSION,
+    EXPRESSIONABLE_GENERIC_TYPE_NON_GENERIC
+};
+
+// Temporary
+#define expressionable_parse_err(str, tmp) \
+    FAIL_ERR(str)
+
+struct expressionable;
+
+typedef void *(*EXPRESSIONABLE_HANDLE_NUMBER)(struct expressionable *expressionable);
+typedef void *(*EXPRESSIONABLE_HANDLE_IDENTIFIER)(struct expressionable *expressionable);
+typedef void *(*EXPRESSIONABLE_SINGLE_TOKEN_TO_NODE)(struct expressionable *expressionable);
+typedef void (*EXPRESSIONABLE_MAKE_EXPRESSION_NODE)(struct expressionable *expressionable, void *left_node_ptr, void *right_node_ptr);
+typedef void (*EXPRESSIONABLE_MAKE_PARENTHESES_NODE)(struct expressionable *expressionable, void *node_ptr);
+
+typedef int (*EXPRESSIONABLE_GET_NODE_TYPE)(struct expressionable *expressionable, void *node);
+typedef void *(*EXPRESSIONABLE_GET_LEFT_NODE)(struct expressionable *expressionable, void *target_node);
+typedef void *(*EXPRESSIONABLE_GET_RIGHT_NODE)(struct expressionable *expressionable, void *target_node);
+typedef const char *(*EXPRESSIONABLE_GET_NODE_OPERATOR)(struct expressionable *expressionable, void *target_node);
+typedef void **(*EXPRESSIONABLE_GET_NODE_ADDRESS)(struct expressionable *expressionable, void *target_node);
+typedef void (*EXPPRESIONABLE_SET_EXPRESSION_NODE)(struct expressionable *expressionable, void *left_node, void *right_node, const char *op);
+struct expressionable_config
+{
+    struct expressionable_callbacks
+    {
+
+        EXPRESSIONABLE_HANDLE_NUMBER handle_number_callback;
+        EXPRESSIONABLE_SINGLE_TOKEN_TO_NODE handle_single_token_to_node_callback;
+        EXPRESSIONABLE_HANDLE_IDENTIFIER handle_identifier_callback;
+
+        /**
+         * Should create an expressionable node and push it to the stack
+         */
+        EXPRESSIONABLE_MAKE_EXPRESSION_NODE make_expression_node;
+        EXPRESSIONABLE_MAKE_PARENTHESES_NODE make_parentheses_node;
+
+        /**
+         * Function must return the numeric type of this node, as specified in the generic
+         * types enumumeration
+         */
+        EXPRESSIONABLE_GET_NODE_TYPE get_node_type;
+
+        EXPRESSIONABLE_GET_LEFT_NODE get_left_node;
+        EXPRESSIONABLE_GET_RIGHT_NODE get_right_node;
+        EXPRESSIONABLE_GET_NODE_OPERATOR get_node_operator;
+        EXPRESSIONABLE_GET_NODE_ADDRESS get_left_node_address;
+        EXPRESSIONABLE_GET_NODE_ADDRESS get_right_node_address;
+        EXPPRESIONABLE_SET_EXPRESSION_NODE set_exp_node;
+
+    } callbacks;
+};
+
+struct expressionable
+{
+    struct expressionable_config *config;
+    struct vector *token_vec;
+    struct vector *node_vec_out;
+};
+
+struct expressionable *expressionable_create(struct expressionable_config *config, struct vector *token_vector, struct vector *node_vector);
+void expressionable_parse(struct expressionable *expressionable);
 
 #endif

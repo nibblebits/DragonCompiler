@@ -1,6 +1,9 @@
-#define ABC for (int i = 0; i < 10; i++) { }
+#ifdef ABC
+ int main(int argc, char** argv)
+ {
+     return 55;
+ }
 
-int func(int a)
-{
-    ABC
-}
+#endif
+
+int k =5;

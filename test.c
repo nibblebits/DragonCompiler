@@ -1,9 +1,6 @@
-#ifdef ABC
- int main(int argc, char** argv)
- {
-     return 55;
- }
+#define ABC(a, c) a + c
 
-#endif
-
-int k =5;
+int main(int argc)
+{
+    int k = ABC(50, 10);
+}

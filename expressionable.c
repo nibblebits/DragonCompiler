@@ -48,15 +48,15 @@ void expressionable_parse(struct expressionable *expressionable);
 
 struct expressionable_callbacks *expressionable_callbacks(struct expressionable *expressionable)
 {
-    return &expressionable->config->callbacks;
+    return &expressionable->config.callbacks;
 }
 
-static void expressionable_node_push(struct expressionable *expressionable, void *node_ptr)
+void expressionable_node_push(struct expressionable *expressionable, void *node_ptr)
 {
     vector_push(expressionable->node_vec_out, node_ptr);
 }
 
-static struct token *expressionable_token_next(struct expressionable *expressionable)
+struct token *expressionable_token_next(struct expressionable *expressionable)
 {
     struct token *next_token = vector_peek_no_increment(expressionable->token_vec);
     while (next_token && next_token->type == TOKEN_TYPE_NEWLINE)
@@ -102,7 +102,7 @@ static void expressionable_expect_op(struct expressionable *expressionable, cons
 /**
  * Pops the last node we pushed to the vector
  */
-static struct node *expressionable_node_pop(struct expressionable *expressionable)
+struct node *expressionable_node_pop(struct expressionable *expressionable)
 {
     struct node *last_node = vector_back_ptr(expressionable->node_vec_out);
     vector_pop(expressionable->node_vec_out);
@@ -112,14 +112,14 @@ static struct node *expressionable_node_pop(struct expressionable *expressionabl
 void expressionable_init(struct expressionable *expressionable, struct vector *token_vector, struct vector *node_vector, struct expressionable_config *config)
 {
     memset(expressionable, 0, sizeof(struct expressionable));
-    expressionable->config = config;
+    memcpy(&expressionable->config, config, sizeof(struct expressionable_config));
     // We don't actually know anything about nodes, we are an abstraction
     // We have the size that is enough.
     expressionable->token_vec = token_vector;
     expressionable->node_vec_out = node_vector;
 }
 
-struct expressionable *expressionable_create(struct expressionable_config *config, struct vector *token_vector, struct vector *node_vector)
+struct expressionable *expressionable_create(struct expressionable_config* config, struct vector *token_vector, struct vector *node_vector)
 {
     assert(vector_element_size(token_vector) == sizeof(struct token));
     struct expressionable *expressionable = calloc(sizeof(struct expressionable), 1);
@@ -127,16 +127,6 @@ struct expressionable *expressionable_create(struct expressionable_config *confi
     return expressionable;
 }
 
-int expressionable_single_token_to_node(struct expressionable *expressionable)
-{
-    void *node_ptr = expressionable_callbacks(expressionable)->handle_single_token_to_node_callback(expressionable);
-    if (!node_ptr)
-        return -1;
-
-    expressionable_node_push(expressionable, node_ptr);
-
-    return 0;
-}
 
 int expressionable_parse_number(struct expressionable *expressionable)
 {
@@ -236,12 +226,14 @@ void expressionable_parser_node_shift_children_left(struct expressionable* expre
     const char *right_op = expressionable_callbacks(expressionable)->get_node_operator(expressionable, right_node);
     void* new_exp_left_node = node;
     void* *new_exp_right_node = expressionable_callbacks(expressionable)->get_right_node(expressionable, left_node);
+    
+    const char* node_op = expressionable_callbacks(expressionable)->get_node_operator(expressionable, node);
     // Make the new left operand
-    expressionable_callbacks(expressionable)->make_expression_node(expressionable, new_exp_left_node, new_exp_right_node);
+    expressionable_callbacks(expressionable)->make_expression_node(expressionable, new_exp_left_node, new_exp_right_node, node_op);
 
     void* new_left_operand = expressionable_node_pop(expressionable);
     struct node *new_right_operand = expressionable_callbacks(expressionable)->get_right_node(expressionable, right_node);
-    expressionable_callbacks(expressionable)->set_exp_node(expressionable, new_left_operand, new_right_operand, right_op);
+    expressionable_callbacks(expressionable)->set_exp_node(expressionable, node, new_left_operand, new_right_operand, right_op);
 }
 
 

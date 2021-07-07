@@ -32,9 +32,28 @@ struct vector* vector_create_no_saves(size_t esize)
     vector->count = 0;
 }
 
+size_t vector_total_size(struct vector *vector)
+{
+    return vector->count * vector->esize;
+}
+
+
 size_t vector_element_size(struct vector* vector)
 {
     return vector->esize;
+}
+
+struct vector* vector_clone(struct vector* vector)
+{
+    void* new_data_address = calloc(vector->esize, vector->count+VECTOR_ELEMENT_INCREMENT);
+    memcpy(new_data_address, vector->data, vector_total_size(vector));
+    struct vector* new_vec = calloc(sizeof(struct vector), 1);
+    memcpy(new_vec, vector, sizeof(struct vector));
+    new_vec->data = new_data_address;
+
+    // Saves are not cloned with vector_clone yet.
+   // assert(vector->saves == NULL);
+    return new_vec;
 }
 
 struct vector *vector_create(size_t esize)
@@ -137,6 +156,7 @@ void *vector_peek_ptr(struct vector *vector)
     return *ptr;
 }
 
+
 void *vector_peek_ptr_at(struct vector *vector, int index)
 {
     void **ptr = vector_at(vector, index);
@@ -229,10 +249,6 @@ int vector_elements_until_end(struct vector *vector, int index)
     return vector->count - index;
 }
 
-size_t vector_total_size(struct vector *vector)
-{
-    return vector->count * vector->esize;
-}
 
 void vector_shift_right_in_bounds_no_increment(struct vector *vector, int index, int amount)
 {

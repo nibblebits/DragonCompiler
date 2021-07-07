@@ -194,15 +194,29 @@ struct expression_state
     };
 };
 
+enum
+{
+    PREPROCESSOR_DEFINITION_STANDARD,
+    PREPROCESSOR_DEFINITION_MACRO_FUNCTION
+};
+
 struct preprocessor_definition
 {
+    // The type of definition i.e standard or macro function
+    int type;
+
     // The name of this definition i.e #define ABC . ABC would be the name
     const char *name;
 
+    
     // A vector of definition value tokens, values can be multiple lines
     // Values can also be multiple tokens.
     // vector of "struct token"
     struct vector *value;
+
+    // A vector of const char* representing function arguments in order.
+    // i.e ABC(a, b, c) a b and c would be in this arguments vector.
+    struct vector* arguments;
 };
 
 struct preprocessor
@@ -210,6 +224,9 @@ struct preprocessor
 
     // Vector of preprocessor definitions struct preprocessor_definition*
     struct vector *definitions;
+
+    // vector of (struct preprocessor_node*) .
+    struct vector* exp_vector;
 
     // Used for parsing expressions.
     struct expressionable *expressionable;
@@ -1212,14 +1229,9 @@ bool token_is_identifier(struct token *token, const char *iden);
 int preprocessor_run(struct compile_process *compiler, const char *file);
 
 /**
- * Initializes the preprocessor
- */
-void preprocessor_initialize(struct preprocessor *preprocessor);
-
-/**
  * Creates a new preprocessor instance
  */
-struct preprocessor *preprocessor_create();
+struct preprocessor *preprocessor_create(struct vector *token_vec);
 
 // Expressionable system, parses expressions
 
@@ -1240,8 +1252,7 @@ struct expressionable;
 
 typedef void *(*EXPRESSIONABLE_HANDLE_NUMBER)(struct expressionable *expressionable);
 typedef void *(*EXPRESSIONABLE_HANDLE_IDENTIFIER)(struct expressionable *expressionable);
-typedef void *(*EXPRESSIONABLE_SINGLE_TOKEN_TO_NODE)(struct expressionable *expressionable);
-typedef void (*EXPRESSIONABLE_MAKE_EXPRESSION_NODE)(struct expressionable *expressionable, void *left_node_ptr, void *right_node_ptr);
+typedef void (*EXPRESSIONABLE_MAKE_EXPRESSION_NODE)(struct expressionable *expressionable, void *left_node_ptr, void *right_node_ptr, const char* op);
 typedef void (*EXPRESSIONABLE_MAKE_PARENTHESES_NODE)(struct expressionable *expressionable, void *node_ptr);
 
 typedef int (*EXPRESSIONABLE_GET_NODE_TYPE)(struct expressionable *expressionable, void *node);
@@ -1249,14 +1260,13 @@ typedef void *(*EXPRESSIONABLE_GET_LEFT_NODE)(struct expressionable *expressiona
 typedef void *(*EXPRESSIONABLE_GET_RIGHT_NODE)(struct expressionable *expressionable, void *target_node);
 typedef const char *(*EXPRESSIONABLE_GET_NODE_OPERATOR)(struct expressionable *expressionable, void *target_node);
 typedef void **(*EXPRESSIONABLE_GET_NODE_ADDRESS)(struct expressionable *expressionable, void *target_node);
-typedef void (*EXPPRESIONABLE_SET_EXPRESSION_NODE)(struct expressionable *expressionable, void *left_node, void *right_node, const char *op);
+typedef void (*EXPPRESIONABLE_SET_EXPRESSION_NODE)(struct expressionable *expressionable, void* node, void *left_node, void *right_node, const char *op);
 struct expressionable_config
 {
     struct expressionable_callbacks
     {
 
         EXPRESSIONABLE_HANDLE_NUMBER handle_number_callback;
-        EXPRESSIONABLE_SINGLE_TOKEN_TO_NODE handle_single_token_to_node_callback;
         EXPRESSIONABLE_HANDLE_IDENTIFIER handle_identifier_callback;
 
         /**
@@ -1283,12 +1293,15 @@ struct expressionable_config
 
 struct expressionable
 {
-    struct expressionable_config *config;
+    struct expressionable_config config;
     struct vector *token_vec;
     struct vector *node_vec_out;
 };
 
-struct expressionable *expressionable_create(struct expressionable_config *config, struct vector *token_vector, struct vector *node_vector);
+struct expressionable *expressionable_create(struct expressionable_config* config, struct vector *token_vector, struct vector *node_vector);
 void expressionable_parse(struct expressionable *expressionable);
+struct token *expressionable_token_next(struct expressionable *expressionable);
+struct node *expressionable_node_pop(struct expressionable *expressionable);
+void expressionable_node_push(struct expressionable *expressionable, void *node_ptr);
 
 #endif

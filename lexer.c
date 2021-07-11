@@ -63,7 +63,8 @@ bool is_keyword(const char *str)
            S_EQ(str, "struct") ||
            S_EQ(str, "union") ||
            S_EQ(str, "static") || 
-           S_EQ(str, "return");
+           S_EQ(str, "return") ||
+           S_EQ(str, "include");
 }
 
 bool keyword_is_datatype(const char *str)
@@ -150,6 +151,11 @@ static struct pos compiler_file_position()
     return current_process->pos;
 }
 
+static struct token* lexer_last_token()
+{
+    return vector_back(current_process->token_vec_original);
+}
+
 static char assert_next_char(char expected_char)
 {
     char c = nextc();
@@ -167,14 +173,15 @@ static struct token *token_create(struct token *_token)
     return &tmp_token;
 }
 
-static struct token *token_make_string()
+
+static struct token *token_make_string(char start_delim, char end_delim)
 {
     struct buffer *buf = buffer_create();
     // We expect strings to start with double quotes.
-    assert_next_char('"');
+    assert_next_char(start_delim);
     char c = nextc();
 
-    for (; c != '"' && c != EOF; c = nextc())
+    for (; c != end_delim && c != EOF; c = nextc())
     {
         if (c == '\\')
         {
@@ -228,8 +235,21 @@ static struct token *token_make_operator_for_value(const char *val)
     return token_create(&(struct token){TOKEN_TYPE_OPERATOR, .sval = val});
 }
 
-static struct token *token_make_operator()
+static struct token *token_make_operator_or_string()
 {
+    char op = peekc();
+    if (op == '<')
+    {
+        // It's possible we have an include statement lets just check that if so we will have a string
+        struct token* last_token = lexer_last_token();
+        if (token_is_keyword(last_token, "include"))
+        {
+            // Aha so we have something like this "include <stdio.h>"
+            // We are at the "stdio.h>" bit so we need to treat this as a string
+            return token_make_string('<', '>');
+        }
+    }
+
     return token_create(&(struct token){TOKEN_TYPE_OPERATOR, .sval = read_op()});
 }
 
@@ -362,7 +382,7 @@ static struct token *handle_comment()
         // so that it can be proceesed correctly by the operator token function
         pushc('/');
 
-        return token_make_operator();
+        return token_make_operator_or_string();
     }
 
     return NULL;
@@ -403,7 +423,7 @@ static struct token *read_next_token()
         break;
 
     OPERATOR_CASE_EXCLUDING_DIVISON:
-        token = token_make_operator();
+        token = token_make_operator_or_string();
         break;
     SYMBOL_CASE:
         token = token_make_symbol();
@@ -413,7 +433,7 @@ static struct token *read_next_token()
         token = token_make_quote();
         break;
     case '"':
-        token = token_make_string();
+        token = token_make_string('"', '"');
         break;
 
     case '\n':

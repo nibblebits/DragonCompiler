@@ -1,6 +1,10 @@
 #ifndef MISC_H
 #define MISC_H
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdbool.h>
+
 /**
  * No idea what to appropiatly call this, the name change can wait for now..
  */
@@ -22,5 +26,5 @@
  * "input1" can end with either a null terminator of the given delimieter.
  */
 int str_matches(const char *input, const char *input2, char delim);
-
+bool file_exists(const char* filename);
 #endif

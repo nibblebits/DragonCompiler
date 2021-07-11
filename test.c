@@ -1,6 +1,4 @@
-#define ABC(a, c) a + c
+#include <test.h>
 
-int main(int argc)
-{
-    int k = ABC(50, 10);
-}
+int e = ABCD;
+

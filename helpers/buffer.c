@@ -27,6 +27,7 @@ void buffer_need(struct buffer* buffer, size_t size)
     }
 }
 
+
 void buffer_printf(struct buffer* buffer, const char* fmt, ...)
 {
     va_list args;
@@ -37,6 +38,19 @@ void buffer_printf(struct buffer* buffer, const char* fmt, ...)
     buffer_extend(buffer, len);
     int actual_len = vsnprintf(&buffer->data[index], len, fmt, args);
     buffer->len += actual_len;
+    va_end(args);
+}
+
+void buffer_printf_no_terminator(struct buffer* buffer, const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    int index = buffer->len;
+    // Temporary, this is a limitation we are guessing the size is no more than 2048
+    int len = 2048;
+    buffer_extend(buffer, len);
+    int actual_len = vsnprintf(&buffer->data[index], len, fmt, args);
+    buffer->len += actual_len-1;
     va_end(args);
 }
 

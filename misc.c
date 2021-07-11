@@ -1,5 +1,16 @@
 #include "misc.h"
 #include <string.h>
+bool file_exists(const char* filename)
+{
+    FILE* f = fopen(filename, "r");
+    if (!f)
+    {
+        return false;
+    }
+
+    fclose(f);
+    return true;
+}
 
 /**
  * Matches the given input with the second input whilst taking the delimieter into account.

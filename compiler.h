@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <string.h>
 
 #include "helpers/vector.h"
 
@@ -843,6 +844,17 @@ void compiler_error(struct compile_process *compiler, const char *msg, ...);
  */
 int compile_file(const char *filename);
 
+
+/**
+ * Includes a file to be compiled, returns a new compile process that represents the file
+ * to be compiled.
+ * 
+ * Only lexical analysis, preprocessing and parsing are done for the given file.
+ * Code generation is excluded.
+ */
+struct compile_process *compile_include(const char *filename, struct compile_process *parent_process);
+
+
 /**
  * Lexical analysis
  */
@@ -867,7 +879,7 @@ bool keyword_is_datatype(const char *str);
 /**
  * Creates a new compile process
  */
-struct compile_process *compile_process_create(const char *filename);
+struct compile_process* compile_process_create(const char* filename, struct compile_process* parent_process);
 
 /**
  * Returns the current file thats being processed

@@ -1,5 +1,7 @@
 #include "compiler.h"
+#include "misc.h"
 #include "helpers/vector.h"
+#include "helpers/buffer.h"
 
 enum
 {
@@ -144,8 +146,17 @@ void preprocessor_token_vec_push_dst(struct compile_process *compiler, struct ve
 
 static bool preprocessor_token_is_preprocessor_keyword(struct token *token)
 {
-    return token->type == TOKEN_TYPE_IDENTIFIER &&
-           (S_EQ(token->sval, "define") || S_EQ(token->sval, "if") || S_EQ(token->sval, "ifdef") || S_EQ(token->sval, "ifndef") || S_EQ(token->sval, "endif"));
+    return token->type == TOKEN_TYPE_IDENTIFIER || token->type == TOKEN_TYPE_KEYWORD &&
+           (S_EQ(token->sval, "define") || S_EQ(token->sval, "if") || S_EQ(token->sval, "ifdef") || S_EQ(token->sval, "ifndef") || S_EQ(token->sval, "endif") || S_EQ(token->sval, "include"));
+}
+
+static bool preprocessor_token_is_include(struct token* token)
+{
+    if (!preprocessor_token_is_preprocessor_keyword(token))
+    {
+        return false;
+    }
+    return S_EQ(token->sval, "include");
 }
 
 static bool preprocessor_token_is_define(struct token *token)
@@ -318,6 +329,27 @@ static void preprocessor_handle_definition_token(struct compile_process *compile
     vector_push(preprocessor->definitions, &definition);
 }
 
+
+static void preprocessor_handle_include_token(struct compile_process* compiler)
+{
+    // We are expecting a file to include, lets check the next token
+    
+    // We have the path here 
+    struct token* file_path_token = preprocessor_next_token(compiler);
+    if (!file_exists(file_path_token->sval))
+    {
+        compiler_error(compiler, "The file does not exist %s unable to include", file_path_token->sval);
+    }
+
+    // Theirs a chance no string provided, check for this later i.e include <abc.h> no quotes ""
+    // Alright lets load and compile the given file
+    struct compile_process* new_compile_process = compile_include(file_path_token->sval, compiler);
+    assert(new_compile_process);
+
+    // Now that we have the new compile process we must merge the tokens with our own
+    preprocessor_token_vec_push_dst(compiler, new_compile_process->token_vec);
+
+}
 static void preprocessor_handle_ifdef_token(struct compile_process *compiler)
 {
     struct token *condition_token = preprocessor_next_token(compiler);
@@ -522,6 +554,12 @@ static int preprocessor_handle_hashtag_token(struct compile_process *compiler, s
         preprocessor_handle_ifdef_token(compiler);
         is_preprocessed = true;
     }
+    else if(preprocessor_token_is_include(next_token))
+    {
+        preprocessor_handle_include_token(compiler);
+        is_preprocessed = true;
+    }
+
 
     return is_preprocessed;
 }

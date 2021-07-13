@@ -1,4 +1,5 @@
 #include "compiler.h"
+#include "misc.h"
 #include <stdio.h>
 #include <stddef.h>
 #include <assert.h>
@@ -249,7 +250,7 @@ static bool parser_left_op_has_priority(const char *op_left, const char *op_righ
 
 static bool parser_is_unary_operator(const char *op)
 {
-    return S_EQ(op, "-") || S_EQ(op, "!") || S_EQ(op, "~") || S_EQ(op, "*");
+    return is_unary_operator(op);
 }
 
 static struct token *token_next()

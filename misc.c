@@ -1,5 +1,11 @@
 #include "misc.h"
+#include "compiler.h"
 #include <string.h>
+
+bool is_unary_operator(const char* op)
+{
+    return S_EQ(op, "-") || S_EQ(op, "!") || S_EQ(op, "~") || S_EQ(op, "*");
+}
 bool file_exists(const char* filename)
 {
     FILE* f = fopen(filename, "r");

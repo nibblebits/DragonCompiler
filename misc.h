@@ -27,4 +27,7 @@
  */
 int str_matches(const char *input, const char *input2, char delim);
 bool file_exists(const char* filename);
+
+// Move to a better place
+bool is_unary_operator(const char* op);
 #endif

@@ -1,4 +1,5 @@
 #include "compiler.h"
+#include "misc.h"
 #include "helpers/vector.h"
 #include <assert.h>
 
@@ -43,7 +44,6 @@ static struct expressionable_op_precedence_group op_precedence[TOTAL_OPERATOR_GR
     {.operators = {",", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
 };
 
-
 void expressionable_parse(struct expressionable *expressionable);
 
 struct expressionable_callbacks *expressionable_callbacks(struct expressionable *expressionable)
@@ -53,7 +53,7 @@ struct expressionable_callbacks *expressionable_callbacks(struct expressionable 
 
 void expressionable_node_push(struct expressionable *expressionable, void *node_ptr)
 {
-    vector_push(expressionable->node_vec_out, node_ptr);
+    vector_push(expressionable->node_vec_out, &node_ptr);
 }
 
 struct token *expressionable_token_next(struct expressionable *expressionable)
@@ -102,9 +102,9 @@ static void expressionable_expect_op(struct expressionable *expressionable, cons
 /**
  * Pops the last node we pushed to the vector
  */
-struct node *expressionable_node_pop(struct expressionable *expressionable)
+void *expressionable_node_pop(struct expressionable *expressionable)
 {
-    struct node *last_node = vector_back_ptr(expressionable->node_vec_out);
+    void *last_node = vector_back_ptr(expressionable->node_vec_out);
     vector_pop(expressionable->node_vec_out);
     return last_node;
 }
@@ -119,14 +119,13 @@ void expressionable_init(struct expressionable *expressionable, struct vector *t
     expressionable->node_vec_out = node_vector;
 }
 
-struct expressionable *expressionable_create(struct expressionable_config* config, struct vector *token_vector, struct vector *node_vector)
+struct expressionable *expressionable_create(struct expressionable_config *config, struct vector *token_vector, struct vector *node_vector)
 {
     assert(vector_element_size(token_vector) == sizeof(struct token));
     struct expressionable *expressionable = calloc(sizeof(struct expressionable), 1);
     expressionable_init(expressionable, token_vector, node_vector, config);
     return expressionable;
 }
-
 
 int expressionable_parse_number(struct expressionable *expressionable)
 {
@@ -176,14 +175,34 @@ void expressionable_parse_parentheses(struct expressionable *expressionable)
     }
 }
 
-int expressionable_parse_exp(struct expressionable *expressionable)
+int expressionable_parse_unary(struct expressionable *expressionable)
 {
-    if (S_EQ(expressionable_peek_next(expressionable)->sval, "("))
+    struct token *unary_token = expressionable_token_next(expressionable);
+    expressionable_parse(expressionable);
+    void *right_operand_node = expressionable_node_pop(expressionable);
+    void *unary_node = expressionable_callbacks(expressionable)->make_unary_node(expressionable, unary_token->sval, right_operand_node);
+    expressionable_node_push(expressionable, unary_node);
+    return 0;
+}
+
+void expressionable_parse_for_operator(struct expressionable *expressionable);
+
+int expressionable_parse_exp(struct expressionable *expressionable, struct token* token)
+{
+    if (is_unary_operator(token->sval))
+    {
+        expressionable_parse_unary(expressionable);
+    }
+    else if (S_EQ(expressionable_peek_next(expressionable)->sval, "("))
     {
         expressionable_parse_parentheses(expressionable);
-        return 0;
     }
-
+    else
+    {
+        // I Hate else, make sub functions avoid this .
+        // Normal operator i.e a + b, 5 + 10
+        expressionable_parse_for_operator(expressionable);
+    }
     return 0;
 }
 
@@ -205,8 +224,7 @@ int expressionable_parse_single(struct expressionable *expressionable)
         res = 0;
         break;
     case TOKEN_TYPE_OPERATOR:
-        expressionable_parse(expressionable);
-        res = 0;
+        expressionable_parse_exp(expressionable, token);
         break;
     }
     return res;
@@ -217,25 +235,24 @@ int expressionable_parse_single(struct expressionable *expressionable)
  * 
  * I.e 50*E(20+120) will become E(50*20)+120
  */
-void expressionable_parser_node_shift_children_left(struct expressionable* expressionable, void* node)
+void expressionable_parser_node_shift_children_left(struct expressionable *expressionable, void *node)
 {
 
-    void* left_node = expressionable_callbacks(expressionable)->get_left_node(expressionable, node);
-    void* right_node = expressionable_callbacks(expressionable)->get_right_node(expressionable, node);
+    void *left_node = expressionable_callbacks(expressionable)->get_left_node(expressionable, node);
+    void *right_node = expressionable_callbacks(expressionable)->get_right_node(expressionable, node);
 
     const char *right_op = expressionable_callbacks(expressionable)->get_node_operator(expressionable, right_node);
-    void* new_exp_left_node = node;
-    void* *new_exp_right_node = expressionable_callbacks(expressionable)->get_right_node(expressionable, left_node);
-    
-    const char* node_op = expressionable_callbacks(expressionable)->get_node_operator(expressionable, node);
+    void *new_exp_left_node = node;
+    void **new_exp_right_node = expressionable_callbacks(expressionable)->get_right_node(expressionable, left_node);
+
+    const char *node_op = expressionable_callbacks(expressionable)->get_node_operator(expressionable, node);
     // Make the new left operand
     expressionable_callbacks(expressionable)->make_expression_node(expressionable, new_exp_left_node, new_exp_right_node, node_op);
 
-    void* new_left_operand = expressionable_node_pop(expressionable);
+    void *new_left_operand = expressionable_node_pop(expressionable);
     struct node *new_right_operand = expressionable_callbacks(expressionable)->get_right_node(expressionable, right_node);
     expressionable_callbacks(expressionable)->set_exp_node(expressionable, node, new_left_operand, new_right_operand, right_op);
 }
-
 
 static int expressionable_parser_get_precedence_for_operator(const char *op, struct expressionable_op_precedence_group **group_out)
 {
@@ -276,7 +293,6 @@ static bool expressionable_parser_left_op_has_priority(const char *op_left, cons
 
     return precedence_left <= precedence_right;
 }
-
 
 /**
  * Reorders the given expression and its children, based on operator priority. I.e 
@@ -339,6 +355,26 @@ void expressionable_parser_reorder_expression(struct expressionable *expressiona
             expressionable_parser_reorder_expression(expressionable, address_of_right);
         }
     }
+}
+
+void expressionable_parse_for_operator(struct expressionable *expressionable)
+{
+    struct token *op_token = expressionable_token_next(expressionable);
+    const char *op = op_token->sval;
+    // We must pop the last node as this will be the left operand
+    void *node_left = expressionable_node_pop(expressionable);
+
+    // We must parse the right operand
+    expressionable_parse(expressionable);
+
+    void *node_right = expressionable_node_pop(expressionable);
+
+    expressionable_callbacks(expressionable)->make_expression_node(expressionable, node_left, node_right, op);
+    void *exp_node = expressionable_node_pop(expressionable);
+
+    // We must reorder the expression if possible
+    expressionable_parser_reorder_expression(expressionable, &exp_node);
+    expressionable_node_push(expressionable, exp_node);
 }
 
 void expressionable_parse(struct expressionable *expressionable)

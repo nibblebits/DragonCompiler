@@ -1251,6 +1251,7 @@ enum
 {
     EXPRESSIONABLE_GENERIC_TYPE_NUMBER,
     EXPRESSIONABLE_GENERIC_TYPE_IDENTIFIER,
+    EXPRESSIONABLE_GENERIC_TYPE_UNARY,
     EXPRESSIONABLE_GENERIC_TYPE_PARENTHESES,
     EXPRESSIONABLE_GENERIC_TYPE_EXPRESSION,
     EXPRESSIONABLE_GENERIC_TYPE_NON_GENERIC
@@ -1266,6 +1267,7 @@ typedef void *(*EXPRESSIONABLE_HANDLE_NUMBER)(struct expressionable *expressiona
 typedef void *(*EXPRESSIONABLE_HANDLE_IDENTIFIER)(struct expressionable *expressionable);
 typedef void (*EXPRESSIONABLE_MAKE_EXPRESSION_NODE)(struct expressionable *expressionable, void *left_node_ptr, void *right_node_ptr, const char* op);
 typedef void (*EXPRESSIONABLE_MAKE_PARENTHESES_NODE)(struct expressionable *expressionable, void *node_ptr);
+typedef void *(*EXPRESSIONABLE_MAKE_UNARY_NODE)(struct expressionable* expressionable, const char* op, void* right_operand_node_ptr);
 
 typedef int (*EXPRESSIONABLE_GET_NODE_TYPE)(struct expressionable *expressionable, void *node);
 typedef void *(*EXPRESSIONABLE_GET_LEFT_NODE)(struct expressionable *expressionable, void *target_node);
@@ -1286,6 +1288,7 @@ struct expressionable_config
          */
         EXPRESSIONABLE_MAKE_EXPRESSION_NODE make_expression_node;
         EXPRESSIONABLE_MAKE_PARENTHESES_NODE make_parentheses_node;
+        EXPRESSIONABLE_MAKE_UNARY_NODE make_unary_node;
 
         /**
          * Function must return the numeric type of this node, as specified in the generic
@@ -1313,7 +1316,7 @@ struct expressionable
 struct expressionable *expressionable_create(struct expressionable_config* config, struct vector *token_vector, struct vector *node_vector);
 void expressionable_parse(struct expressionable *expressionable);
 struct token *expressionable_token_next(struct expressionable *expressionable);
-struct node *expressionable_node_pop(struct expressionable *expressionable);
+void *expressionable_node_pop(struct expressionable *expressionable);
 void expressionable_node_push(struct expressionable *expressionable, void *node_ptr);
 
 #endif

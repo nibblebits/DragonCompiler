@@ -38,9 +38,9 @@ struct preprocessor_node
         } exp;
 
         struct preprocessor_unary_node
-        {   
-            struct preprocessor_node* operand_node;
-            const char* op;
+        {
+            struct preprocessor_node *operand_node;
+            const char *op;
         } unary_node;
 
         /**
@@ -62,7 +62,6 @@ void *preprocessor_node_create(struct preprocessor_node *node)
     memcpy(result, node, sizeof(struct preprocessor_node));
     return result;
 }
-
 
 void *preprocessor_handle_number_token(struct expressionable *expressionable)
 {
@@ -124,7 +123,7 @@ int preprocessor_get_node_type(struct expressionable *expressionable, void *node
 
     case PREPROCESSOR_UNARY_NODE:
         generic_type = EXPRESSIONABLE_GENERIC_TYPE_UNARY;
-    break;
+        break;
     case PREPROCESSOR_EXPRESSION_NODE:
         generic_type = EXPRESSIONABLE_GENERIC_TYPE_EXPRESSION;
         break;
@@ -136,7 +135,6 @@ int preprocessor_get_node_type(struct expressionable *expressionable, void *node
     return generic_type;
 }
 
-
 const char *preprocessor_get_node_operator(struct expressionable *expressionable, void *target_node)
 {
     struct preprocessor_node *preprocessor_node = target_node;
@@ -145,13 +143,12 @@ const char *preprocessor_get_node_operator(struct expressionable *expressionable
 
 void **preprocessor_get_left_node_address(struct expressionable *expressionable, void *target_node)
 {
-    return (void**)&((struct preprocessor_node*)(target_node))->exp.left;
+    return (void **)&((struct preprocessor_node *)(target_node))->exp.left;
 }
 
 void **preprocessor_get_right_node_address(struct expressionable *expressionable, void *target_node)
 {
-    return (void**)&((struct preprocessor_node*)(target_node))->exp.right;
-
+    return (void **)&((struct preprocessor_node *)(target_node))->exp.right;
 }
 
 void preprocessor_set_expression_node(struct expressionable *expressionable, void *node, void *left_node, void *right_node, const char *op)
@@ -162,10 +159,10 @@ void preprocessor_set_expression_node(struct expressionable *expressionable, voi
     preprocessor_node->exp.op = op;
 }
 
-void* preprocessor_make_unary_node(struct expressionable* expressionable, const char* op, void* right_operand_node_ptr)
+void *preprocessor_make_unary_node(struct expressionable *expressionable, const char *op, void *right_operand_node_ptr)
 {
-    struct preprocessor_node* right_operand_node = right_operand_node_ptr;
-    return preprocessor_node_create(&(struct preprocessor_node){.type=PREPROCESSOR_UNARY_NODE, .unary_node.op=op,.unary_node.operand_node=right_operand_node_ptr});
+    struct preprocessor_node *right_operand_node = right_operand_node_ptr;
+    return preprocessor_node_create(&(struct preprocessor_node){.type = PREPROCESSOR_UNARY_NODE, .unary_node.op = op, .unary_node.operand_node = right_operand_node_ptr});
 }
 
 struct expressionable_config preprocessor_expressionable_config =
@@ -181,8 +178,7 @@ struct expressionable_config preprocessor_expressionable_config =
         .callbacks.get_node_operator = preprocessor_get_node_operator,
         .callbacks.get_left_node_address = preprocessor_get_left_node_address,
         .callbacks.get_right_node_address = preprocessor_get_right_node_address,
-        .callbacks.set_exp_node = preprocessor_set_expression_node
-};
+        .callbacks.set_exp_node = preprocessor_set_expression_node};
 
 struct preprocessor_function_argument
 {
@@ -486,12 +482,19 @@ static void preprocessor_handle_include_token(struct compile_process *compiler)
     preprocessor_token_vec_push_dst(compiler, new_compile_process->token_vec);
 }
 
-void preprocessor_read_to_end_if(struct compile_process* compiler, bool true_clause)
+void preprocessor_read_to_end_if(struct compile_process *compiler, bool true_clause)
 {
     // We have this definition we can proceed with the rest of the body, until
     // an #endif is discovered
     while (preprocessor_next_token_no_increment(compiler) && !preprocessor_hashtag_and_identifier(compiler, "endif"))
     {
+        // Read the else statement.
+        if (preprocessor_hashtag_and_identifier(compiler, "else"))
+        {
+            preprocessor_read_to_end_if(compiler, !true_clause);
+            break;
+        }
+
         if (true_clause)
         {
             preprocessor_handle_token(compiler, preprocessor_next_token(compiler));
@@ -516,21 +519,20 @@ static void preprocessor_handle_ifdef_token(struct compile_process *compiler)
     preprocessor_read_to_end_if(compiler, definition != NULL);
 }
 
-static int preprocessor_evaluate_number(struct preprocessor_node* node)
+static int preprocessor_evaluate_number(struct preprocessor_node *node)
 {
     return node->const_val.llnum;
 }
 
-static int preprocessor_evaluate_identifier(struct compile_process* compiler, struct preprocessor_node* node)
+static int preprocessor_evaluate_identifier(struct compile_process *compiler, struct preprocessor_node *node)
 {
-    struct preprocessor* preprocessor = compiler_preprocessor(compiler);
-    struct preprocessor_definition* definition = preprocessor_get_definition(preprocessor, node->sval);
+    struct preprocessor *preprocessor = compiler_preprocessor(compiler);
+    struct preprocessor_definition *definition = preprocessor_get_definition(preprocessor, node->sval);
     if (!definition)
     {
         // For some reason C returns true for evaluation if a given definition does not exist. Strange..
         return true;
     }
-
 
     if (vector_count(definition->value) > 1)
     {
@@ -542,7 +544,7 @@ static int preprocessor_evaluate_identifier(struct compile_process* compiler, st
         return false;
     }
 
-    struct token* token = vector_back(definition->value);
+    struct token *token = vector_back(definition->value);
     if (token->type != TOKEN_TYPE_NUMBER)
     {
         compiler_error(compiler, "The definition %s must hold a number value, unable to use macro IF", definition->name);
@@ -550,55 +552,54 @@ static int preprocessor_evaluate_identifier(struct compile_process* compiler, st
     return token->llnum;
 }
 
- 
-int preprocessor_arithmetic(struct compile_process* compiler, long left_operand, long right_operand, const char* op)
+int preprocessor_arithmetic(struct compile_process *compiler, long left_operand, long right_operand, const char *op)
 {
     int result = 0;
     if (S_EQ(op, "*"))
     {
         result = left_operand * right_operand;
     }
-    else if(S_EQ(op, "/"))
+    else if (S_EQ(op, "/"))
     {
         result = left_operand / right_operand;
     }
-    else if(S_EQ(op, "+"))
+    else if (S_EQ(op, "+"))
     {
         result = left_operand + right_operand;
     }
-    else if(S_EQ(op, "-"))
+    else if (S_EQ(op, "-"))
     {
         result = left_operand - right_operand;
     }
     else if (S_EQ(op, "=="))
     {
         result = left_operand == right_operand;
-    }   
-    else if(S_EQ(op, "!="))
+    }
+    else if (S_EQ(op, "!="))
     {
         result = left_operand != right_operand;
     }
-    else if(S_EQ(op, ">"))
+    else if (S_EQ(op, ">"))
     {
         result = left_operand > right_operand;
     }
-    else if(S_EQ(op, "<"))
+    else if (S_EQ(op, "<"))
     {
         result = left_operand < right_operand;
     }
-    else if(S_EQ(op, ">="))
+    else if (S_EQ(op, ">="))
     {
         result = left_operand >= right_operand;
     }
-    else if(S_EQ(op, "<="))
+    else if (S_EQ(op, "<="))
     {
         result = left_operand <= right_operand;
     }
-    else if(S_EQ(op, "<<"))
+    else if (S_EQ(op, "<<"))
     {
         result = left_operand << right_operand;
     }
-    else if(S_EQ(op, ">>"))
+    else if (S_EQ(op, ">>"))
     {
         result = left_operand >> right_operand;
     }
@@ -611,28 +612,27 @@ int preprocessor_arithmetic(struct compile_process* compiler, long left_operand,
     // Forgot to handle them.
 
     return result;
-
 }
 
-int preprocessor_evaluate(struct compile_process* compiler, struct preprocessor_node* root_node);
+int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_node *root_node);
 
-int preprocessor_evaluate_exp(struct compile_process* compiler, struct preprocessor_node* node)
+int preprocessor_evaluate_exp(struct compile_process *compiler, struct preprocessor_node *node)
 {
     long left_operand = preprocessor_evaluate(compiler, node->exp.left);
     long right_operand = preprocessor_evaluate(compiler, node->exp.right);
     return preprocessor_arithmetic(compiler, left_operand, right_operand, node->exp.op);
 }
 
-int preprocessor_evaluate_unary(struct compile_process* compiler, struct preprocessor_node* node)
+int preprocessor_evaluate_unary(struct compile_process *compiler, struct preprocessor_node *node)
 {
     int res = 0;
-    const char* op = node->unary_node.op;
-    struct preprocessor_node* right_operand = node->unary_node.operand_node;
+    const char *op = node->unary_node.op;
+    struct preprocessor_node *right_operand = node->unary_node.operand_node;
     if (S_EQ(op, "!"))
     {
         res = !preprocessor_evaluate(compiler, right_operand);
     }
-    else if(S_EQ(op, "~"))
+    else if (S_EQ(op, "~"))
     {
         res = ~preprocessor_evaluate(compiler, right_operand);
     }
@@ -642,48 +642,47 @@ int preprocessor_evaluate_unary(struct compile_process* compiler, struct preproc
     }
 }
 
-int preprocessor_evaluate_parentheses(struct compile_process* compiler, struct preprocessor_node* node)
+int preprocessor_evaluate_parentheses(struct compile_process *compiler, struct preprocessor_node *node)
 {
     return preprocessor_evaluate(compiler, node->parenthesis.exp);
 }
 
-int preprocessor_evaluate(struct compile_process* compiler, struct preprocessor_node* root_node)
+int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_node *root_node)
 {
-    struct preprocessor_node* current = root_node;
+    struct preprocessor_node *current = root_node;
     int result = 0;
-    switch(current->type)
+    switch (current->type)
     {
-        case PREPROCESSOR_NUMBER_NODE:
-            result = preprocessor_evaluate_number(current);
+    case PREPROCESSOR_NUMBER_NODE:
+        result = preprocessor_evaluate_number(current);
         break;
 
-        case PREPROCESSOR_IDENTIFIER_NODE:
-            result = preprocessor_evaluate_identifier(compiler, current);
-        break;
-    
-        case PREPROCESSOR_UNARY_NODE:
-            result = preprocessor_evaluate_unary(compiler, current);
+    case PREPROCESSOR_IDENTIFIER_NODE:
+        result = preprocessor_evaluate_identifier(compiler, current);
         break;
 
-        case PREPROCESSOR_EXPRESSION_NODE:
-            result = preprocessor_evaluate_exp(compiler, current);
+    case PREPROCESSOR_UNARY_NODE:
+        result = preprocessor_evaluate_unary(compiler, current);
         break;
 
-        case PREPROCESSOR_PARENTHESES_NODE:
-            result = preprocessor_evaluate_parentheses(compiler, current);
+    case PREPROCESSOR_EXPRESSION_NODE:
+        result = preprocessor_evaluate_exp(compiler, current);
         break;
 
+    case PREPROCESSOR_PARENTHESES_NODE:
+        result = preprocessor_evaluate_parentheses(compiler, current);
+        break;
     }
     return result;
 }
 static void preprocessor_handle_if_token(struct compile_process *compiler)
 {
-    struct vector *node_vector = vector_create(sizeof(struct preprocessor_node*));
+    struct vector *node_vector = vector_create(sizeof(struct preprocessor_node *));
     // We will have an expression after the if token that needs to be preprocessed
     struct expressionable *expressionable = expressionable_create(&preprocessor_expressionable_config, compiler->token_vec_original, node_vector);
     expressionable_parse(expressionable);
 
-    struct preprocessor_node* node = expressionable_node_pop(expressionable);
+    struct preprocessor_node *node = expressionable_node_pop(expressionable);
     int result = preprocessor_evaluate(compiler, node);
     preprocessor_read_to_end_if(compiler, result > 0);
 }
@@ -916,7 +915,6 @@ void preprocessor_handle_token(struct compile_process *compiler, struct token *t
         preprocessor_token_push_dst(compiler, token);
     }
 }
-
 
 void preprocessor_initialize(struct vector *token_vec, struct preprocessor *preprocessor)
 {

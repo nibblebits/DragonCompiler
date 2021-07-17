@@ -27,6 +27,8 @@ enum
     // You can think of this as where global variables would be.
     // Does not include situations where we are inside of a structure
     HISTORY_FLAG_IS_GLOBAL_SCOPE = 0b00000100,
+    // This flag is set if the stack is growing upwards, i.e function arguments
+    HISTORY_FLAG_IS_UPWARD_STACK = 0b00001000
 };
 
 // Expression flags
@@ -144,7 +146,8 @@ struct parser_scope_entity *parser_new_scope_entity(struct node *node, int stack
 
 void parser_scope_offset_for_stack(struct node *node, struct history *history)
 {
-    int offset = -variable_size(node);
+    bool upward_stack = history->flags & HISTORY_FLAG_IS_UPWARD_STACK;
+    int offset = upward_stack ? variable_size(node) : -variable_size(node);
     struct parser_scope_entity *last_entity = parser_scope_last_entity();
 
     if (last_entity)
@@ -152,19 +155,28 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
         offset += last_entity->node->var.aoffset;
         if (variable_node_is_primative(node))
         {
-            node->var.padding = padding(-offset, node->var.type.size);
+            node->var.padding = padding(upward_stack ? offset : -offset, node->var.type.size);
             last_entity->node->var.padding_after = node->var.padding;
         }
     }
+
+    bool first_entity = !last_entity;
 
     // If this is a structure variable then we must align the padding to a 4-byte boundary so long
     // as their was any padding in the original structure scope
     // \attention Maybe make a new function for second operand, a bit long...
     if (!variable_node_is_primative(node) && variable_struct_node(node)->_struct.body_n->body.padded)
     {
-        node->var.padding = padding(-offset, DATA_SIZE_DWORD);
+        node->var.padding = padding(upward_stack ? offset : -offset, DATA_SIZE_DWORD);
     }
-    node->var.aoffset = offset + -node->var.padding;
+    node->var.aoffset = offset + (upward_stack ? node->var.padding : -node->var.padding);
+    if (upward_stack && first_entity)
+    {
+        // Since we are an upward stack we must add an extra 4 bytes to skip the return 
+        // We only do this for the first entity of course as all other variables
+        // will follow suit.
+        node->var.aoffset += DATA_SIZE_DWORD;
+    }
 }
 
 void parser_scope_offset_for_structure(struct node *node, struct history *history)
@@ -1093,11 +1105,13 @@ void parse_variable_full(struct history *history)
  */
 struct vector *parse_function_arguments(struct history *history)
 {
+    parser_scope_new();
     struct vector *arguments_vec = vector_create(sizeof(struct node *));
     // If we see a right bracket we are at the end of the function arguments i.e (int a, int b)
     while (!token_next_is_symbol(')'))
     {
-        parse_variable_full(history);
+        // Function arguments grow upwards on the stack
+        parse_variable_full(history_down(history, history->flags | HISTORY_FLAG_IS_UPWARD_STACK));
         // Push the parsed argument variable into the arguments vector
         struct node *argument_node = node_pop();
         vector_push(arguments_vec, &argument_node);
@@ -1111,13 +1125,16 @@ struct vector *parse_function_arguments(struct history *history)
         // Skip the comma
         token_next();
     }
+    parser_scope_finish();
 
     return arguments_vec;
 }
 
 void parse_function_body(struct history *history)
 {
+    parser_scope_new();
     parse_body(0, history);
+    parser_scope_finish();
 }
 
 void parse_function(struct datatype *dtype, struct token *name_token, struct history *history)

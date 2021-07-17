@@ -787,9 +787,6 @@ struct node
                 };
             } const_val;
 
-            // The unaligned offset for this variable not including any padding.
-            int offset;
-
             // Aligned offset taking the "padding" into account
             int aoffset;
 

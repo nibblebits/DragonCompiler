@@ -597,7 +597,7 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     asm_push("mov %s [%s], eax", codegen_byte_word_or_dword(left_entity->node->var.type.size), codegen_entity_private(left_entity)->address);
 }
 
-void codegen_generate_expressionable_function_arguments(struct resolver_entity *resolver_entity, struct node *func_call_args_exp_node, size_t *arguments_size)
+void codegen_generate_expressionable_function_arguments(struct node *func_call_args_exp_node, size_t *arguments_size)
 {
     *arguments_size = 0;
     assert(func_call_args_exp_node->type == NODE_TYPE_EXPRESSION_PARENTHESIS);
@@ -1072,6 +1072,16 @@ void codegen_generate_function_body(struct node *node)
     codegen_generate_stack_scope(node->body.statements);
 }
 
+void codegen_generate_function_arguments(struct vector* argument_vector)
+{
+    vector_set_peek_pointer(argument_vector, 0);
+    struct node* current = vector_peek_ptr(argument_vector);
+    while(current)
+    {
+        codegen_new_scope_entity(current, current->var.aoffset, CODEGEN_SCOPE_FLAG_IS_LOCAL_STACK);
+        current = vector_peek_ptr(argument_vector);
+    }
+}
 void codegen_generate_function(struct node *node)
 {
     asm_push("; %s function", node->func.name);
@@ -1081,9 +1091,10 @@ void codegen_generate_function(struct node *node)
     asm_push("push ebp");
     asm_push("mov ebp, esp");
 
-    // Generate scope for functon arguments
-    codegen_new_scope(0);
-    //  codegen_generate_function_arguments(node->func.argument_vector);
+    // Generate scope for function arguments
+    codegen_new_scope(CODEGEN_SCOPE_FLAG_IS_LOCAL_STACK);
+
+    codegen_generate_function_arguments(node->func.argument_vector);
 
     // Generate the function body
     codegen_generate_function_body(node->func.body_n);

@@ -437,12 +437,6 @@ void variable_align_offset(struct node *var_node, int *stack_offset_out)
     }
 }
 
-void var_node_set_offset(struct node *node, int offset)
-{
-    assert(node->type == NODE_TYPE_VARIABLE);
-    node->var.offset = offset;
-}
-
 int compute_sum_padding(struct vector *vec)
 {
     int padding = 0;

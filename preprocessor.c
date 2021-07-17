@@ -133,8 +133,9 @@ int preprocessor_get_node_type(struct expressionable *expressionable, void *node
         generic_type = EXPRESSIONABLE_GENERIC_TYPE_PARENTHESES;
         break;
     }
-    return preprocessor_node->type;
+    return generic_type;
 }
+
 
 const char *preprocessor_get_node_operator(struct expressionable *expressionable, void *target_node)
 {
@@ -144,21 +145,20 @@ const char *preprocessor_get_node_operator(struct expressionable *expressionable
 
 void **preprocessor_get_left_node_address(struct expressionable *expressionable, void *target_node)
 {
-    struct preprocessor_node *node = target_node;
-    return (void **)&node->exp.left;
+    return (void**)&((struct preprocessor_node*)(target_node))->exp.left;
 }
 
 void **preprocessor_get_right_node_address(struct expressionable *expressionable, void *target_node)
 {
-    struct preprocessor_node *node = target_node;
-    return (void **)&node->exp.right;
+    return (void**)&((struct preprocessor_node*)(target_node))->exp.right;
+
 }
 
 void preprocessor_set_expression_node(struct expressionable *expressionable, void *node, void *left_node, void *right_node, const char *op)
 {
     struct preprocessor_node *preprocessor_node = node;
     preprocessor_node->exp.left = left_node;
-    preprocessor_node->exp.right = left_node;
+    preprocessor_node->exp.right = right_node;
     preprocessor_node->exp.op = op;
 }
 
@@ -683,14 +683,9 @@ static void preprocessor_handle_if_token(struct compile_process *compiler)
     struct expressionable *expressionable = expressionable_create(&preprocessor_expressionable_config, compiler->token_vec_original, node_vector);
     expressionable_parse(expressionable);
 
-    bool true_clause = false;
     struct preprocessor_node* node = expressionable_node_pop(expressionable);
-    if(preprocessor_evaluate(compiler, node))
-    {
-        true_clause = true;
-    }
-
-    preprocessor_read_to_end_if(compiler, true_clause);
+    int result = preprocessor_evaluate(compiler, node);
+    preprocessor_read_to_end_if(compiler, result > 0);
 }
 
 void preprocessor_handle_identifier_macro_call_argument(struct preprocessor_function_arguments *arguments, struct vector *token_vec)

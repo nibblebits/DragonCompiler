@@ -237,21 +237,27 @@ int expressionable_parse_single(struct expressionable *expressionable)
  */
 void expressionable_parser_node_shift_children_left(struct expressionable *expressionable, void *node)
 {
+    int node_type = expressionable_callbacks(expressionable)->get_node_type(expressionable, node);
+    assert(node_type == EXPRESSIONABLE_GENERIC_TYPE_EXPRESSION);
 
     void *left_node = expressionable_callbacks(expressionable)->get_left_node(expressionable, node);
     void *right_node = expressionable_callbacks(expressionable)->get_right_node(expressionable, node);
+    int right_node_type = expressionable_callbacks(expressionable)->get_node_type(expressionable, right_node);
+    assert(right_node_type == EXPRESSIONABLE_GENERIC_TYPE_EXPRESSION);
 
     const char *right_op = expressionable_callbacks(expressionable)->get_node_operator(expressionable, right_node);
-    void *new_exp_left_node = node;
-    void **new_exp_right_node = expressionable_callbacks(expressionable)->get_right_node(expressionable, left_node);
+    void *new_exp_left_node = left_node;
+    void *new_exp_right_node = expressionable_callbacks(expressionable)->get_left_node(expressionable, right_node);
+
 
     const char *node_op = expressionable_callbacks(expressionable)->get_node_operator(expressionable, node);
     // Make the new left operand
     expressionable_callbacks(expressionable)->make_expression_node(expressionable, new_exp_left_node, new_exp_right_node, node_op);
 
     void *new_left_operand = expressionable_node_pop(expressionable);
-    struct node *new_right_operand = expressionable_callbacks(expressionable)->get_right_node(expressionable, right_node);
+    void *new_right_operand = expressionable_callbacks(expressionable)->get_right_node(expressionable, right_node);
     expressionable_callbacks(expressionable)->set_exp_node(expressionable, node, new_left_operand, new_right_operand, right_op);
+
 }
 
 static int expressionable_parser_get_precedence_for_operator(const char *op, struct expressionable_op_precedence_group **group_out)
@@ -294,6 +300,7 @@ static bool expressionable_parser_left_op_has_priority(const char *op_left, cons
     return precedence_left <= precedence_right;
 }
 
+
 /**
  * Reorders the given expression and its children, based on operator priority. I.e 
  * multiplication takes priority over addition.
@@ -301,8 +308,8 @@ static bool expressionable_parser_left_op_has_priority(const char *op_left, cons
 void expressionable_parser_reorder_expression(struct expressionable *expressionable, void **node_out)
 {
     void *node = *node_out;
-
     int node_type = expressionable_callbacks(expressionable)->get_node_type(expressionable, node);
+
     // The node passed to us has to be an expression
     if (node_type != EXPRESSIONABLE_GENERIC_TYPE_EXPRESSION)
     {
@@ -312,17 +319,10 @@ void expressionable_parser_reorder_expression(struct expressionable *expressiona
     void *left_node = expressionable_callbacks(expressionable)->get_left_node(expressionable, node);
     void *right_node = expressionable_callbacks(expressionable)->get_right_node(expressionable, node);
 
-    int left_node_type = -1;
-    int right_node_type = -1;
-    if (left_node)
-    {
-        left_node_type = expressionable_callbacks(expressionable)->get_node_type(expressionable, left_node);
-    }
-
-    if (right_node)
-    {
-        right_node_type = expressionable_callbacks(expressionable)->get_node_type(expressionable, right_node);
-    }
+    int left_node_type = expressionable_callbacks(expressionable)->get_node_type(expressionable, left_node);
+    int right_node_type = expressionable_callbacks(expressionable)->get_node_type(expressionable, right_node);
+    assert(left_node_type >= 0);
+    assert(right_node_type >= 0);
 
     // No expressions nothing to do
     if (left_node_type != EXPRESSIONABLE_GENERIC_TYPE_EXPRESSION && right_node &&
@@ -348,12 +348,13 @@ void expressionable_parser_reorder_expression(struct expressionable *expressiona
 
             // Reorder the shifted children.
 
-            void **address_of_left = expressionable_callbacks(expressionable)->get_left_node_address(expressionable, left_node);
-            void **address_of_right = expressionable_callbacks(expressionable)->get_right_node_address(expressionable, right_node);
+            void **address_of_left = expressionable_callbacks(expressionable)->get_left_node_address(expressionable, node);
+            void **address_of_right = expressionable_callbacks(expressionable)->get_right_node_address(expressionable, node);
 
             expressionable_parser_reorder_expression(expressionable, address_of_left);
             expressionable_parser_reorder_expression(expressionable, address_of_right);
         }
+        
     }
 }
 

@@ -34,6 +34,9 @@ struct resolver_entity *resolver_result_entity_next(struct resolver_entity *enti
 
 struct resolver_entity *resolver_entity_clone(struct resolver_entity *entity)
 {
+    if (!entity)
+        return NULL;
+
     struct resolver_entity *new_entity = calloc(sizeof(struct resolver_entity), 1);
     memcpy(new_entity, entity, sizeof(struct resolver_entity));
     return new_entity;
@@ -173,16 +176,16 @@ struct resolver_process *resolver_new_process(struct compile_process *compiler, 
 
 bool resolver_entity_has_array_multiplier(struct resolver_entity *entity)
 {
-    return entity->array_runtime.multiplier > 1;
+    return entity->var_data.array_runtime.multiplier > 1;
 }
 
-struct resolver_entity *resolver_create_new_entity(struct datatype dtype, void *private)
+struct resolver_entity *resolver_create_new_entity(int type, void *private)
 {
     struct resolver_entity *entity = calloc(sizeof(struct resolver_entity), 1);
     if (!entity)
         return NULL;
 
-    entity->dtype = dtype;
+    entity->type = type;
     entity->private = private;
 
     return entity;
@@ -190,14 +193,15 @@ struct resolver_entity *resolver_create_new_entity(struct datatype dtype, void *
 
 struct resolver_entity *resolver_create_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private)
 {
-    struct resolver_entity *entity = resolver_create_new_entity(var_node->var.type, private);
+    struct resolver_entity *entity = resolver_create_new_entity(RESOLVER_ENTITY_TYPE_VARIABLE, private);
     if (!entity)
         return NULL;
 
     entity->scope = resolver_scope_current(process);
     assert(entity->scope);
-
+    entity->var_data.dtype = var_node->var.type;
     entity->node = var_node;
+    entity->name = var_node->var.name;
     return entity;
 }
 
@@ -215,15 +219,67 @@ struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process
     return entity;
 }
 
-struct resolver_entity *resolver_get_variable_in_scope(const char *var_name, struct resolver_scope *scope)
+struct resolver_entity *resolver_create_new_entity_for_function_call(struct resolver_process *process, struct node *func_node, void *private)
 {
+    struct resolver_entity *entity = resolver_create_new_entity(RESOLVER_ENTITY_TYPE_FUNCTION_CALL, private);
+    if (!entity)
+    {
+        return NULL;
+    }
+
+    entity->name = func_node->func.name;
+    entity->func_call_data.arguments = vector_create(sizeof(struct node *));
+    return entity;
+}
+
+struct resolver_entity *resolver_register_function(struct resolver_process *process, struct node *func_node, void *private)
+{
+    struct resolver_entity *entity = resolver_create_new_entity(RESOLVER_ENTITY_TYPE_FUNCTION, private);
+    if (!entity)
+        return NULL;
+
+    entity->name = func_node->func.name;
+    entity->node = func_node;
+    // Functions must be on the root most scope
+    vector_push(process->scope.root->entities, &entity);
+    return entity;
+}
+
+struct resolver_entity *resolver_get_entity_in_scope_with_entity_type(struct resolver_result *result, struct resolver_process *resolver, struct resolver_scope *scope, const char *entity_name, int entity_type)
+{
+    // If we have a last structure entity, then they have to be asking for a variable
+    // if they are not then theirs a bug here.
+    assert(!result->last_struct_entity || entity_type == -1 || entity_type == RESOLVER_ENTITY_TYPE_VARIABLE);
+
+    // If we have a last struct entity set then we must be accessing a structure
+    // i.e a.b.c therefore we can assume a variable type since structures can only hold variables
+    // and other structures that are named with variables.
+    if (result->last_struct_entity && result->last_struct_entity->node->var.type.type == DATA_TYPE_STRUCT)
+    {
+        struct resolver_scope *scope = result->last_struct_entity->scope;
+        struct node *out_node = NULL;
+        int offset = struct_offset(resolver_compiler(resolver), node_var_type_str(result->last_struct_entity->node), entity_name, &out_node, 0, 0);
+        return resolver_new_entity_for_var_node(resolver, out_node, resolver->callbacks.new_struct_entity(result, out_node, offset, scope));
+    }
+
+    // Ok this is not a structure variable, lets search the scopes
+    // until we can identify this entity
     vector_set_peek_pointer_end(scope->entities);
     vector_set_flag(scope->entities, VECTOR_FLAG_PEEK_DECREMENT);
     struct resolver_entity *current = vector_peek_ptr(scope->entities);
     while (current)
     {
-        if (S_EQ(current->node->var.name, var_name))
+        // We only care about the given entity type, i.e variable, function structure what ever it is.
+        if (entity_type != -1 && current->type != entity_type)
+        {
+            current = vector_peek_ptr(scope->entities);
+            continue;
+        }
+
+        if (S_EQ(current->name, entity_name))
+        {
             break;
+        }
 
         current = vector_peek_ptr(scope->entities);
     }
@@ -231,31 +287,50 @@ struct resolver_entity *resolver_get_variable_in_scope(const char *var_name, str
     return current;
 }
 
-struct resolver_entity *resolver_get_variable(struct resolver_result *result, struct resolver_process *resolver, const char *var_name)
+struct resolver_entity *resolver_get_entity_for_type(struct resolver_result *result, struct resolver_process *resolver, const char *entity_name, int entity_type)
 {
+    struct resolver_scope *scope = resolver->scope.current;
     struct resolver_entity *entity = NULL;
-    struct resolver_scope *scope = NULL;
-
-    // We may need to get a variable from a structure if we are currently in a structure
-    // during this resolusion
-    if (result->last_struct_entity && result->last_struct_entity->node->var.type.type == DATA_TYPE_STRUCT)
-    {
-        scope = result->last_struct_entity->scope;
-        struct node *out_node = NULL;
-        int offset = struct_offset(resolver_compiler(resolver), node_var_type_str(result->last_struct_entity->node), var_name, &out_node, 0, 0);
-        return resolver_new_entity_for_var_node(resolver, out_node, resolver->callbacks.new_struct_entity(result, out_node, offset, scope));
-    }
-
-    scope = resolver->scope.current;
     while (scope)
     {
-        entity = resolver_get_variable_in_scope(var_name, scope);
+        entity = resolver_get_entity_in_scope_with_entity_type(result, resolver, scope, entity_name, entity_type);
         if (entity)
             break;
 
         scope = scope->prev;
     }
 
+    return entity;
+}
+
+struct resolver_entity *resolver_get_entity(struct resolver_result *result, struct resolver_process *resolver, const char *entity_name)
+{
+    return resolver_get_entity_for_type(result, resolver, entity_name, -1);
+}
+
+struct resolver_entity *resolver_get_entity_in_scope(struct resolver_result *result, struct resolver_process *resolver, struct resolver_scope *scope, const char *entity_name)
+{
+    return resolver_get_entity_in_scope_with_entity_type(result, resolver, scope, entity_name, -1);
+}
+
+struct resolver_entity *resolver_get_variable(struct resolver_result *result, struct resolver_process *resolver, const char *var_name)
+{
+    struct resolver_entity *entity = resolver_get_entity_for_type(result, resolver, var_name, RESOLVER_ENTITY_TYPE_VARIABLE);
+    return entity;
+}
+
+struct resolver_entity *resolver_get_function_in_scope(struct resolver_result *result, struct resolver_process *resolver, const char *func_name, struct resolver_scope *scope)
+{
+    return resolver_get_entity_for_type(result, resolver, func_name, RESOLVER_ENTITY_TYPE_FUNCTION);
+}
+
+struct resolver_entity *resolver_get_function(struct resolver_result *result, struct resolver_process *resolver, const char *func_name)
+{
+    struct resolver_entity *entity = NULL;
+    // Functions can only be in the root scope, its not possible in C to have sub functions.
+    // No OOP exists.
+    struct resolver_scope *scope = resolver->scope.root;
+    entity = resolver_get_function_in_scope(result, resolver, func_name, scope);
     return entity;
 }
 
@@ -328,13 +403,12 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
             // maintain left_entity as a seperate instance
             resolver_array_push(result, left_entity);
 
-            entity = resolver_entity_clone(left_entity);  
-            
+            entity = resolver_entity_clone(left_entity);
+
             entity->flags |= RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME;
             // Set the index node expression so caller knows how to resolve this.
-            entity->array_runtime.index_node = right_operand;
-            entity->array_runtime.multiplier = array_multiplier(&entity->dtype, last_array_index, 1);
-            
+            entity->var_data.array_runtime.index_node = right_operand;
+            entity->var_data.array_runtime.multiplier = array_multiplier(&entity->var_data.dtype, last_array_index, 1);
         }
         else
         {
@@ -342,8 +416,8 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
             entity = left_entity;
             entity->flags |= RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME;
             // Set the index node expression so caller knows how to resolve this.
-            entity->array_runtime.index_node = right_operand;
-            entity->array_runtime.multiplier = array_multiplier(&entity->dtype, last_array_index, 1);
+            entity->var_data.array_runtime.index_node = right_operand;
+            entity->var_data.array_runtime.multiplier = array_multiplier(&entity->var_data.dtype, last_array_index, 1);
         }
     }
     else if (left_entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
@@ -369,6 +443,68 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
     }
     return entity;
 }
+
+static struct resolver_entity *resolver_follow_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result);
+
+static void resolver_build_function_call_arguments(struct resolver_process *resolver, struct node *argument_node, struct resolver_entity *root_func_call_entity, size_t* total_size_out)
+{
+    if (is_argument_node(argument_node))
+    {
+        // Ok we have an expression i.e 50, 20
+        // Build the left node for this function argument
+        resolver_build_function_call_arguments(resolver, argument_node->exp.left, root_func_call_entity, total_size_out);
+        // Build the right node for this function argument
+        resolver_build_function_call_arguments(resolver, argument_node->exp.right, root_func_call_entity, total_size_out);
+
+    }
+    else if(argument_node->type == NODE_TYPE_EXPRESSION_PARENTHESIS)
+    {
+        // Every function call argument starts with an expression parenthesis node.
+        // Probably should deprecate the parenthesis node, its a problem...
+        #warning "This design could result in a bug take for example test((((55)))), 65) test this before release"
+        resolver_build_function_call_arguments(resolver, argument_node->parenthesis.exp, root_func_call_entity, total_size_out);
+
+    }
+    else
+    {
+        // We must now push this node to the output vector
+        vector_push(root_func_call_entity->func_call_data.arguments, &argument_node);
+        // It will use 4 bytes on the stack
+        *total_size_out += DATA_SIZE_DWORD;
+    }
+
+}
+
+static struct resolver_entity *resolver_follow_function_call(struct resolver_process *resolver, struct resolver_result *result, struct node *node)
+{
+    // Ok this is a function call, left operand = function name, right operand = arguments
+    const char *func_name = node->exp.left->sval;
+    struct resolver_entity *entity = resolver_get_function(result, resolver, func_name);
+    assert(entity);
+
+    // As this is a function all we must create a new function call entity, for this given function call
+    struct resolver_entity *func_call_entity = resolver_create_new_entity_for_function_call(resolver, entity->node, NULL);
+    assert(func_call_entity);
+
+    // Let's build the function call arguments
+    resolver_build_function_call_arguments(resolver, node->exp.right, func_call_entity, &func_call_entity->func_call_data.stack_size);
+
+    //Push the function call entity to the stack
+    resolver_result_entity_push(result, func_call_entity);
+
+    return func_call_entity;
+}
+static struct resolver_entity *resolver_follow_parentheses(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+{
+    // This may be a function call is the left operand an identifier?
+    if (node->exp.left->type == NODE_TYPE_IDENTIFIER)
+    {
+        return resolver_follow_function_call(resolver, result, node);
+    }
+    // This is a normal expression, process it
+    return resolver_follow_exp(resolver, node->parenthesis.exp, result);
+}
+
 static struct resolver_entity *resolver_follow_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     struct resolver_entity *entity = NULL;
@@ -380,13 +516,21 @@ static struct resolver_entity *resolver_follow_exp(struct resolver_process *reso
     {
         entity = resolver_follow_array(resolver, node, result);
     }
-
+    else if (is_parentheses_node(node))
+    {
+        entity = resolver_follow_parentheses(resolver, node, result);
+    }
     return entity;
 }
 
 struct resolver_entity *resolver_follow_identifier(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
-    struct resolver_entity *entity = resolver_entity_clone(resolver_get_variable(result, resolver, node->sval));
+    struct resolver_entity *entity = resolver_entity_clone(resolver_get_entity(result, resolver, node->sval));
+    if (!entity)
+    {
+        return NULL;
+    }
+
     resolver_result_entity_push(result, entity);
 
     // If we dont have an identifier entity yet then set it
@@ -396,13 +540,21 @@ struct resolver_entity *resolver_follow_identifier(struct resolver_process *reso
         result->identifier = entity;
     }
 
-    if (entity->dtype.type == DATA_TYPE_STRUCT)
+    if (entity->type = RESOLVER_ENTITY_TYPE_VARIABLE && entity->var_data.dtype.type == DATA_TYPE_STRUCT)
     {
         result->last_struct_entity = entity;
     }
     return entity;
 }
-static void resolver_follow_part(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+
+static struct resolver_entity *resolver_follow_part_return_entity(struct resolver_process *resolver, struct node *node, struct resolver_result *result);
+
+static struct resolver_entity *resolver_follow_exp_parenthesis(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+{
+    return resolver_follow_part_return_entity(resolver, node->parenthesis.exp, result);
+}
+
+static struct resolver_entity *resolver_follow_part_return_entity(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     struct resolver_entity *entity = NULL;
     switch (node->type)
@@ -414,6 +566,10 @@ static void resolver_follow_part(struct resolver_process *resolver, struct node 
     case NODE_TYPE_EXPRESSION:
         entity = resolver_follow_exp(resolver, node, result);
         break;
+
+    case NODE_TYPE_EXPRESSION_PARENTHESIS:
+        entity = resolver_follow_exp_parenthesis(resolver, node, result);
+        break;
     }
 
     if (entity)
@@ -421,6 +577,13 @@ static void resolver_follow_part(struct resolver_process *resolver, struct node 
         entity->result = result;
         entity->resolver = resolver;
     }
+
+    return entity;
+}
+
+static void resolver_follow_part(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+{
+    resolver_follow_part_return_entity(resolver, node, result);
 }
 
 struct resolver_result *resolver_follow(struct resolver_process *resolver, struct node *node)

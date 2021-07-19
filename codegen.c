@@ -74,8 +74,17 @@ enum
     CODEGEN_ENTITY_FLAG_IS_LOCAL_STACK = 0b00000001
 };
 
+enum
+{
+    CODEGEN_ENTITY_DATA_TYPE_VARIABLE,
+    CODEGEN_ENTITY_DATA_TYPE_FUNCTION,
+};
+
 struct codegen_entity_data
 {
+    // The type of entity data this is, i.e variable, function, structure
+    int type;
+
     // The address that can be addressed in assembly. I.e [ebp-4] [name]
     char address[60];
 
@@ -141,15 +150,15 @@ char *codegen_stack_asm_address(int stack_offset, char *out)
     return out;
 }
 
-void codegen_global_asm_address(struct node *var_node, int offset, char *address_out)
+void codegen_global_asm_address(const char* name, int offset, char *address_out)
 {
     if (offset == 0)
     {
-        sprintf(address_out, "%s", var_node->var.name);
+        sprintf(address_out, "%s", name);
         return;
     }
 
-    sprintf(address_out, "%s+%i", var_node->var.name, offset);
+    sprintf(address_out, "%s+%i", name, offset);
 }
 
 void codegen_entity_data_set_address(struct codegen_entity_data *entity_data, struct node *var_node, int offset, int flags)
@@ -162,18 +171,32 @@ void codegen_entity_data_set_address(struct codegen_entity_data *entity_data, st
     }
     else
     {
-        codegen_global_asm_address(var_node, offset, entity_data->address);
+        codegen_global_asm_address(var_node->var.name, offset, entity_data->address);
         sprintf(entity_data->base_address, "%s", var_node->var.name);
     }
 }
 
-struct codegen_entity_data *codegen_new_entity_data(struct node *var_node, int offset, int flags)
+static struct codegen_entity_data *codegen_new_entity_data()
 {
     struct codegen_entity_data *entity_data = calloc(sizeof(struct codegen_entity_data), 1);
+    return entity_data;
+}
+struct codegen_entity_data *codegen_new_entity_data_for_var_node(struct node *var_node, int offset, int flags)
+{
+    struct codegen_entity_data *entity_data = codegen_new_entity_data();
     entity_data->offset = offset;
     entity_data->flags = flags;
-
+    entity_data->type = CODEGEN_ENTITY_DATA_TYPE_VARIABLE;
     codegen_entity_data_set_address(entity_data, var_node, offset, flags);
+    return entity_data;
+}
+
+struct codegen_entity_data *codegen_new_entity_data_for_function(struct node *func_node, int flags)
+{
+    struct codegen_entity_data *entity_data = codegen_new_entity_data();
+    entity_data->flags = flags;
+    entity_data->type = CODEGEN_ENTITY_DATA_TYPE_FUNCTION;
+    codegen_global_asm_address(func_node->sval, 0, entity_data->address);
     return entity_data;
 }
 
@@ -185,8 +208,15 @@ void codegen_entity_build_address_from_base(struct codegen_entity_data *data_out
 
 struct resolver_entity *codegen_new_scope_entity(struct node *var_node, int offset, int flags)
 {
-    struct codegen_entity_data *entity_data = codegen_new_entity_data(var_node, offset, flags);
+    assert(var_node->type == NODE_TYPE_VARIABLE);
+    struct codegen_entity_data *entity_data = codegen_new_entity_data_for_var_node(var_node, offset, flags);
     return resolver_new_entity_for_var_node(current_process->resolver, var_node, entity_data);
+}
+
+struct resolver_entity* codegen_register_function(struct node* func_node, int flags)
+{
+    struct codegen_entity_data *private = codegen_new_entity_data_for_function(func_node, flags);
+    return resolver_register_function(current_process->resolver, func_node, private);
 }
 
 void codegen_new_scope(int flags)
@@ -530,7 +560,7 @@ void codegen_generate_variable_access(struct node *node, struct resolver_result 
 
     if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
     {
-        struct resolver_entity* last_entity = NULL;
+        struct resolver_entity *last_entity = NULL;
         int count = 0;
         while (entity)
         {
@@ -538,14 +568,13 @@ void codegen_generate_variable_access(struct node *node, struct resolver_result 
             if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
             {
                 // This entity represents array access that requires runtime assistance
-                codegen_generate_expressionable(entity->array_runtime.index_node, history);
+                codegen_generate_expressionable(entity->var_data.array_runtime.index_node, history);
                 register_unset_flag(REGISTER_EAX_IS_USED);
                 if (resolver_entity_has_array_multiplier(entity))
                 {
-                    asm_push("imul eax, %i", entity->array_runtime.multiplier);
+                    asm_push("imul eax, %i", entity->var_data.array_runtime.multiplier);
                 }
                 asm_push("push eax");
-
             }
             entity = resolver_result_entity_next(entity);
             count++;
@@ -556,7 +585,6 @@ void codegen_generate_variable_access(struct node *node, struct resolver_result 
         {
             asm_push("pop ecx");
             asm_push("add eax, ecx");
-
         }
         asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
         return;
@@ -571,7 +599,7 @@ void codegen_generate_variable_access(struct node *node, struct resolver_result 
     {
         if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
         {
-            codegen_generate_expressionable(entity->array_runtime.index_node, history);
+            codegen_generate_expressionable(entity->var_data.array_runtime.index_node, history);
             register_unset_flag(REGISTER_EAX_IS_USED);
         }
 
@@ -673,6 +701,49 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     codegen_generate_expressionable(node->exp.right, history_down(history, flags | EXPRESSION_FLAG_RIGHT_NODE));
 }
 
+void codegen_generate_function_call(struct node* node, struct resolver_entity* entity, struct history* history)
+{
+    // Ok we have a function call entity lets generate it. First we must
+    // process all function arguments before we can call the function
+    // We must also process them backwards because of the stack
+    vector_set_peek_pointer_end(entity->func_call_data.arguments);
+    vector_set_flag(entity->func_call_data.arguments, VECTOR_FLAG_PEEK_DECREMENT);
+
+    struct node* argument_node = vector_peek_ptr(entity->func_call_data.arguments);
+    while(argument_node)
+    {
+        register_unset_flag(REGISTER_EAX_IS_USED);
+        codegen_generate_expressionable(argument_node, history);    
+        // At this point EAX will contain the result of the argument, lets push it to the stack
+        // ready for the function call
+        asm_push("PUSH EAX");
+
+        argument_node = vector_peek_ptr(entity->func_call_data.arguments);
+    }
+
+    // Done with the arguments? Great lets initiate the function call
+    asm_push("call %s", entity->name);
+
+    // Now to restore the stack
+    codegen_stack_add(entity->func_call_data.stack_size);
+}
+
+void codegen_generate_for_entity(struct node* node, struct resolver_entity* entity, struct history* history)
+{
+    switch(entity->type)
+    {
+        case RESOLVER_ENTITY_TYPE_VARIABLE:
+            codegen_generate_variable_access(node, entity->result, history);
+        break;
+
+        case RESOLVER_ENTITY_TYPE_FUNCTION_CALL:
+            codegen_generate_function_call(node, entity, history);
+        break;
+
+        default:
+            FAIL_ERR("Invalid entity to generate, check supported type");
+    }
+}
 void _codegen_generate_exp_node(struct node *node, struct history *history)
 {
     if (is_node_assignment(node))
@@ -687,7 +758,7 @@ void _codegen_generate_exp_node(struct node *node, struct history *history)
     if (resolver_result_ok(result))
     {
         entity = resolver_result_entity(result);
-        codegen_generate_variable_access(node, result, history);
+        codegen_generate_for_entity(node, entity, history);
         return;
     }
 
@@ -784,6 +855,7 @@ void codegen_handle_variable_access(struct node *access_node, struct resolver_en
 
 void codegen_generate_identifier(struct node *node, struct history *history)
 {
+
     struct resolver_result *result = resolver_follow(current_process->resolver, node);
     assert(resolver_result_ok(result));
 
@@ -1072,18 +1144,22 @@ void codegen_generate_function_body(struct node *node)
     codegen_generate_stack_scope(node->body.statements);
 }
 
-void codegen_generate_function_arguments(struct vector* argument_vector)
+void codegen_generate_function_arguments(struct vector *argument_vector)
 {
     vector_set_peek_pointer(argument_vector, 0);
-    struct node* current = vector_peek_ptr(argument_vector);
-    while(current)
+    struct node *current = vector_peek_ptr(argument_vector);
+    while (current)
     {
         codegen_new_scope_entity(current, current->var.aoffset, CODEGEN_SCOPE_FLAG_IS_LOCAL_STACK);
         current = vector_peek_ptr(argument_vector);
     }
 }
+
 void codegen_generate_function(struct node *node)
 {
+    // We must register this function
+    codegen_register_function(node, 0);
+    
     asm_push("; %s function", node->func.name);
     asm_push("%s:", node->func.name);
 
@@ -1167,7 +1243,7 @@ void *codegen_new_struct_entity(struct resolver_result *result, struct node *var
         entity_flags |= CODEGEN_SCOPE_FLAG_IS_LOCAL_STACK;
     }
 
-    struct codegen_entity_data *result_entity = codegen_new_entity_data(result->identifier->node, offset, entity_flags);
+    struct codegen_entity_data *result_entity = codegen_new_entity_data_for_var_node(result->identifier->node, offset, entity_flags);
     return result_entity;
 }
 
@@ -1181,20 +1257,20 @@ void *codegen_merge_struct_entity(struct resolver_result *result, struct resolve
 
     int left_offset = codegen_entity_private(left_entity)->offset;
     int right_offset = codegen_entity_private(right_entity)->offset;
-    return codegen_new_entity_data(result->first_entity_const->node, left_offset + right_offset, entity_flags);
+    return codegen_new_entity_data_for_var_node(result->first_entity_const->node, left_offset + right_offset, entity_flags);
 }
 
 void *codegen_new_array_entity(struct resolver_result *result, struct resolver_entity *array_entity, int index_val, int index)
 {
-    int index_offset = array_offset(&array_entity->dtype, index, index_val);
+    int index_offset = array_offset(&array_entity->var_data.dtype, index, index_val);
     int final_offset = codegen_entity_private(array_entity)->offset + index_offset;
-    return codegen_new_entity_data(result->identifier->node, final_offset, 0);
+    return codegen_new_entity_data_for_var_node(result->identifier->node, final_offset, 0);
 }
 
 void codegen_join_array_entity_index(struct resolver_result *result, struct resolver_entity *join_entity, int index_val, int index)
 {
     struct codegen_entity_data *private = codegen_entity_private(join_entity);
-    int index_offset = array_offset(&join_entity->dtype, index, index_val);
+    int index_offset = array_offset(&join_entity->var_data.dtype, index, index_val);
     int final_offset = codegen_entity_private(join_entity)->offset + index_offset;
     codegen_entity_data_set_address(codegen_entity_private(join_entity), join_entity->node, final_offset, 0);
 }

@@ -209,7 +209,6 @@ struct preprocessor_definition
     // The name of this definition i.e #define ABC . ABC would be the name
     const char *name;
 
-    
     // A vector of definition value tokens, values can be multiple lines
     // Values can also be multiple tokens.
     // vector of "struct token"
@@ -217,7 +216,7 @@ struct preprocessor_definition
 
     // A vector of const char* representing function arguments in order.
     // i.e ABC(a, b, c) a b and c would be in this arguments vector.
-    struct vector* arguments;
+    struct vector *arguments;
 };
 
 struct preprocessor
@@ -227,7 +226,7 @@ struct preprocessor
     struct vector *definitions;
 
     // vector of (struct preprocessor_node*) .
-    struct vector* exp_vector;
+    struct vector *exp_vector;
 
     // Used for parsing expressions.
     struct expressionable *expressionable;
@@ -361,16 +360,53 @@ enum
     RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME = 0b00000100
 };
 
+enum
+{
+    RESOLVER_ENTITY_TYPE_VARIABLE,
+    RESOLVER_ENTITY_TYPE_FUNCTION,
+    RESOLVER_ENTITY_TYPE_STRUCTURE,
+    RESOLVER_ENTITY_TYPE_FUNCTION_CALL
+};
+
 struct resolver_entity
 {
+    int type;
     int flags;
 
-    struct datatype dtype;
+    // The name that represents this entity in the given scope that it is in
+    // If this is a variable this would be the variable name,
+    // if this is a function it would be the function name
+    // if this is a structure it would be the structure name.
+    const char* name;
 
-    // Can be NULL if no variable is present. otherwise equal to the var_node
+    // Can be NULL if no variable is present. otherwise equal to a node
     // that was resolved.
     struct node *node;
+    union
+    {
+        // This data is set if the resolver entity type is a variable. RESOLVER_ENTITY_TYPE_VARIABLE type
+        struct resolver_entity_var_data
+        {
+            struct datatype dtype;
+            struct resolver_array_runtime
+            {
+                struct node *index_node;
+                int multiplier;
+            } array_runtime;
 
+        } var_data;
+
+        struct resolver_entity_function_call_data
+        {
+            // The function call arguments, this is a vector of struct node* 
+            // Must have a type of RESOLVER_ENTITY_FUNCTION_CALL
+            struct vector* arguments;
+
+            // The total bytes of the stack used by the function arguments
+            // for this function call.
+            size_t stack_size;
+        } func_call_data;
+    };
     // The scope that this entity belongs too.
     struct resolver_scope *scope;
 
@@ -382,15 +418,6 @@ struct resolver_entity
 
     // Private data that can be stored by the creator of the resolver entity
     void *private;
-
-    union
-    {
-        struct resolver_array_runtime
-        {
-            struct node *index_node;
-            int multiplier;
-        } array_runtime;
-    };
 
     // The next entity in the list
     struct resolver_entity *next;
@@ -841,7 +868,6 @@ void compiler_error(struct compile_process *compiler, const char *msg, ...);
  */
 int compile_file(const char *filename);
 
-
 /**
  * Includes a file to be compiled, returns a new compile process that represents the file
  * to be compiled.
@@ -850,7 +876,6 @@ int compile_file(const char *filename);
  * Code generation is excluded.
  */
 struct compile_process *compile_include(const char *filename, struct compile_process *parent_process);
-
 
 /**
  * Lexical analysis
@@ -876,7 +901,7 @@ bool keyword_is_datatype(const char *str);
 /**
  * Creates a new compile process
  */
-struct compile_process* compile_process_create(const char* filename, struct compile_process* parent_process);
+struct compile_process *compile_process_create(const char *filename, struct compile_process *parent_process);
 
 /**
  * Returns the current file thats being processed
@@ -1040,6 +1065,9 @@ bool is_access_operator(const char *op);
 
 bool is_array_node(struct node *node);
 
+bool is_parentheses_node(struct node* node);
+
+
 /**
  * Returns true if this node represents an access node expression
  */
@@ -1069,8 +1097,6 @@ int align_value_treat_positive(int val, int to);
  * Aligns the offset for the provided offset for the given variable
  */
 void variable_align_offset(struct node *var_node, int *stack_offset_out);
-
-void var_node_set_offset(struct node *node, int offset);
 
 /**
  * Sums all the padding for a vector of variable nodes.
@@ -1143,6 +1169,11 @@ size_t array_brackets_calculate_size(struct datatype *type, struct array_bracket
 size_t variable_size(struct node *var_node);
 
 bool is_array_operator(const char *op);
+bool is_argument_operator(const char* op);
+/**
+ * Is the given node an expression whose operator is ","
+ */
+bool is_argument_node(struct node* node);
 
 /**
  * Returns true if the address can be caclulated at compile time
@@ -1202,6 +1233,7 @@ struct resolver_scope *resolver_new_scope(struct resolver_process *resolver, voi
 void resolver_finish_scope(struct resolver_process *resolver);
 struct resolver_process *resolver_new_process(struct compile_process *compiler, struct resolver_callbacks *callbacks);
 struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private);
+struct resolver_entity *resolver_register_function(struct resolver_process *process, struct node *func_node, void *private);
 struct resolver_entity *resolver_get_variable_in_scope(const char *var_name, struct resolver_scope *scope);
 struct resolver_entity *resolver_get_variable(struct resolver_result *result, struct resolver_process *resolver, const char *var_name);
 struct resolver_result *resolver_follow(struct resolver_process *resolver, struct node *node);
@@ -1262,16 +1294,16 @@ struct expressionable;
 
 typedef void *(*EXPRESSIONABLE_HANDLE_NUMBER)(struct expressionable *expressionable);
 typedef void *(*EXPRESSIONABLE_HANDLE_IDENTIFIER)(struct expressionable *expressionable);
-typedef void (*EXPRESSIONABLE_MAKE_EXPRESSION_NODE)(struct expressionable *expressionable, void *left_node_ptr, void *right_node_ptr, const char* op);
+typedef void (*EXPRESSIONABLE_MAKE_EXPRESSION_NODE)(struct expressionable *expressionable, void *left_node_ptr, void *right_node_ptr, const char *op);
 typedef void (*EXPRESSIONABLE_MAKE_PARENTHESES_NODE)(struct expressionable *expressionable, void *node_ptr);
-typedef void *(*EXPRESSIONABLE_MAKE_UNARY_NODE)(struct expressionable* expressionable, const char* op, void* right_operand_node_ptr);
+typedef void *(*EXPRESSIONABLE_MAKE_UNARY_NODE)(struct expressionable *expressionable, const char *op, void *right_operand_node_ptr);
 
 typedef int (*EXPRESSIONABLE_GET_NODE_TYPE)(struct expressionable *expressionable, void *node);
 typedef void *(*EXPRESSIONABLE_GET_LEFT_NODE)(struct expressionable *expressionable, void *target_node);
 typedef void *(*EXPRESSIONABLE_GET_RIGHT_NODE)(struct expressionable *expressionable, void *target_node);
 typedef const char *(*EXPRESSIONABLE_GET_NODE_OPERATOR)(struct expressionable *expressionable, void *target_node);
 typedef void **(*EXPRESSIONABLE_GET_NODE_ADDRESS)(struct expressionable *expressionable, void *target_node);
-typedef void (*EXPPRESIONABLE_SET_EXPRESSION_NODE)(struct expressionable *expressionable, void* node, void *left_node, void *right_node, const char *op);
+typedef void (*EXPPRESIONABLE_SET_EXPRESSION_NODE)(struct expressionable *expressionable, void *node, void *left_node, void *right_node, const char *op);
 struct expressionable_config
 {
     struct expressionable_callbacks
@@ -1310,7 +1342,7 @@ struct expressionable
     struct vector *node_vec_out;
 };
 
-struct expressionable *expressionable_create(struct expressionable_config* config, struct vector *token_vector, struct vector *node_vector);
+struct expressionable *expressionable_create(struct expressionable_config *config, struct vector *token_vector, struct vector *node_vector);
 void expressionable_parse(struct expressionable *expressionable);
 struct token *expressionable_token_next(struct expressionable *expressionable);
 void *expressionable_node_pop(struct expressionable *expressionable);

@@ -230,9 +230,29 @@ bool is_array_operator(const char *op)
     return S_EQ(op, "[]");
 }
 
+bool is_argument_operator(const char* op)
+{
+    return S_EQ(op, ",");
+}
+
+bool is_argument_node(struct node* node)
+{
+    return node->type == NODE_TYPE_EXPRESSION && is_argument_operator(node->exp.op);
+}
+
 bool is_array_node(struct node *node)
 {
     return node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op);
+}
+
+bool is_parentheses_operator(const char* op)
+{
+    return S_EQ(op, "()");
+}
+
+bool is_parentheses_node(struct node* node)
+{
+    return node->type == NODE_TYPE_EXPRESSION && is_parentheses_operator(node->exp.op);
 }
 
 static bool is_exp_compile_computable(struct node *node)

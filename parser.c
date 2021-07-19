@@ -507,6 +507,8 @@ static void parser_append_size_for_node(size_t *_variable_size, struct node *nod
         }
     }
 }
+
+
 /**
  * Parses a single body statement and in the event the statement is a variable
  * the variable_size variable will be incremented by the size of the variable
@@ -756,6 +758,61 @@ void parse_struct_or_union(struct datatype *dtype)
     parse_err("Unions are not yet supported");
 }
 
+void parse_variable_function_or_struct_union(struct history *history);
+void parse_keyword_return(struct history *history);
+void parse_datatype_type(struct datatype *datatype);
+
+void parse_sizeof(struct history* history)
+{
+    // Get rid of the sizeof
+    expect_keyword("sizeof");
+    expect_op("(");
+    // Now for our expression
+    struct datatype dtype;
+    parse_datatype_type(&dtype);
+
+    // Alright we got the size perfect, lets inject a number to represent the size
+    struct node* node = node_create(&(struct node){NODE_TYPE_NUMBER, .llnum = datatype_size(&dtype)});
+    node_push(node);
+    
+    expect_sym(')');
+}
+
+void parse_keyword(struct history *history)
+{
+    struct token *token = token_peek_next();
+
+
+    if(S_EQ(token->sval, "sizeof"))
+    {
+        // This should be in the preprocessor but its not advacned enough
+        // I hope we can get away with it here in the parser, time will tell
+        parse_sizeof(history);
+        return;
+    }
+
+    // keyword_is_datatype is temporary because custom types can exist
+    // Therefore variable declarations will be the appropaite action
+    // if all other keywords are not present.
+    // This will be changed soon
+    if (is_keyword_variable_modifier(token->sval) || keyword_is_datatype(token->sval))
+    {
+        parse_variable_function_or_struct_union(history);
+        return;
+    }
+
+    if (S_EQ(token->sval, "return"))
+    {
+        parse_keyword_return(history);
+        return;
+    }
+    
+
+    parse_err("Unexpected keyword %s\n", token->sval);
+}
+
+
+
 void parse_exp_normal(struct history *history)
 {
     struct token *op_token = token_next();
@@ -860,6 +917,11 @@ int parse_expressionable_single(struct history *history)
         break;
     case TOKEN_TYPE_OPERATOR:
         parse_exp(history);
+        res = 0;
+        break;
+
+    case TOKEN_TYPE_KEYWORD:
+        parse_keyword(history);
         res = 0;
         break;
     }
@@ -1229,27 +1291,7 @@ void parse_keyword_return(struct history *history)
     expect_sym(';');
 }
 
-void parse_keyword(struct history *history)
-{
-    struct token *token = token_peek_next();
-    // keyword_is_datatype is temporary because custom types can exist
-    // Therefore variable declarations will be the appropaite action
-    // if all other keywords are not present.
-    // This will be changed soon
-    if (is_keyword_variable_modifier(token->sval) || keyword_is_datatype(token->sval))
-    {
-        parse_variable_function_or_struct_union(history);
-        return;
-    }
 
-    if (S_EQ(token->sval, "return"))
-    {
-        parse_keyword_return(history);
-        return;
-    }
-
-    parse_err("Unexpected keyword %s\n", token->sval);
-}
 
 void parse_keyword_for_global()
 {

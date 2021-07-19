@@ -1,11 +1,7 @@
 
-
-int test(int mm)
+struct dog
 {
-    return 55;
-}
-
-int main(int k, int e)
-{
-    test(56+40, 80+25);
-}
+    int x;
+    char e;
+};
+int x = sizeof(struct dog);

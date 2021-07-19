@@ -1167,6 +1167,7 @@ size_t array_brackets_calculate_size(struct datatype *type, struct array_bracket
  * I.e short abc[8]; will return 8*2;
  */
 size_t variable_size(struct node *var_node);
+size_t datatype_size(struct datatype* datatype);
 
 bool is_array_operator(const char *op);
 bool is_argument_operator(const char* op);

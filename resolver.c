@@ -588,6 +588,8 @@ static void resolver_follow_part(struct resolver_process *resolver, struct node 
 
 struct resolver_result *resolver_follow(struct resolver_process *resolver, struct node *node)
 {
+    assert(resolver);
+    assert(node);
     struct resolver_result *result = resolver_new_result(resolver);
     resolver_follow_part(resolver, node, result);
     if (!resolver_result_entity_root(result))

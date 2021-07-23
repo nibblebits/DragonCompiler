@@ -13,6 +13,16 @@ const char* node_var_name(struct node* var_node)
     return var_node->var.name;
 }
 
+bool is_pointer_node(struct node* node)
+{
+    if (node->type == NODE_TYPE_VARIABLE && node->var.type.flags & DATATYPE_FLAG_IS_POINTER)
+    {
+        return true;
+    }
+
+    return false;
+}
+
 struct vector* node_vector_clone(struct vector* vec)
 {
     struct vector* new_vector = vector_create(sizeof(struct node*));

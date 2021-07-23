@@ -540,7 +540,7 @@ struct resolver_entity *resolver_follow_identifier(struct resolver_process *reso
         result->identifier = entity;
     }
 
-    if (entity->type = RESOLVER_ENTITY_TYPE_VARIABLE && entity->var_data.dtype.type == DATA_TYPE_STRUCT)
+    if (entity->type == RESOLVER_ENTITY_TYPE_VARIABLE && entity->var_data.dtype.type == DATA_TYPE_STRUCT)
     {
         result->last_struct_entity = entity;
     }
@@ -552,6 +552,11 @@ static struct resolver_entity *resolver_follow_part_return_entity(struct resolve
 static struct resolver_entity *resolver_follow_exp_parenthesis(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     return resolver_follow_part_return_entity(resolver, node->parenthesis.exp, result);
+}
+
+static struct resolver_entity* resolver_follow_unary_exp(struct resolver_process* resolver, struct node* node, struct resolver_result* result)
+{
+    return resolver_follow_part_return_entity(resolver, node->unary.operand, result);
 }
 
 static struct resolver_entity *resolver_follow_part_return_entity(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
@@ -569,6 +574,10 @@ static struct resolver_entity *resolver_follow_part_return_entity(struct resolve
 
     case NODE_TYPE_EXPRESSION_PARENTHESIS:
         entity = resolver_follow_exp_parenthesis(resolver, node, result);
+        break;
+
+    case NODE_TYPE_UNARY:
+        entity = resolver_follow_unary_exp(resolver, node, result);
         break;
     }
 

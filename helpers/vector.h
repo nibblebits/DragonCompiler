@@ -61,6 +61,8 @@ void vector_pop(struct vector* vector);
 void vector_peek_pop(struct vector* vector);
 
 void* vector_back(struct vector* vector);
+void *vector_back_or_null(struct vector *vector);
+
 void* vector_back_ptr(struct vector* vector);
 void* vector_back_ptr_or_null(struct vector* vector);
 

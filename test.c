@@ -1,7 +1,8 @@
+#define MACRO_SUM(x, y) x+y
 
-struct dog
+int main()
 {
-    int x;
-    char e;
-};
-int x = sizeof(struct dog);
+    int a;
+    int* x;
+    a = 50 * 90 * 20 * *x;
+}

@@ -27,7 +27,6 @@
 
 static struct token tmp_token;
 static struct compile_process *current_process;
-
 void error(const char *fmt, ...)
 {
     va_list args;
@@ -154,7 +153,7 @@ static struct pos compiler_file_position()
 
 static struct token* lexer_last_token()
 {
-    return vector_back(current_process->token_vec_original);
+    return vector_back_or_null(current_process->token_vec_original);
 }
 
 static char assert_next_char(char expected_char)
@@ -404,6 +403,19 @@ static struct token *token_make_quote()
     return token_create(&(struct token){TOKEN_TYPE_NUMBER, .cval = c});
 }
 
+static struct token *read_next_token();
+static struct token* handle_whitespace()
+{
+    // Let's get the previous token and set the whitespace boolean#
+    struct token* last_token = lexer_last_token();
+    if (last_token)
+    {
+        last_token->whitespace = true;
+    }
+    
+    nextc();
+    return read_next_token();
+}
 static struct token *read_next_token()
 {
     struct token *token = NULL;
@@ -443,8 +455,7 @@ static struct token *read_next_token()
     // Spaces, tabs are ignored..
     case ' ':
     case '\t':
-        nextc();
-        token = read_next_token();
+        token = handle_whitespace();
         break;
 
     case EOF:

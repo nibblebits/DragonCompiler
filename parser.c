@@ -688,6 +688,24 @@ void parse_for_indirection_unary()
     parse_expressionable(history_begin(&history, 0));
 
     struct node *unary_operand_node = node_pop();
+
+    // Let's ensure that this variable is capable of indirection
+    // as this could be simple multiplication arithmetic i.e 50 * 20 mistaken
+    // for a unary.
+    // Very unsure about this solution, consider revising
+    struct resolver_result* result = resolver_follow(current_process->resolver, unary_operand_node);
+    if (!resolver_result_ok(result) || !is_pointer_node(result->entity->node))
+    {
+        // Ok this is not something the unary is responsible for, therefore
+        // this is actually a multiplication node i.e a * b or 50 * 60
+
+       // Lets pop off the left operand we need to make an expression here for multiplication
+       struct node* left_operand = node_pop();
+       make_exp_node(left_operand, unary_operand_node, "*");
+       return;
+    }
+    
+    
     make_unary_node("*", unary_operand_node);
 
     struct node *unary_node = node_pop();
@@ -726,6 +744,7 @@ void parse_for_unary()
 void parse_struct(struct datatype *dtype)
 {
     parser_scope_new();
+    resolver_default_new_scope(current_process->resolver, 0);
     // We already have the structure name parsed, its inside dtype.
     // Parse the body of the structure "struct abc {body_here}"
 
@@ -744,6 +763,7 @@ void parse_struct(struct datatype *dtype)
 
     // Structures must end with semicolons
     expect_sym(';');
+    resolver_default_finish_scope(current_process->resolver);
     parser_scope_finish();
 }
 
@@ -884,7 +904,7 @@ void parse_exp(struct history *history)
         return;
     }
 
-    if (parser_is_unary_operator(token_peek_next()->sval))
+    if (parser_is_unary_operator(token_peek_next()->sval) && !token_peek_next()->whitespace)
     {
         parse_for_unary();
         return;
@@ -1062,8 +1082,11 @@ void parser_datatype_init(struct token *datatype_token, struct datatype *datatyp
         datatype_out->struct_node = struct_node_for_name(current_process, datatype_token->sval);
     }
 
-    datatype_out->flags |= DATATYPE_FLAG_IS_POINTER;
-    datatype_out->pointer_depth = pointer_depth;
+    if (pointer_depth > 0)
+    {
+        datatype_out->flags |= DATATYPE_FLAG_IS_POINTER;
+        datatype_out->pointer_depth = pointer_depth;
+    }
     datatype_out->type_str = datatype_token->sval;
 }
 
@@ -1137,10 +1160,10 @@ void parse_variable(struct datatype *dtype, struct token *name_token, struct his
     make_variable_node(dtype, name_token, value_node);
 
     struct node *var_node = node_pop();
-
     // Calculate scope offset
     parser_scope_offset(var_node, history);
     parser_scope_push(parser_new_scope_entity(var_node, var_node->var.aoffset, 0), var_node->var.type.size);
+    resolver_default_new_scope_entity(current_process->resolver, var_node, var_node->var.aoffset, 0);
 
     // Push the variable node back to the stack
     node_push(var_node);
@@ -1168,6 +1191,8 @@ void parse_variable_full(struct history *history)
 struct vector *parse_function_arguments(struct history *history)
 {
     parser_scope_new();
+    resolver_default_new_scope(current_process->resolver, 0);
+
     struct vector *arguments_vec = vector_create(sizeof(struct node *));
     // If we see a right bracket we are at the end of the function arguments i.e (int a, int b)
     while (!token_next_is_symbol(')'))
@@ -1187,6 +1212,7 @@ struct vector *parse_function_arguments(struct history *history)
         // Skip the comma
         token_next();
     }
+    resolver_finish_scope(current_process->resolver);
     parser_scope_finish();
 
     return arguments_vec;
@@ -1195,7 +1221,10 @@ struct vector *parse_function_arguments(struct history *history)
 void parse_function_body(struct history *history)
 {
     parser_scope_new();
+    resolver_default_new_scope(current_process->resolver, 0);
+
     parse_body(0, history);
+    resolver_default_finish_scope(current_process->resolver);
     parser_scope_finish();
 }
 

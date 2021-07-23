@@ -19,6 +19,8 @@ struct compile_process* compile_process_create(const char* filename, struct comp
     process->node_tree_vec = vector_create(sizeof(struct node*));
     process->generator.states.expr = vector_create(sizeof(struct expression_state*));
     process->symbol_tbl = vector_create(sizeof(struct symbol*));
+    process->resolver = resolver_default_new_process(process);
+
 
     // We have a parent processor? THen they should share the same preprocessor
     // instance, so they share all macro definitions

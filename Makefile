@@ -1,5 +1,5 @@
 INCLUDES= -I ./ -I ./helpers
-OBJECTS= ./build/misc.o ./build/lexer.o ./build/token.o ./build/expressionable.o ./build/parser.o ./build/symresolver.o ./build/scope.o ./build/resolver.o ./build/helper.o ./build/codegen.o ./build/helpers/vector.o ./build/helpers/buffer.o ./build/compiler.o ./build/cprocess.o ./build/preprocessor.o ./build/array.o ./build/node.o
+OBJECTS= ./build/misc.o ./build/lexer.o ./build/token.o ./build/expressionable.o ./build/parser.o ./build/symresolver.o ./build/scope.o ./build/resolver.o ./build/rdefault.o ./build/helper.o ./build/codegen.o ./build/helpers/vector.o ./build/helpers/buffer.o ./build/compiler.o ./build/cprocess.o ./build/preprocessor.o ./build/array.o ./build/node.o
 all: ${OBJECTS}
 	gcc main.c -o main ${OBJECTS} -g
 
@@ -47,6 +47,9 @@ all: ${OBJECTS}
 
 ./build/node.o: ./node.c
 	gcc node.c ${INCLUDES} -o ./build/node.o -g -c 
+
+./build/rdefault.o: ./rdefault.c
+	gcc rdefault.c ${INCLUDES} -o ./build/rdefault.o -g -c 
 
 
 # Helper files

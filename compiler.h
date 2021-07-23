@@ -295,6 +295,7 @@ struct compile_process
 
     // The future of "scope" The replacement.
     struct resolver_process *resolver;
+    
 };
 
 struct datatype
@@ -581,6 +582,11 @@ struct token
         unsigned long lnum;
         unsigned long long llnum;
     };
+    
+    // True if their is a whitespace between the token and the next token
+    // i.e * a for token * whitespace would be true as the token "a" has a space
+    // between this token
+    bool whitespace;
 };
 
 struct sizeable_node
@@ -1260,6 +1266,11 @@ struct node *node_clone(struct node *node);
 const char *node_var_type_str(struct node *var_node);
 const char *node_var_name(struct node *var_node);
 
+/**
+ * Returns true if this is a variable node and it is a pointer, or returns true
+ * if this is a function node that returns a pointer. Otherwise false
+ */
+bool is_pointer_node(struct node* node);
 // Token
 
 bool token_is_operator(struct token *token, const char *op);
@@ -1348,5 +1359,73 @@ void expressionable_parse(struct expressionable *expressionable);
 struct token *expressionable_token_next(struct expressionable *expressionable);
 void *expressionable_node_pop(struct expressionable *expressionable);
 void expressionable_node_push(struct expressionable *expressionable, void *node_ptr);
+
+/**
+ * Resolver default configuration
+ */
+
+/**
+ * This file is a default configuration for the resolver, this is an abstraction
+ * that can be used by every part of this compiler
+ */
+
+enum
+{
+    RESOLVER_DEFAULT_ENTITY_TYPE_STACK,
+    RESOLVER_DEFAULT_ENTITY_TYPE_SYMBOL
+};
+
+
+
+// Resolver scope flags
+enum
+{
+    RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK = 0b00000001
+};
+
+enum
+{
+    RESOLVER_DEFAULT_ENTITY_DATA_TYPE_VARIABLE,
+    RESOLVER_DEFAULT_ENTITY_DATA_TYPE_FUNCTION,
+};
+
+
+struct resolver_default_entity_data
+{
+    // The type of entity data this is, i.e variable, function, structure
+    int type;
+
+    // The address that can be addressed in assembly. I.e [ebp-4] [name]
+    char address[60];
+
+    // The base address excluding any offset applied to it
+    // I.e "ebp" for all stack variables.
+    // I.e "variable_name" for global variables.
+    char base_address[60];
+
+    // The numeric offset that we must use. This is the numeric offset
+    // that is applied to "address" if any.
+    int offset;
+    int flags;
+};
+
+
+struct resolver_default_scope_data
+{
+    int flags;
+};
+
+struct resolver_default_entity_data *resolver_default_new_entity_data();
+struct resolver_default_entity_data *resolver_default_new_entity_data_for_var_node(struct node *var_node, int offset, int flags);
+struct resolver_default_entity_data *resolver_default_new_entity_data_for_function(struct node *func_node, int flags);
+struct resolver_entity *resolver_default_new_scope_entity(struct resolver_process* resolver, struct node *var_node, int offset, int flags);
+struct resolver_entity* resolver_default_register_function(struct resolver_process* resolver, struct node* func_node, int flags);
+void resolver_default_new_scope(struct resolver_process* resolver, int flags);
+void resolver_default_finish_scope(struct resolver_process* resolver);
+struct resolver_process* resolver_default_new_process(struct compile_process* compiler);
+struct resolver_default_entity_data *resolver_default_entity_private(struct resolver_entity *entity);
+struct resolver_default_scope_data *resolver_default_scope_private(struct resolver_scope *scope);
+
+
 
 #endif

@@ -605,6 +605,9 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
  */
 void parse_body(size_t *variable_size, struct history *history)
 {
+    parser_scope_new();
+    resolver_default_new_scope(current_process->resolver, 0);
+
     // We must always have a variable size pointer
     // if the caller doesn't care about the size we will make our own.
     size_t tmp_size = 0x00;
@@ -623,6 +626,9 @@ void parse_body(size_t *variable_size, struct history *history)
 
     // We got a couple of statements between curly braces {int a; int b;}
     parse_body_multiple_statements(variable_size, body_vec, history);
+
+    resolver_default_finish_scope(current_process->resolver);
+    parser_scope_finish();
 }
 
 /**
@@ -1155,6 +1161,7 @@ void parser_datatype_init(struct token *datatype_token, struct datatype *datatyp
         datatype_out->flags |= DATATYPE_FLAG_IS_POINTER;
         datatype_out->pointer_depth = pointer_depth;
     }
+
     datatype_out->type_str = datatype_token->sval;
 }
 
@@ -1259,8 +1266,6 @@ void parse_variable_full(struct history *history)
 struct vector *parse_function_arguments(struct history *history)
 {
     parser_scope_new();
-    resolver_default_new_scope(current_process->resolver, 0);
-
     struct vector *arguments_vec = vector_create(sizeof(struct node *));
     // If we see a right bracket we are at the end of the function arguments i.e (int a, int b)
     while (!token_next_is_symbol(')'))
@@ -1280,7 +1285,6 @@ struct vector *parse_function_arguments(struct history *history)
         // Skip the comma
         token_next();
     }
-    resolver_finish_scope(current_process->resolver);
     parser_scope_finish();
 
     return arguments_vec;
@@ -1288,12 +1292,7 @@ struct vector *parse_function_arguments(struct history *history)
 
 void parse_function_body(struct history *history)
 {
-    parser_scope_new();
-    resolver_default_new_scope(current_process->resolver, 0);
-
     parse_body(0, history);
-    resolver_default_finish_scope(current_process->resolver);
-    parser_scope_finish();
 }
 
 void parse_function(struct datatype *dtype, struct token *name_token, struct history *history)
@@ -1301,6 +1300,10 @@ void parse_function(struct datatype *dtype, struct token *name_token, struct his
     struct vector *arguments_vector = NULL;
 
     struct history new_history;
+
+    // Scope for function arguments
+    resolver_default_new_scope(current_process->resolver, 0);
+
     // We expect a left bracket for functions.
     // Let us not forget we already have the return type and name of the function i.e int abc
     expect_op("(");
@@ -1315,12 +1318,19 @@ void parse_function(struct datatype *dtype, struct token *name_token, struct his
         struct node *body_node = node_pop();
         // Create the function node
         make_function_node(dtype, name_token->sval, arguments_vector, body_node);
+
+        // We are done with function arguments scope (body will create its own)
+        resolver_finish_scope(current_process->resolver);
         return;
     }
 
     // Ok then this is a function declaration wtihout a body, in which case
     // we expect a semicolon
     expect_sym(';');
+
+    // We are done with function arguments scope
+    resolver_finish_scope(current_process->resolver);
+
     make_function_node(dtype, name_token->sval, arguments_vector, NULL);
 }
 

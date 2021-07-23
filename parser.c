@@ -435,6 +435,10 @@ void parse_single_token_to_node()
         node = node_create(&(struct node){NODE_TYPE_IDENTIFIER, .sval = token->sval});
         break;
 
+    case TOKEN_TYPE_STRING:
+        node = node_create(&(struct node){NODE_TYPE_STRING, .sval=token->sval});
+        break;
+
     default:
         parse_err("Problem converting token to node. No valid node exists for token of type %i\n", token->type);
     }
@@ -848,6 +852,12 @@ void parse_if(struct history *history)
 
     make_if_node(cond_node, body_node, next_node);
 }
+
+void parse_string(struct history* history)
+{
+    parse_single_token_to_node();
+}
+
 void parse_keyword(struct history *history)
 {
     struct token *token = token_peek_next();
@@ -995,6 +1005,11 @@ int parse_expressionable_single(struct history *history)
 
     case TOKEN_TYPE_KEYWORD:
         parse_keyword(history);
+        res = 0;
+        break;
+
+    case TOKEN_TYPE_STRING:
+        parse_string(history);
         res = 0;
         break;
     }

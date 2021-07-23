@@ -1,5 +1,5 @@
 #include "compiler.h"
-#include "helpers/vector.h"
+#include "helpers/hashmap.h"
 #include <stdio.h>
 #include <math.h>
 

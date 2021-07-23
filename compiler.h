@@ -231,6 +231,35 @@ struct preprocessor
     // Used for parsing expressions.
     struct expressionable *expressionable;
 };
+
+struct string_table_element
+{
+    // The string in question
+    const char* str;
+    // The code generator label that represents this string in memory
+    const char label[50];
+};
+
+struct code_generator
+{
+    struct states
+    {
+        // Expression state vector - A vector used as a stack of expression states.
+        // Most recently pushed element is the current expression state rules.
+        // Should pop from this vector when an expression ends, push when an expression starts
+        // I.e opening brackets starts a new expression (50+20)
+        // See enum expression_state for more information
+        struct vector *expr;
+    } states;
+
+    // This is a bitmask of flags for registers that are in use
+    // if the bit is set the register is currently being used
+    // this helps the system control how to do things.
+    int used_registers;
+
+    // Vector of struct string_table_element*
+    struct vector* string_table;
+};
 /**
  * This file represents a compilation process
  */
@@ -266,23 +295,6 @@ struct compile_process
     // data can point to the node in question, along with other relevant information
     struct vector *symbol_tbl;
 
-    struct generator
-    {
-        struct states
-        {
-            // Expression state vector - A vector used as a stack of expression states.
-            // Most recently pushed element is the current expression state rules.
-            // Should pop from this vector when an expression ends, push when an expression starts
-            // I.e opening brackets starts a new expression (50+20)
-            // See enum expression_state for more information
-            struct vector *expr;
-        } states;
-
-        // This is a bitmask of flags for registers that are in use
-        // if the bit is set the register is currently being used
-        // this helps the system control how to do things.
-        int used_registers;
-    } generator;
 
     struct
     {
@@ -295,7 +307,9 @@ struct compile_process
 
     // The future of "scope" The replacement.
     struct resolver_process *resolver;
-    
+
+    // The code generator
+    struct code_generator *generator;
 };
 
 struct datatype
@@ -378,7 +392,7 @@ struct resolver_entity
     // If this is a variable this would be the variable name,
     // if this is a function it would be the function name
     // if this is a structure it would be the structure name.
-    const char* name;
+    const char *name;
 
     // Can be NULL if no variable is present. otherwise equal to a node
     // that was resolved.
@@ -399,9 +413,9 @@ struct resolver_entity
 
         struct resolver_entity_function_call_data
         {
-            // The function call arguments, this is a vector of struct node* 
+            // The function call arguments, this is a vector of struct node*
             // Must have a type of RESOLVER_ENTITY_FUNCTION_CALL
-            struct vector* arguments;
+            struct vector *arguments;
 
             // The total bytes of the stack used by the function arguments
             // for this function call.
@@ -582,7 +596,7 @@ struct token
         unsigned long lnum;
         unsigned long long llnum;
     };
-    
+
     // True if their is a whitespace between the token and the next token
     // i.e * a for token * whitespace would be true as the token "a" has a space
     // between this token
@@ -685,11 +699,12 @@ enum
     NODE_TYPE_EXPRESSION_PARENTHESIS,
     NODE_TYPE_NUMBER,
     NODE_TYPE_IDENTIFIER,
+    NODE_TYPE_STRING,
     NODE_TYPE_VARIABLE,
     NODE_TYPE_FUNCTION,
     NODE_TYPE_BODY,
     NODE_TYPE_STATEMENT_RETURN,
-    NODE_TYPE_STATEMENT_IF, // Used for both IF and ELSE IF statements
+    NODE_TYPE_STATEMENT_IF,   // Used for both IF and ELSE IF statements
     NODE_TYPE_STATEMENT_ELSE, // This is an ELSE statement of an IF
     NODE_TYPE_UNARY,
     NODE_TYPE_STRUCT,
@@ -851,13 +866,13 @@ struct node
             struct if_stmt
             {
                 // Condition node i.e if(50*20 > 40)
-                struct node* cond_node;
+                struct node *cond_node;
 
                 // Body node i.e { printf("test"); }
-                struct node* body_node;
+                struct node *body_node;
                 // The next part of the IF statement i.e the "else" or "else if"
                 // NULL If theris nothing more.
-                struct node* next;
+                struct node *next;
 
             } _if;
 
@@ -865,7 +880,7 @@ struct node
             {
 
                 // Body node i.e { printf("test"); }
-                struct node* body_node;
+                struct node *body_node;
             } _else;
         } stmt;
     };
@@ -1093,8 +1108,7 @@ bool is_access_operator(const char *op);
 
 bool is_array_node(struct node *node);
 
-bool is_parentheses_node(struct node* node);
-
+bool is_parentheses_node(struct node *node);
 
 /**
  * Returns true if this node represents an access node expression
@@ -1195,14 +1209,14 @@ size_t array_brackets_calculate_size(struct datatype *type, struct array_bracket
  * I.e short abc[8]; will return 8*2;
  */
 size_t variable_size(struct node *var_node);
-size_t datatype_size(struct datatype* datatype);
+size_t datatype_size(struct datatype *datatype);
 
 bool is_array_operator(const char *op);
-bool is_argument_operator(const char* op);
+bool is_argument_operator(const char *op);
 /**
  * Is the given node an expression whose operator is ","
  */
-bool is_argument_node(struct node* node);
+bool is_argument_node(struct node *node);
 
 /**
  * Returns true if the address can be caclulated at compile time
@@ -1292,7 +1306,7 @@ const char *node_var_name(struct node *var_node);
  * Returns true if this is a variable node and it is a pointer, or returns true
  * if this is a function node that returns a pointer. Otherwise false
  */
-bool is_pointer_node(struct node* node);
+bool is_pointer_node(struct node *node);
 // Token
 
 bool token_is_operator(struct token *token, const char *op);
@@ -1397,8 +1411,6 @@ enum
     RESOLVER_DEFAULT_ENTITY_TYPE_SYMBOL
 };
 
-
-
 // Resolver scope flags
 enum
 {
@@ -1410,7 +1422,6 @@ enum
     RESOLVER_DEFAULT_ENTITY_DATA_TYPE_VARIABLE,
     RESOLVER_DEFAULT_ENTITY_DATA_TYPE_FUNCTION,
 };
-
 
 struct resolver_default_entity_data
 {
@@ -1431,7 +1442,6 @@ struct resolver_default_entity_data
     int flags;
 };
 
-
 struct resolver_default_scope_data
 {
     int flags;
@@ -1440,14 +1450,15 @@ struct resolver_default_scope_data
 struct resolver_default_entity_data *resolver_default_new_entity_data();
 struct resolver_default_entity_data *resolver_default_new_entity_data_for_var_node(struct node *var_node, int offset, int flags);
 struct resolver_default_entity_data *resolver_default_new_entity_data_for_function(struct node *func_node, int flags);
-struct resolver_entity *resolver_default_new_scope_entity(struct resolver_process* resolver, struct node *var_node, int offset, int flags);
-struct resolver_entity* resolver_default_register_function(struct resolver_process* resolver, struct node* func_node, int flags);
-void resolver_default_new_scope(struct resolver_process* resolver, int flags);
-void resolver_default_finish_scope(struct resolver_process* resolver);
-struct resolver_process* resolver_default_new_process(struct compile_process* compiler);
+struct resolver_entity *resolver_default_new_scope_entity(struct resolver_process *resolver, struct node *var_node, int offset, int flags);
+struct resolver_entity *resolver_default_register_function(struct resolver_process *resolver, struct node *func_node, int flags);
+void resolver_default_new_scope(struct resolver_process *resolver, int flags);
+void resolver_default_finish_scope(struct resolver_process *resolver);
+struct resolver_process *resolver_default_new_process(struct compile_process *compiler);
 struct resolver_default_entity_data *resolver_default_entity_private(struct resolver_entity *entity);
 struct resolver_default_scope_data *resolver_default_scope_private(struct resolver_scope *scope);
 
 
-
+// Code generator
+struct code_generator* codegenerator_new(struct compile_process* process);
 #endif

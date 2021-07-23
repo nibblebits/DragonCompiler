@@ -230,12 +230,12 @@ bool is_array_operator(const char *op)
     return S_EQ(op, "[]");
 }
 
-bool is_argument_operator(const char* op)
+bool is_argument_operator(const char *op)
 {
     return S_EQ(op, ",");
 }
 
-bool is_argument_node(struct node* node)
+bool is_argument_node(struct node *node)
 {
     return node->type == NODE_TYPE_EXPRESSION && is_argument_operator(node->exp.op);
 }
@@ -245,12 +245,12 @@ bool is_array_node(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op);
 }
 
-bool is_parentheses_operator(const char* op)
+bool is_parentheses_operator(const char *op)
 {
     return S_EQ(op, "()");
 }
 
-bool is_parentheses_node(struct node* node)
+bool is_parentheses_node(struct node *node)
 {
     return node->type == NODE_TYPE_EXPRESSION && is_parentheses_operator(node->exp.op);
 }
@@ -494,11 +494,13 @@ bool variable_node_is_primative(struct node *node)
     return node->var.type.type != DATA_TYPE_STRUCT && node->var.type.type != DATA_TYPE_UNION;
 }
 
-size_t datatype_size(struct datatype* datatype)
+size_t datatype_size(struct datatype *datatype)
 {
-      if (datatype->flags & DATATYPE_FLAG_IS_ARRAY)
+    if (datatype->flags & DATATYPE_FLAG_IS_ARRAY)
         return datatype->array.size;
-    
+    if (datatype->flags & DATATYPE_FLAG_IS_POINTER)
+        return DATA_SIZE_DWORD;
+        
     return datatype->size;
 }
 
@@ -595,10 +597,10 @@ int compute_array_offset(struct node *node, size_t single_element_size)
     return compute_array_offset_with_multiplier(node, single_element_size, 0);
 }
 
-int array_multiplier(struct datatype* dtype, int index, int index_value)
+int array_multiplier(struct datatype *dtype, int index, int index_value)
 {
-     vector_set_peek_pointer(dtype->array.brackets->n_brackets, index+1);
-    
+    vector_set_peek_pointer(dtype->array.brackets->n_brackets, index + 1);
+
     int size_sum = index_value;
     struct node *bracket_node = vector_peek_ptr(dtype->array.brackets->n_brackets);
     while (bracket_node)
@@ -615,14 +617,13 @@ int array_multiplier(struct datatype* dtype, int index, int index_value)
 
 int array_offset(struct datatype *dtype, int index, int index_value)
 {
-    if (index == vector_count(dtype->array.brackets->n_brackets)-1)
+    if (index == vector_count(dtype->array.brackets->n_brackets) - 1)
         return index_value * dtype->size;
 
-   
     return array_multiplier(dtype, index, index_value) * dtype->size;
 }
 
-bool char_is_delim(char c, const char* delims)
+bool char_is_delim(char c, const char *delims)
 {
     int len = strlen(delims);
     for (int i = 0; i < len; i++)

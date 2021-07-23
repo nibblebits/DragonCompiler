@@ -38,6 +38,54 @@ struct history
     };
 };
 
+int codegen_label_count()
+{
+    static int count = 0;
+    count++;
+    return count;
+}
+
+const char *codegen_get_label_for_string(const char *str);
+
+/**
+ * Registers the given string and returns the label name.
+ * If already registered then just returns the label name
+ */
+const char *codegen_register_string(const char *str)
+{
+
+    // Already registered this string before? Why waste memory..
+    const char* label = codegen_get_label_for_string(str);
+    if (label)
+    {
+        return label;
+    }
+
+    struct string_table_element *str_elem = calloc(sizeof(struct string_table_element), 1);
+    int label_id = codegen_label_count();
+    sprintf((char *)str_elem->label, "str_%i", label_id);
+    str_elem->str = str;
+    vector_push(current_process->generator->string_table, &str_elem);
+    return str_elem->label;
+}
+
+const char *codegen_get_label_for_string(const char *str)
+{
+    const char *result = NULL;
+    vector_set_peek_pointer(current_process->generator->string_table, 0);
+    struct string_table_element *current = vector_peek_ptr(current_process->generator->string_table);
+    while (current)
+    {
+        if (S_EQ(current->str, str))
+        {
+            result = current->label;
+        }
+        current = vector_peek_ptr(current_process->generator->string_table);
+    }
+
+    return result;
+}
+
 static struct history *history_down(struct history *history, int flags)
 {
     history->flags = flags;
@@ -149,17 +197,17 @@ int codegen_get_enum_for_register(const char *reg)
 
 static bool register_is_used(const char *reg)
 {
-    return current_process->generator.used_registers & codegen_get_enum_for_register(reg);
+    return current_process->generator->used_registers & codegen_get_enum_for_register(reg);
 }
 
 void register_set_flag(int flag)
 {
-    current_process->generator.used_registers |= flag;
+    current_process->generator->used_registers |= flag;
 }
 
 void register_unset_flag(int flag)
 {
-    current_process->generator.used_registers &= ~flag;
+    current_process->generator->used_registers &= ~flag;
 }
 
 void codegen_use_register(const char *reg)
@@ -234,6 +282,31 @@ static struct node *node_next()
     return vector_peek_ptr(current_process->node_tree_vec);
 }
 
+void codegen_write_string(struct string_table_element *str_elem)
+{
+    asm_push("%s: db '%s', 0", str_elem->label, str_elem->str);
+}
+
+void codegen_write_strings()
+{
+    vector_set_peek_pointer(current_process->generator->string_table, 0);
+    struct string_table_element *current = vector_peek_ptr(current_process->generator->string_table);
+    while (current)
+    {
+        codegen_write_string(current);
+        current = vector_peek_ptr(current_process->generator->string_table);
+    }
+}
+
+/**
+ * Generates the read only data section
+ */
+void codegen_generate_rod()
+{
+    asm_push("section .rodata");
+    codegen_write_strings();
+}
+
 void codegen_generate_node(struct node *node);
 void codegen_generate_expressionable(struct node *node, struct history *history);
 void codegen_generate_new_expressionable(struct node *node, struct history *history)
@@ -259,7 +332,7 @@ static const char *codegen_get_fmt_for_value(struct node *value_node, struct res
     return tmp_buf;
 }
 
-void codegen_gen_math_for_value(const char *reg, const char* value, int flags)
+void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
 {
     if (flags & EXPRESSION_IS_ADDITION)
     {
@@ -287,7 +360,7 @@ void codegen_gen_math_for_value(const char *reg, const char* value, int flags)
     }
 }
 
-static void codegen_gen_mov_or_math_for_value(const char *reg, const char* value,  int flags)
+static void codegen_gen_mov_or_math_for_value(const char *reg, const char *value, int flags)
 {
     if (register_is_used(reg))
     {
@@ -299,13 +372,12 @@ static void codegen_gen_mov_or_math_for_value(const char *reg, const char* value
     asm_push("mov %s, %s", reg, value);
 }
 
-
 static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, int flags, struct resolver_entity *entity)
 {
     codegen_gen_mov_or_math_for_value(reg, codegen_get_fmt_for_value(value_node, entity), flags);
 }
 
-static void codegen_gen_mem_access(struct node* value_node, int flags, struct resolver_entity* entity)
+static void codegen_gen_mem_access(struct node *value_node, int flags, struct resolver_entity *entity)
 {
     if (flags & EXPRESSION_GET_ADDRESS)
     {
@@ -315,7 +387,6 @@ static void codegen_gen_mem_access(struct node* value_node, int flags, struct re
         asm_push("mov ebx, [%s]", codegen_entity_private(entity)->address);
         return;
     }
-
 
     codegen_gen_mov_or_math("eax", value_node, flags, entity);
 }
@@ -448,8 +519,6 @@ const char *codegen_byte_word_or_dword(size_t size)
     return type;
 }
 
-
-
 void codegen_generate_variable_access_for_array(struct resolver_entity *entity, struct history *history)
 {
     struct resolver_entity *last_entity = NULL;
@@ -481,7 +550,7 @@ void codegen_generate_variable_access_for_array(struct resolver_entity *entity, 
     asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
 }
 
-void codegen_generate_variable_access_for_non_array(struct node* node, struct resolver_entity* entity, struct history* history)
+void codegen_generate_variable_access_for_non_array(struct node *node, struct resolver_entity *entity, struct history *history)
 {
     codegen_gen_mem_access(node, history->flags, entity);
 
@@ -525,7 +594,7 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     codegen_generate_expressionable(node->exp.right, history);
 
     register_unset_flag(REGISTER_EAX_IS_USED);
-    asm_push("mov %s [%s], eax", codegen_byte_word_or_dword(left_entity->node->var.type.size), codegen_entity_private(left_entity)->address);
+    asm_push("mov %s [%s], eax", codegen_byte_word_or_dword(datatype_size(&left_entity->node->var.type)), codegen_entity_private(left_entity)->address);
 }
 
 void codegen_generate_expressionable_function_arguments(struct node *func_call_args_exp_node, size_t *arguments_size)
@@ -685,7 +754,6 @@ void codegen_generate_exp_node(struct node *node, struct history *history)
 
     // Generate the expression and all child expressions
     _codegen_generate_exp_node(node, history);
-
 }
 
 /**
@@ -710,7 +778,6 @@ const char *codegen_choose_ebx_or_edx()
 
     return reg;
 }
-
 
 void codegen_generate_identifier(struct node *node, struct history *history)
 {
@@ -788,6 +855,12 @@ void codegen_generate_exp_parenthesis_node(struct node *node, struct history *hi
     codegen_generate_expressionable(node->parenthesis.exp, history);
 }
 
+void codegen_generate_string(struct node* node, struct history* history)
+{
+    const char* label = codegen_register_string(node->sval);
+    codegen_gen_mov_or_math_for_value("eax", label, history->flags);
+}
+
 void codegen_generate_expressionable(struct node *node, struct history *history)
 {
     switch (node->type)
@@ -795,12 +868,15 @@ void codegen_generate_expressionable(struct node *node, struct history *history)
     case NODE_TYPE_NUMBER:
         codegen_generate_number_node(node, history);
         break;
+    case NODE_TYPE_IDENTIFIER:
+        codegen_generate_identifier(node, history);
+        break;
+    case NODE_TYPE_STRING:
+        codegen_generate_string(node, history);
+        break;
 
     case NODE_TYPE_EXPRESSION:
         codegen_generate_exp_node(node, history);
-        break;
-    case NODE_TYPE_IDENTIFIER:
-        codegen_generate_identifier(node, history);
         break;
     case NODE_TYPE_EXPRESSION_PARENTHESIS:
         codegen_generate_exp_parenthesis_node(node, history);
@@ -928,9 +1004,6 @@ void codegen_generate_stack_scope(struct vector *statements)
     codegen_finish_scope();
 }
 
-
-
-
 void codegen_generate_body(struct node *node)
 {
     codegen_generate_stack_scope(node->body.statements);
@@ -960,7 +1033,6 @@ void codegen_generate_scope_variable(struct node *node)
     register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
-
 void codegen_generate_statement_return(struct node *node)
 {
     struct history history;
@@ -979,25 +1051,18 @@ void codegen_generate_statement_return(struct node *node)
     register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
-int codegen_label_count()
+void _codegen_generate_if_stmt(struct node *node, int end_label_id);
+void codegen_generate_else_stmt(struct node *node)
 {
-    static int count = 0;
-    count++;
-    return count;
+    codegen_generate_body(node->stmt._else.body_node);
 }
-
-void _codegen_generate_if_stmt(struct node* node, int end_label_id);
-void codegen_generate_else_stmt(struct node* node)
-{
-    codegen_generate_body(node->stmt._else.body_node);    
-}
-void codegen_generate_else_or_else_if(struct node* node, int end_label_id)
+void codegen_generate_else_or_else_if(struct node *node, int end_label_id)
 {
     if (node->type == NODE_TYPE_STATEMENT_IF)
     {
         _codegen_generate_if_stmt(node, end_label_id);
     }
-    else if(node->type == NODE_TYPE_STATEMENT_ELSE)
+    else if (node->type == NODE_TYPE_STATEMENT_ELSE)
     {
         codegen_generate_else_stmt(node);
     }
@@ -1007,14 +1072,14 @@ void codegen_generate_else_or_else_if(struct node* node, int end_label_id)
     }
 }
 
-void _codegen_generate_if_stmt(struct node* node, int end_label_id)
+void _codegen_generate_if_stmt(struct node *node, int end_label_id)
 {
     struct history history;
     int if_label_id = codegen_label_count();
     codegen_generate_expressionable(node->stmt._if.cond_node, history_begin(&history, 0));
     asm_push("cmp eax, 0");
     asm_push("je .if_%i:", if_label_id);
-    codegen_generate_body(node->stmt._if.body_node);    
+    codegen_generate_body(node->stmt._if.body_node);
     asm_push("jmp .if_end_%i:", end_label_id);
     asm_push(".if_%i:", if_label_id);
 
@@ -1022,10 +1087,9 @@ void _codegen_generate_if_stmt(struct node* node, int end_label_id)
     {
         codegen_generate_else_or_else_if(node->stmt._if.next, end_label_id);
     }
-
 }
 
-void codegen_generate_if_stmt(struct node* node)
+void codegen_generate_if_stmt(struct node *node)
 {
     int end_label_id = codegen_label_count();
     _codegen_generate_if_stmt(node, end_label_id);
@@ -1057,7 +1121,7 @@ void codegen_generate_statement(struct node *node)
 
     case NODE_TYPE_STATEMENT_IF:
         codegen_generate_if_stmt(node);
-    break;
+        break;
     }
 }
 
@@ -1071,7 +1135,6 @@ void codegen_generate_scope_no_new_scope(struct vector *statements)
         statement_node = vector_peek_ptr(statements);
     }
 }
-
 
 void codegen_generate_function_arguments(struct vector *argument_vector)
 {
@@ -1169,5 +1232,16 @@ int codegen(struct compile_process *process)
     codegen_generate_root();
     codegen_finish_scope();
 
+    // Finally generate read only data
+    codegen_generate_rod();
+
     return 0;
+}
+
+struct code_generator *codegenerator_new(struct compile_process *process)
+{
+    struct code_generator *generator = calloc(sizeof(struct code_generator), 1);
+    generator->states.expr = vector_create(sizeof(struct expression_state *));
+    generator->string_table = vector_create(sizeof(struct string_table_element *));
+    return generator;
 }

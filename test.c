@@ -1,8 +1,7 @@
 #define MACRO_SUM(x, y) x+y
 
-char* abc = 0;
+char* abc = "testing";
 int main()
 {
-    abc = "Hello world how are you?";
     
 }

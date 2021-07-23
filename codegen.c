@@ -904,7 +904,16 @@ static void codegen_generate_global_variable_for_primitive(struct node *node)
     char tmp_buf[256];
     if (node->var.val != NULL)
     {
-        asm_push("%s: %s %lld", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf), node->var.val->llnum, tmp_buf);
+        if (node->var.val->type == NODE_TYPE_STRING)
+        {
+            // Ok we have a string here
+            const char* label = codegen_register_string(node->var.val->sval);
+            asm_push("%s: %s %s", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf), label, tmp_buf);
+        }
+        else
+        {
+            asm_push("%s: %s %lld", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf), node->var.val->llnum, tmp_buf);
+        }
         return;
     }
 

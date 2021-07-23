@@ -448,6 +448,8 @@ const char *codegen_byte_word_or_dword(size_t size)
     return type;
 }
 
+
+
 void codegen_generate_variable_access_for_array(struct resolver_entity *entity, struct history *history)
 {
     struct resolver_entity *last_entity = NULL;
@@ -910,6 +912,29 @@ size_t codegen_compute_stack_size(struct vector *vec)
     return C_ALIGN(stack_size);
 }
 
+void codegen_generate_scope_no_new_scope(struct vector *statements);
+void codegen_generate_stack_scope(struct vector *statements)
+{
+    // New body new scope.
+
+    // Resolver scope needs to exist too it will be this normal scopes replacement
+    codegen_new_scope(RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK);
+
+    // We got to compute the stack size we need for our statements
+    size_t stack_size = codegen_compute_stack_size(statements);
+    codegen_stack_sub(stack_size);
+    codegen_generate_scope_no_new_scope(statements);
+    codegen_stack_add(stack_size);
+    codegen_finish_scope();
+}
+
+
+
+
+void codegen_generate_body(struct node *node)
+{
+    codegen_generate_stack_scope(node->body.statements);
+}
 void codegen_generate_scope_variable(struct node *node)
 {
     // Register the variable to the scope.
@@ -935,6 +960,7 @@ void codegen_generate_scope_variable(struct node *node)
     register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
+
 void codegen_generate_statement_return(struct node *node)
 {
     struct history history;
@@ -951,6 +977,60 @@ void codegen_generate_statement_return(struct node *node)
 
     // EAX is available now
     register_unset_flag(REGISTER_EAX_IS_USED);
+}
+
+int codegen_label_count()
+{
+    static int count = 0;
+    count++;
+    return count;
+}
+
+void _codegen_generate_if_stmt(struct node* node, int end_label_id);
+void codegen_generate_else_stmt(struct node* node)
+{
+    codegen_generate_body(node->stmt._else.body_node);    
+}
+void codegen_generate_else_or_else_if(struct node* node, int end_label_id)
+{
+    if (node->type == NODE_TYPE_STATEMENT_IF)
+    {
+        _codegen_generate_if_stmt(node, end_label_id);
+    }
+    else if(node->type == NODE_TYPE_STATEMENT_ELSE)
+    {
+        codegen_generate_else_stmt(node);
+    }
+    else
+    {
+        FAIL_ERR("Unexpected node, expecting else or else if. Compiler bug");
+    }
+}
+
+void _codegen_generate_if_stmt(struct node* node, int end_label_id)
+{
+    struct history history;
+    int if_label_id = codegen_label_count();
+    codegen_generate_expressionable(node->stmt._if.cond_node, history_begin(&history, 0));
+    asm_push("cmp eax, 0");
+    asm_push("je .if_%i:", if_label_id);
+    codegen_generate_body(node->stmt._if.body_node);    
+    asm_push("jmp .if_end_%i:", end_label_id);
+    asm_push(".if_%i:", if_label_id);
+
+    if (node->stmt._if.next)
+    {
+        codegen_generate_else_or_else_if(node->stmt._if.next, end_label_id);
+    }
+
+}
+
+void codegen_generate_if_stmt(struct node* node)
+{
+    int end_label_id = codegen_label_count();
+    _codegen_generate_if_stmt(node, end_label_id);
+
+    asm_push(".if_end_%i:", end_label_id);
 }
 
 void codegen_generate_statement(struct node *node)
@@ -974,6 +1054,10 @@ void codegen_generate_statement(struct node *node)
     case NODE_TYPE_STATEMENT_RETURN:
         codegen_generate_statement_return(node);
         break;
+
+    case NODE_TYPE_STATEMENT_IF:
+        codegen_generate_if_stmt(node);
+    break;
     }
 }
 
@@ -988,25 +1072,6 @@ void codegen_generate_scope_no_new_scope(struct vector *statements)
     }
 }
 
-void codegen_generate_stack_scope(struct vector *statements)
-{
-    // New body new scope.
-
-    // Resolver scope needs to exist too it will be this normal scopes replacement
-    codegen_new_scope(RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK);
-
-    // We got to compute the stack size we need for our statements
-    size_t stack_size = codegen_compute_stack_size(statements);
-    codegen_stack_sub(stack_size);
-    codegen_generate_scope_no_new_scope(statements);
-    codegen_stack_add(stack_size);
-    codegen_finish_scope();
-}
-
-void codegen_generate_function_body(struct node *node)
-{
-    codegen_generate_stack_scope(node->body.statements);
-}
 
 void codegen_generate_function_arguments(struct vector *argument_vector)
 {
@@ -1037,7 +1102,7 @@ void codegen_generate_function(struct node *node)
     codegen_generate_function_arguments(node->func.argument_vector);
 
     // Generate the function body
-    codegen_generate_function_body(node->func.body_n);
+    codegen_generate_body(node->func.body_n);
 
     // End function argument scope
     codegen_finish_scope();

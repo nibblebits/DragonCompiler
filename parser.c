@@ -172,7 +172,7 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
     node->var.aoffset = offset + (upward_stack ? node->var.padding : -node->var.padding);
     if (upward_stack && first_entity)
     {
-        // Since we are an upward stack we must add an extra 4 bytes to skip the return 
+        // Since we are an upward stack we must add an extra 4 bytes to skip the return
         // We only do this for the first entity of course as all other variables
         // will follow suit.
         node->var.aoffset += DATA_SIZE_DWORD;
@@ -450,6 +450,17 @@ void make_exp_parentheses_node(struct node *exp_node)
     node_create(&(struct node){NODE_TYPE_EXPRESSION_PARENTHESIS, .parenthesis.exp = exp_node});
 }
 
+void make_if_node(struct node *cond_node, struct node *body_node, struct node* next_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_IF, .stmt._if.cond_node = cond_node, .stmt._if.body_node = body_node, .stmt._if.next=next_node});
+}
+
+
+void make_else_node(struct node *body_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_ELSE, .stmt._else.body_node = body_node});
+}
+
 void make_struct_node(const char *struct_name, struct node *body_node)
 {
     node_create(&(struct node){NODE_TYPE_STRUCT, ._struct.name = struct_name, ._struct.body_n = body_node});
@@ -507,7 +518,6 @@ static void parser_append_size_for_node(size_t *_variable_size, struct node *nod
         }
     }
 }
-
 
 /**
  * Parses a single body statement and in the event the statement is a variable
@@ -693,19 +703,18 @@ void parse_for_indirection_unary()
     // as this could be simple multiplication arithmetic i.e 50 * 20 mistaken
     // for a unary.
     // Very unsure about this solution, consider revising
-    struct resolver_result* result = resolver_follow(current_process->resolver, unary_operand_node);
+    struct resolver_result *result = resolver_follow(current_process->resolver, unary_operand_node);
     if (!resolver_result_ok(result) || !is_pointer_node(result->entity->node))
     {
         // Ok this is not something the unary is responsible for, therefore
         // this is actually a multiplication node i.e a * b or 50 * 60
 
-       // Lets pop off the left operand we need to make an expression here for multiplication
-       struct node* left_operand = node_pop();
-       make_exp_node(left_operand, unary_operand_node, "*");
-       return;
+        // Lets pop off the left operand we need to make an expression here for multiplication
+        struct node *left_operand = node_pop();
+        make_exp_node(left_operand, unary_operand_node, "*");
+        return;
     }
-    
-    
+
     make_unary_node("*", unary_operand_node);
 
     struct node *unary_node = node_pop();
@@ -782,7 +791,7 @@ void parse_variable_function_or_struct_union(struct history *history);
 void parse_keyword_return(struct history *history);
 void parse_datatype_type(struct datatype *datatype);
 
-void parse_sizeof(struct history* history)
+void parse_sizeof(struct history *history)
 {
     // Get rid of the sizeof
     expect_keyword("sizeof");
@@ -792,18 +801,58 @@ void parse_sizeof(struct history* history)
     parse_datatype_type(&dtype);
 
     // Alright we got the size perfect, lets inject a number to represent the size
-    struct node* node = node_create(&(struct node){NODE_TYPE_NUMBER, .llnum = datatype_size(&dtype)});
+    struct node *node = node_create(&(struct node){NODE_TYPE_NUMBER, .llnum = datatype_size(&dtype)});
     node_push(node);
-    
+
     expect_sym(')');
 }
 
+void parse_if(struct history *history);
+struct node* parse_else_or_else_if(struct history *history)
+{
+    struct node* node = NULL;
+    if (token_next_is_keyword("else"))
+    {
+        // Ok we have an else keyword is this an else if?
+        token_next();
+        if (token_next_is_keyword("if"))
+        {
+            // Ok we have an "else if" lets parse the if statement
+            parse_if(history_down(history, 0));
+            node = node_pop();
+            return node;
+        }
+
+        // This is just an else statement
+        size_t var_size = 0;
+        parse_body(&var_size, history);
+        struct node *body_node = node_pop();
+        make_else_node(body_node);
+        node = node_pop();
+    }
+
+    return node;
+}
+void parse_if(struct history *history)
+{
+    expect_keyword("if");
+    expect_op("(");
+    parse_expressionable(history);
+    expect_sym(')');
+
+    struct node *cond_node = node_pop();
+    size_t var_size = 0;
+    parse_body(&var_size, history);
+    struct node *body_node = node_pop();
+    struct node* next_node = parse_else_or_else_if(history);
+
+    make_if_node(cond_node, body_node, next_node);
+}
 void parse_keyword(struct history *history)
 {
     struct token *token = token_peek_next();
 
-
-    if(S_EQ(token->sval, "sizeof"))
+    if (S_EQ(token->sval, "sizeof"))
     {
         // This should be in the preprocessor but its not advacned enough
         // I hope we can get away with it here in the parser, time will tell
@@ -826,12 +875,14 @@ void parse_keyword(struct history *history)
         parse_keyword_return(history);
         return;
     }
-    
+    else if (S_EQ(token->sval, "if"))
+    {
+        parse_if(history);
+        return;
+    }
 
     parse_err("Unexpected keyword %s\n", token->sval);
 }
-
-
 
 void parse_exp_normal(struct history *history)
 {
@@ -904,6 +955,8 @@ void parse_exp(struct history *history)
         return;
     }
 
+    // Unaries must not have a whitespace after the unary operator. If it has a whitespace
+    // then it is not a unary.
     if (parser_is_unary_operator(token_peek_next()->sval) && !token_peek_next()->whitespace)
     {
         parse_for_unary();
@@ -1319,8 +1372,6 @@ void parse_keyword_return(struct history *history)
     // We expect a semicolon all the time when it comes to return keywords
     expect_sym(';');
 }
-
-
 
 void parse_keyword_for_global()
 {

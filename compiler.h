@@ -689,6 +689,8 @@ enum
     NODE_TYPE_FUNCTION,
     NODE_TYPE_BODY,
     NODE_TYPE_STATEMENT_RETURN,
+    NODE_TYPE_STATEMENT_IF, // Used for both IF and ELSE IF statements
+    NODE_TYPE_STATEMENT_ELSE, // This is an ELSE statement of an IF
     NODE_TYPE_UNARY,
     NODE_TYPE_STRUCT,
     NODE_TYPE_BRACKET // Array brackets i.e [50][20] Two node brackets.
@@ -845,6 +847,26 @@ struct node
                 // The expresion of the return statement.
                 struct node *exp;
             } ret;
+
+            struct if_stmt
+            {
+                // Condition node i.e if(50*20 > 40)
+                struct node* cond_node;
+
+                // Body node i.e { printf("test"); }
+                struct node* body_node;
+                // The next part of the IF statement i.e the "else" or "else if"
+                // NULL If theris nothing more.
+                struct node* next;
+
+            } _if;
+
+            struct else_stmt
+            {
+
+                // Body node i.e { printf("test"); }
+                struct node* body_node;
+            } _else;
         } stmt;
     };
 

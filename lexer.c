@@ -64,7 +64,9 @@ bool is_keyword(const char *str)
            S_EQ(str, "static") || 
            S_EQ(str, "return") ||
            S_EQ(str, "include") ||
-           S_EQ(str, "sizeof");
+           S_EQ(str, "sizeof") ||
+           S_EQ(str, "if") ||
+           S_EQ(str, "else");
 }
 
 bool keyword_is_datatype(const char *str)

@@ -1218,6 +1218,17 @@ bool is_argument_operator(const char *op);
  */
 bool is_argument_node(struct node *node);
 
+
+/**
+ * Returns true if this operator is special.
+ * Special operators require instructions that could break the flow of registers
+ * examples include multiplication and division.
+ * 
+ * Special operators need special treatment, they may need to use additioanl registers,
+ * unable to rely on just one, Or they may need multiple instructions to compute them correctly
+ */
+bool is_special_operator(const char* op);
+
 /**
  * Returns true if the address can be caclulated at compile time
  */

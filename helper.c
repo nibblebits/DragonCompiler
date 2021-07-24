@@ -230,6 +230,17 @@ bool is_array_operator(const char *op)
     return S_EQ(op, "[]");
 }
 
+// Consider a better name for this.
+
+/**
+ * Returns true if this operator is special.
+ * Special operators require instructions that could break the flow of registers
+ * examples include multiplication and division.
+ */
+bool is_special_operator(const char* op)
+{
+    return S_EQ(op, "*") || S_EQ(op, "/");
+}
 bool is_argument_operator(const char *op)
 {
     return S_EQ(op, ",");

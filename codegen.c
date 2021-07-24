@@ -665,11 +665,22 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     assert(node->type == NODE_TYPE_EXPRESSION);
 
     int flags = history->flags;
-
+    bool is_special = is_special_operator(node->exp.op) && register_is_used("eax"); 
     // We need to set the correct flag regarding which operator is being used
     flags |= codegen_set_flag_for_operator(node->exp.op);
+    if (is_special)
+    {
+        register_unset_flag(REGISTER_EAX_IS_USED);
+        asm_push("push eax");
+    }
     codegen_generate_expressionable(node->exp.left, history_down(history, flags));
     codegen_generate_expressionable(node->exp.right, history_down(history, flags | EXPRESSION_FLAG_RIGHT_NODE));
+    if (is_special)
+    {
+        asm_push("pop ecx");
+        asm_push("add eax, ecx");
+    }
+
 }
 
 void codegen_generate_function_call(struct node *node, struct resolver_entity *entity, struct history *history)

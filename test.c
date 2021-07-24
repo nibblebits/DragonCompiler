@@ -2,5 +2,5 @@
 int test(char* msg)
 {
     int x;
-    x = 20+10+30 / 1000 * 50;
+    x = 50 > 20;
 }

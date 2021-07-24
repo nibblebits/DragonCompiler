@@ -55,7 +55,7 @@ const char *codegen_register_string(const char *str)
 {
 
     // Already registered this string before? Why waste memory..
-    const char* label = codegen_get_label_for_string(str);
+    const char *label = codegen_get_label_for_string(str);
     if (label)
     {
         return label;
@@ -332,6 +332,13 @@ static const char *codegen_get_fmt_for_value(struct node *value_node, struct res
     return tmp_buf;
 }
 
+void codegen_gen_cmp(const char *value, const char *set_ins)
+{
+    asm_push("cmp eax, %s", value);
+    asm_push("%s al", set_ins);
+    asm_push("movzx eax, al");
+}
+
 void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
 {
     if (flags & EXPRESSION_IS_ADDITION)
@@ -357,6 +364,30 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
         asm_push("cdq");
         // Assuming signed, check for unsigned in the future, check for float in the future..
         asm_push("idiv ecx");
+    }
+    else if (flags & EXPRESSION_IS_ABOVE)
+    {
+        codegen_gen_cmp(value, "setg");
+    }
+    else if (flags & EXPRESSION_IS_BELOW)
+    {
+        codegen_gen_cmp(value, "setl");
+    }
+    else if(flags & EXPRESSION_IS_EQUAL)
+    {
+        codegen_gen_cmp(value, "sete");
+    }
+    else if(flags & EXPRESSION_IS_ABOVE_OR_EQUAL)
+    {
+        codegen_gen_cmp(value, "setge");
+    }
+    else if(flags & EXPRESSION_IS_BELOW_OR_EQUAL)
+    {
+        codegen_gen_cmp(value, "setle");
+    }
+    else if(flags & EXPRESSION_IS_NOT_EQUAL)
+    {
+        codegen_gen_cmp(value, "setne");
     }
 }
 
@@ -639,6 +670,10 @@ int codegen_set_flag_for_operator(const char *op)
     {
         flag |= EXPRESSIPON_IS_DIVISION;
     }
+    else if (S_EQ(op, ">"))
+    {
+        flag |= EXPRESSION_IS_ABOVE;
+    }
 
     return flag;
 }
@@ -665,7 +700,7 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     assert(node->type == NODE_TYPE_EXPRESSION);
 
     int flags = history->flags;
-    bool is_special = is_special_operator(node->exp.op) && register_is_used("eax"); 
+    bool is_special = is_special_operator(node->exp.op) && register_is_used("eax");
     // We need to set the correct flag regarding which operator is being used
     flags |= codegen_set_flag_for_operator(node->exp.op);
     if (is_special)
@@ -680,7 +715,6 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
         asm_push("pop ecx");
         asm_push("add eax, ecx");
     }
-
 }
 
 void codegen_generate_function_call(struct node *node, struct resolver_entity *entity, struct history *history)
@@ -866,9 +900,9 @@ void codegen_generate_exp_parenthesis_node(struct node *node, struct history *hi
     codegen_generate_expressionable(node->parenthesis.exp, history);
 }
 
-void codegen_generate_string(struct node* node, struct history* history)
+void codegen_generate_string(struct node *node, struct history *history)
 {
-    const char* label = codegen_register_string(node->sval);
+    const char *label = codegen_register_string(node->sval);
     codegen_gen_mov_or_math_for_value("eax", label, history->flags);
 }
 
@@ -918,7 +952,7 @@ static void codegen_generate_global_variable_for_primitive(struct node *node)
         if (node->var.val->type == NODE_TYPE_STRING)
         {
             // Ok we have a string here
-            const char* label = codegen_register_string(node->var.val->sval);
+            const char *label = codegen_register_string(node->var.val->sval);
             asm_push("%s: %s %s", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf), label, tmp_buf);
         }
         else

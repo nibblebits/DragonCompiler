@@ -2,5 +2,5 @@
 int test(char* msg)
 {
     int x;
-    x = 50 > 20;
+    x = 50 && 40 && 70;
 }

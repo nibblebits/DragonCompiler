@@ -35,6 +35,11 @@ struct history
                 size_t size;
             } arguments;
         } function_call;
+
+        struct history_exp
+        {
+            char logical_end_and_label[20];
+        } exp;
     };
 };
 
@@ -357,7 +362,7 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
         // Need a way to know if its signed in the future.. Assumed all signed for now.
         asm_push("imul ecx");
     }
-    else if (flags & EXPRESSIPON_IS_DIVISION)
+    else if (flags & EXPRESSION_IS_DIVISION)
     {
         codegen_use_register("ecx");
         asm_push("mov ecx, %s", value);
@@ -373,19 +378,19 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
     {
         codegen_gen_cmp(value, "setl");
     }
-    else if(flags & EXPRESSION_IS_EQUAL)
+    else if (flags & EXPRESSION_IS_EQUAL)
     {
         codegen_gen_cmp(value, "sete");
     }
-    else if(flags & EXPRESSION_IS_ABOVE_OR_EQUAL)
+    else if (flags & EXPRESSION_IS_ABOVE_OR_EQUAL)
     {
         codegen_gen_cmp(value, "setge");
     }
-    else if(flags & EXPRESSION_IS_BELOW_OR_EQUAL)
+    else if (flags & EXPRESSION_IS_BELOW_OR_EQUAL)
     {
         codegen_gen_cmp(value, "setle");
     }
-    else if(flags & EXPRESSION_IS_NOT_EQUAL)
+    else if (flags & EXPRESSION_IS_NOT_EQUAL)
     {
         codegen_gen_cmp(value, "setne");
     }
@@ -668,11 +673,31 @@ int codegen_set_flag_for_operator(const char *op)
     }
     else if (S_EQ(op, "/"))
     {
-        flag |= EXPRESSIPON_IS_DIVISION;
+        flag |= EXPRESSION_IS_DIVISION;
     }
     else if (S_EQ(op, ">"))
     {
         flag |= EXPRESSION_IS_ABOVE;
+    }
+    else if (S_EQ(op, "<"))
+    {
+        flag |= EXPRESSION_IS_BELOW;
+    }
+    else if (S_EQ(op, ">="))
+    {
+        flag |= EXPRESSION_IS_ABOVE_OR_EQUAL;
+    }
+    else if (S_EQ(op, "<="))
+    {
+        flag |= EXPRESSION_IS_BELOW_OR_EQUAL;
+    }
+    else if (S_EQ(op, "!="))
+    {
+        flag |= EXPRESSION_IS_NOT_EQUAL;
+    }
+    else if (S_EQ(op, "&&"))
+    {
+        flag |= EXPRESSION_LOGICAL_AND;
     }
 
     return flag;
@@ -695,11 +720,64 @@ int get_additional_flags(int current_flags, struct node *node)
     return additional_flags;
 }
 
+void codegen_generate_logical_cmp_and(const char *reg, const char *fail_label)
+{
+    // THis can be optimized to more appropiate instructions.
+    asm_push("cmp eax, 0");
+    asm_push("je %s", fail_label);
+}
+void codegen_generate_exp_node_for_logical_arithmetic(struct node *node, struct history *history)
+{
+    // We have a logical operator i.e && or ||
+    bool start_of_logical_exp = !(history->flags & EXPRESSION_IN_LOGICAL_EXPRESSION);
+    char *end_and_label = history->exp.logical_end_and_label;
+    if (start_of_logical_exp)
+    {
+        memset(history->exp.logical_end_and_label, 0, sizeof(history->exp.logical_end_and_label));
+        sprintf(history->exp.logical_end_and_label, ".endand_%i", codegen_label_count());
+        end_and_label = history->exp.logical_end_and_label;
+        history->flags |= EXPRESSION_IN_LOGICAL_EXPRESSION;
+    }
+
+    // Let's deal with the left and right node
+    codegen_generate_expressionable(node->exp.left, history);
+    // Time to compare
+    if (S_EQ(node->exp.op, "&&"))
+    {
+        codegen_generate_logical_cmp_and("eax", end_and_label);
+    }
+    register_unset_flag(REGISTER_EAX_IS_USED);
+    codegen_generate_expressionable(node->exp.right, history);
+    if (S_EQ(node->exp.op, "&&") && !is_logical_node(node->exp.right))
+    {
+        codegen_generate_logical_cmp_and("eax", end_and_label);
+    }
+
+    if (start_of_logical_exp)
+    {
+        // This result was true, set the EAX register
+        asm_push("mov eax, 1");
+        asm_push("jmp %s_positive", end_and_label);
+        // Time to end this expression
+        asm_push("%s:", end_and_label);
+        // Result was false
+        asm_push("xor eax, eax");
+        asm_push("%s_positive:", end_and_label);
+
+    }
+}
 void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history *history)
 {
     assert(node->type == NODE_TYPE_EXPRESSION);
 
     int flags = history->flags;
+
+    if (is_logical_operator(node->exp.op))
+    {
+        codegen_generate_exp_node_for_logical_arithmetic(node, history);
+        return;
+    }
+
     bool is_special = is_special_operator(node->exp.op) && register_is_used("eax");
     // We need to set the correct flag regarding which operator is being used
     flags |= codegen_set_flag_for_operator(node->exp.op);

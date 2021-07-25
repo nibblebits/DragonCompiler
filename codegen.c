@@ -402,6 +402,26 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
     {
         codegen_gen_cmp(value, "setne");
     }
+    else if(flags & EXPRESSION_IS_BITSHIFT_LEFT)
+    {
+        asm_push("sal %s, %s", reg, value);
+    }
+    else if(flags & EXPRESSION_IS_BITSHIFT_RIGHT)
+    {
+        asm_push("sar %s, %s", reg, value);
+    }
+    else if(flags & EXPRESSION_IS_BITWISE_AND)
+    {
+        asm_push("and %s, %s", reg, value);
+    }
+    else if(flags & EXPRESSION_IS_BITWISE_OR)
+    {
+        asm_push("or %s, %s", reg, value);
+    }
+    else if(flags & EXPRESSION_IS_BITWISE_XOR)
+    {
+        asm_push("xor %s, %s", reg, value);
+    }
 }
 
 static void codegen_gen_mov_or_math_for_value(const char *reg, const char *value, int flags)
@@ -706,6 +726,26 @@ int codegen_set_flag_for_operator(const char *op)
     else if (S_EQ(op, "&&"))
     {
         flag |= EXPRESSION_LOGICAL_AND;
+    }
+    else if(S_EQ(op, "<<"))
+    {
+        flag |= EXPRESSION_IS_BITSHIFT_LEFT;
+    }
+    else if(S_EQ(op, ">>"))
+    {
+        flag |= EXPRESSION_IS_BITSHIFT_RIGHT;
+    }
+    else if(S_EQ(op, "&"))
+    {
+        flag |= EXPRESSION_IS_BITWISE_AND;
+    }
+    else if(S_EQ(op, "|"))
+    {
+        flag |= EXPRESSION_IS_BITWISE_OR;
+    }
+    else if(S_EQ(op, "^"))
+    {
+        flag |= EXPRESSION_IS_BITWISE_XOR;
     }
 
     return flag;

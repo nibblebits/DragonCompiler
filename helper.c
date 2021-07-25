@@ -239,7 +239,7 @@ bool is_array_operator(const char *op)
  */
 bool is_special_operator(const char* op)
 {
-    return S_EQ(op, "*") || S_EQ(op, "/");
+    return S_EQ(op, "*") || S_EQ(op, "/") || S_EQ(op, "^");
 }
 
 bool is_logical_operator(const char* op)

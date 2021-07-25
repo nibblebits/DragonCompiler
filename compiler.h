@@ -119,15 +119,22 @@ enum
     EXPRESSION_IS_NOT_EQUAL = 0b1000000000000000,
     EXPRESSION_LOGICAL_AND = 0b10000000000000000,
     EXPRESSION_LOGICAL_OR = 0b100000000000000000,
-    EXPRESSION_IN_LOGICAL_EXPRESSION = 0b1000000000000000000
+    EXPRESSION_IN_LOGICAL_EXPRESSION = 0b1000000000000000000,
+    EXPRESSION_IS_BITSHIFT_LEFT = 0b10000000000000000000,
+    EXPRESSION_IS_BITSHIFT_RIGHT = 0b100000000000000000000,
+    EXPRESSION_IS_BITWISE_OR = 0b1000000000000000000000,
+    EXPRESSION_IS_BITWISE_AND = 0b10000000000000000000000,
+    EXPRESSION_IS_BITWISE_XOR = 0b100000000000000000000000
 };
 
-#define EXPRESSION_UNINHERITABLE_FLAGS                                                   \
-    (EXPRESSION_FLAG_RIGHT_NODE | EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS |                \
-     EXPRESSION_IS_ADDITION | EXPRESSION_IS_SUBTRACTION | EXPRESSION_IS_MULTIPLICATION | \
-     EXPRESSION_IS_DIVISION | EXPRESSION_IS_ABOVE | EXPRESSION_IS_ABOVE_OR_EQUAL |     \
-    EXPRESSION_IS_BELOW | EXPRESSION_IS_BELOW_OR_EQUAL | EXPRESSION_IS_EQUAL  |         \
-    EXPRESSION_IS_NOT_EQUAL | EXPRESSION_LOGICAL_AND) \
+#define EXPRESSION_UNINHERITABLE_FLAGS                                                                 \
+    (EXPRESSION_FLAG_RIGHT_NODE | EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS |                              \
+     EXPRESSION_IS_ADDITION | EXPRESSION_IS_SUBTRACTION | EXPRESSION_IS_MULTIPLICATION |               \
+     EXPRESSION_IS_DIVISION | EXPRESSION_IS_ABOVE | EXPRESSION_IS_ABOVE_OR_EQUAL |                     \
+     EXPRESSION_IS_BELOW | EXPRESSION_IS_BELOW_OR_EQUAL | EXPRESSION_IS_EQUAL |                        \
+     EXPRESSION_IS_NOT_EQUAL | EXPRESSION_LOGICAL_AND |                                                \
+     EXPRESSION_IN_LOGICAL_EXPRESSION | EXPRESSION_IS_BITSHIFT_LEFT | EXPRESSION_IS_BITSHIFT_RIGHT | \
+     EXPRESSION_IS_BITWISE_OR | EXPRESSION_IS_BITWISE_AND | EXPRESSION_IS_BITWISE_XOR)
 
 // Flags for structure access functions.
 enum
@@ -245,7 +252,7 @@ struct preprocessor
 struct string_table_element
 {
     // The string in question
-    const char* str;
+    const char *str;
     // The code generator label that represents this string in memory
     const char label[50];
 };
@@ -268,7 +275,7 @@ struct code_generator
     int used_registers;
 
     // Vector of struct string_table_element*
-    struct vector* string_table;
+    struct vector *string_table;
 };
 /**
  * This file represents a compilation process
@@ -304,7 +311,6 @@ struct compile_process
     // The symbol table that holds things like function names, global variables
     // data can point to the node in question, along with other relevant information
     struct vector *symbol_tbl;
-
 
     struct
     {
@@ -1228,7 +1234,6 @@ bool is_argument_operator(const char *op);
  */
 bool is_argument_node(struct node *node);
 
-
 /**
  * Returns true if this operator is special.
  * Special operators require instructions that could break the flow of registers
@@ -1237,15 +1242,14 @@ bool is_argument_node(struct node *node);
  * Special operators need special treatment, they may need to use additioanl registers,
  * unable to rely on just one, Or they may need multiple instructions to compute them correctly
  */
-bool is_special_operator(const char* op);
-
+bool is_special_operator(const char *op);
 
 /**
  * Returns true if the given operator is a logical comparision operator
  */
-bool is_logical_operator(const char* op);
+bool is_logical_operator(const char *op);
 
-bool is_logical_node(struct node* node);
+bool is_logical_node(struct node *node);
 
 /**
  * Returns true if the address can be caclulated at compile time
@@ -1487,7 +1491,6 @@ struct resolver_process *resolver_default_new_process(struct compile_process *co
 struct resolver_default_entity_data *resolver_default_entity_private(struct resolver_entity *entity);
 struct resolver_default_scope_data *resolver_default_scope_private(struct resolver_scope *scope);
 
-
 // Code generator
-struct code_generator* codegenerator_new(struct compile_process* process);
+struct code_generator *codegenerator_new(struct compile_process *process);
 #endif

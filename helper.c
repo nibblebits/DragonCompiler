@@ -239,7 +239,17 @@ bool is_array_operator(const char *op)
  */
 bool is_special_operator(const char* op)
 {
-    return S_EQ(op, "*") || S_EQ(op, "/") || S_EQ(op, "^");
+    return S_EQ(op, "*") || S_EQ(op, "/") || is_bitwise_operator(op);
+}
+
+bool is_special_node(struct node* node)
+{
+    return node->type == NODE_TYPE_EXPRESSION && is_special_operator(node->exp.op);
+}
+
+bool is_bitwise_operator(const char* op)
+{
+    return S_EQ(op, "^") || S_EQ(op, "<<") || S_EQ(op, ">>") || S_EQ(op, "&") || S_EQ(op, "|");
 }
 
 bool is_logical_operator(const char* op)

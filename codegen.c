@@ -12,7 +12,6 @@ static struct expression_state blank_state = {};
 #define codegen_err(...) \
     compiler_error(current_process, __VA_ARGS__)
 
-
 // Represents a history expression
 struct history_exp
 {
@@ -402,23 +401,23 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
     {
         codegen_gen_cmp(value, "setne");
     }
-    else if(flags & EXPRESSION_IS_BITSHIFT_LEFT)
+    else if (flags & EXPRESSION_IS_BITSHIFT_LEFT)
     {
         asm_push("sal %s, %s", reg, value);
     }
-    else if(flags & EXPRESSION_IS_BITSHIFT_RIGHT)
+    else if (flags & EXPRESSION_IS_BITSHIFT_RIGHT)
     {
         asm_push("sar %s, %s", reg, value);
     }
-    else if(flags & EXPRESSION_IS_BITWISE_AND)
+    else if (flags & EXPRESSION_IS_BITWISE_AND)
     {
         asm_push("and %s, %s", reg, value);
     }
-    else if(flags & EXPRESSION_IS_BITWISE_OR)
+    else if (flags & EXPRESSION_IS_BITWISE_OR)
     {
         asm_push("or %s, %s", reg, value);
     }
-    else if(flags & EXPRESSION_IS_BITWISE_XOR)
+    else if (flags & EXPRESSION_IS_BITWISE_XOR)
     {
         asm_push("xor %s, %s", reg, value);
     }
@@ -727,23 +726,23 @@ int codegen_set_flag_for_operator(const char *op)
     {
         flag |= EXPRESSION_LOGICAL_AND;
     }
-    else if(S_EQ(op, "<<"))
+    else if (S_EQ(op, "<<"))
     {
         flag |= EXPRESSION_IS_BITSHIFT_LEFT;
     }
-    else if(S_EQ(op, ">>"))
+    else if (S_EQ(op, ">>"))
     {
         flag |= EXPRESSION_IS_BITSHIFT_RIGHT;
     }
-    else if(S_EQ(op, "&"))
+    else if (S_EQ(op, "&"))
     {
         flag |= EXPRESSION_IS_BITWISE_AND;
     }
-    else if(S_EQ(op, "|"))
+    else if (S_EQ(op, "|"))
     {
         flag |= EXPRESSION_IS_BITWISE_OR;
     }
-    else if(S_EQ(op, "^"))
+    else if (S_EQ(op, "^"))
     {
         flag |= EXPRESSION_IS_BITWISE_XOR;
     }
@@ -820,7 +819,7 @@ void codegen_generate_end_labels_for_logical_expression(const char *op, const ch
     }
 }
 
-void codegen_setup_new_logical_expression(struct history *history, struct node* node)
+void codegen_setup_new_logical_expression(struct history *history, struct node *node)
 {
     bool start_of_logical_exp = !(history->flags & EXPRESSION_IN_LOGICAL_EXPRESSION);
     char *end_label = history->exp.logical_end_label;
@@ -854,12 +853,35 @@ void codegen_generate_exp_node_for_logical_arithmetic(struct node *node, struct 
         codegen_generate_logical_cmp(node->exp.op, history->exp.logical_end_label, history->exp.logical_end_label_positive);
     }
 
-
     if (!is_logical_node(node->exp.right))
     {
         codegen_generate_end_labels_for_logical_expression(node->exp.op, history->exp.logical_end_label, history->exp.logical_end_label_positive);
     }
 }
+
+void codegen_handle_special_operator_start(struct node *node)
+{
+    register_unset_flag(REGISTER_EAX_IS_USED);
+    if (is_bitwise_operator(node->exp.op))
+    {
+        return;
+    }
+
+    asm_push("push eax");
+}
+
+void codegen_handle_special_operator_end(struct node *node)
+{
+    if (is_bitwise_operator(node->exp.op))
+    {
+        asm_push("; HERE TEST");
+        return;
+    }
+
+    asm_push("pop ecx");
+    asm_push("add eax, ecx");
+}
+
 void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history *history)
 {
     assert(node->type == NODE_TYPE_EXPRESSION);
@@ -872,21 +894,23 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
         return;
     }
 
-    bool is_special = is_special_operator(node->exp.op) && register_is_used("eax");
+    struct node* left_node = node->exp.left;
+    struct node* right_node = node->exp.right;
+
+    // Is the right node an expression and special?
+    bool is_special = is_special_node(node->exp.right);
     // We need to set the correct flag regarding which operator is being used
     flags |= codegen_set_flag_for_operator(node->exp.op);
     if (is_special)
     {
-        register_unset_flag(REGISTER_EAX_IS_USED);
-        asm_push("push eax");
+        // Are we special? Then lets generate the right node first then the left
+        left_node = node->exp.right;
+        right_node = node->exp.left;
     }
-    codegen_generate_expressionable(node->exp.left, history_down(history, flags));
-    codegen_generate_expressionable(node->exp.right, history_down(history, flags | EXPRESSION_FLAG_RIGHT_NODE));
-    if (is_special)
-    {
-        asm_push("pop ecx");
-        asm_push("add eax, ecx");
-    }
+    codegen_generate_expressionable(left_node, history_down(history, flags));
+    codegen_generate_expressionable(right_node, history_down(history, flags | EXPRESSION_FLAG_RIGHT_NODE));
+
+
 }
 
 void codegen_generate_function_call(struct node *node, struct resolver_entity *entity, struct history *history)

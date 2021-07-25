@@ -1243,6 +1243,9 @@ bool is_argument_node(struct node *node);
  * unable to rely on just one, Or they may need multiple instructions to compute them correctly
  */
 bool is_special_operator(const char *op);
+bool is_special_node(struct node* node);
+
+bool is_bitwise_operator(const char* op);
 
 /**
  * Returns true if the given operator is a logical comparision operator

@@ -722,6 +722,9 @@ void parse_for_indirection_unary()
         // Lets pop off the left operand we need to make an expression here for multiplication
         struct node *left_operand = node_pop();
         make_exp_node(left_operand, unary_operand_node, "*");
+        struct node* exp_node = node_pop();
+        parser_reorder_expression(&exp_node);
+        node_push(exp_node);
         return;
     }
 

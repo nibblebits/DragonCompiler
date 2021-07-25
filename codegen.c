@@ -12,6 +12,17 @@ static struct expression_state blank_state = {};
 #define codegen_err(...) \
     compiler_error(current_process, __VA_ARGS__)
 
+
+// Represents a history expression
+struct history_exp
+{
+    // The operator for the start of this logical expression
+    // I.e 50 || 20 && 90. Logical start operator would be ||
+    const char *logical_start_op;
+    char logical_end_label[20];
+    char logical_end_label_positive[20];
+};
+
 /**
  * Specifies current history for the given operation/expression
  */
@@ -36,10 +47,7 @@ struct history
             } arguments;
         } function_call;
 
-        struct history_exp
-        {
-            char logical_end_and_label[20];
-        } exp;
+        struct history_exp exp;
     };
 };
 
@@ -723,47 +731,93 @@ int get_additional_flags(int current_flags, struct node *node)
 void codegen_generate_logical_cmp_and(const char *reg, const char *fail_label)
 {
     // THis can be optimized to more appropiate instructions.
-    asm_push("cmp eax, 0");
+    asm_push("cmp %s, 0", reg);
     asm_push("je %s", fail_label);
 }
+
+void codegen_generate_logical_cmp_or(const char *reg, const char *equal_label)
+{
+    // THis can be optimized to more appropiate instructions.
+    asm_push("cmp %s, 0", reg);
+    asm_push("jg %s", equal_label);
+}
+
+void codegen_generate_logical_cmp(const char *op, const char *fail_label, const char *equal_label)
+{
+    if (S_EQ(op, "&&"))
+    {
+        codegen_generate_logical_cmp_and("eax", fail_label);
+    }
+    else if (S_EQ(op, "||"))
+    {
+        codegen_generate_logical_cmp_or("eax", equal_label);
+    }
+}
+
+void codegen_generate_end_labels_for_logical_expression(const char *op, const char *end_label, const char *end_label_positive)
+{
+    if (S_EQ(op, "&&"))
+    {
+        asm_push("; && END CLAUSE");
+        // This result was true, set the EAX register
+        asm_push("mov eax, 1");
+        asm_push("jmp %s", end_label_positive);
+        // Time to end this expression
+        asm_push("%s:", end_label);
+        // Result was false
+        asm_push("xor eax, eax");
+        asm_push("%s:", end_label_positive);
+    }
+    else if (S_EQ(op, "||"))
+    {
+        asm_push("; || END CLAUSE");
+        // Catch all, if we get here with no TRUE result then its false.
+        asm_push("jmp %s", end_label);
+        asm_push("%s:", end_label_positive);
+        // True result
+        asm_push("mov eax, 1");
+        asm_push("%s:", end_label);
+    }
+}
+
+void codegen_setup_new_logical_expression(struct history *history, struct node* node)
+{
+    bool start_of_logical_exp = !(history->flags & EXPRESSION_IN_LOGICAL_EXPRESSION);
+    char *end_label = history->exp.logical_end_label;
+    char *end_label_positive = history->exp.logical_end_label_positive;
+
+    int label_index = codegen_label_count();
+    sprintf(history->exp.logical_end_label, ".endc_%i", label_index);
+    sprintf(history->exp.logical_end_label_positive, ".endc_%i_positive", label_index);
+    history->exp.logical_start_op = node->exp.op;
+    end_label = history->exp.logical_end_label;
+    end_label_positive = history->exp.logical_end_label_positive;
+    history->flags |= EXPRESSION_IN_LOGICAL_EXPRESSION;
+}
+
 void codegen_generate_exp_node_for_logical_arithmetic(struct node *node, struct history *history)
 {
     // We have a logical operator i.e && or ||
     bool start_of_logical_exp = !(history->flags & EXPRESSION_IN_LOGICAL_EXPRESSION);
-    char *end_and_label = history->exp.logical_end_and_label;
     if (start_of_logical_exp)
     {
-        memset(history->exp.logical_end_and_label, 0, sizeof(history->exp.logical_end_and_label));
-        sprintf(history->exp.logical_end_and_label, ".endand_%i", codegen_label_count());
-        end_and_label = history->exp.logical_end_and_label;
-        history->flags |= EXPRESSION_IN_LOGICAL_EXPRESSION;
+        codegen_setup_new_logical_expression(history, node);
     }
 
-    // Let's deal with the left and right node
     codegen_generate_expressionable(node->exp.left, history);
-    // Time to compare
-    if (S_EQ(node->exp.op, "&&"))
-    {
-        codegen_generate_logical_cmp_and("eax", end_and_label);
-    }
+    codegen_generate_logical_cmp(node->exp.op, history->exp.logical_end_label, history->exp.logical_end_label_positive);
     register_unset_flag(REGISTER_EAX_IS_USED);
     codegen_generate_expressionable(node->exp.right, history);
-    if (S_EQ(node->exp.op, "&&") && !is_logical_node(node->exp.right))
+    register_unset_flag(REGISTER_EAX_IS_USED);
+    if (!is_logical_node(node->exp.right))
     {
-        codegen_generate_logical_cmp_and("eax", end_and_label);
+        codegen_generate_logical_cmp(node->exp.op, history->exp.logical_end_label, history->exp.logical_end_label_positive);
     }
 
-    if (start_of_logical_exp)
-    {
-        // This result was true, set the EAX register
-        asm_push("mov eax, 1");
-        asm_push("jmp %s_positive", end_and_label);
-        // Time to end this expression
-        asm_push("%s:", end_and_label);
-        // Result was false
-        asm_push("xor eax, eax");
-        asm_push("%s_positive:", end_and_label);
 
+    if (!is_logical_node(node->exp.right))
+    {
+        codegen_generate_end_labels_for_logical_expression(node->exp.op, history->exp.logical_end_label, history->exp.logical_end_label_positive);
     }
 }
 void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history *history)

@@ -900,7 +900,7 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     if (must_save_restore)
     {
         asm_push("pop ecx");
-        asm_push("add eax, ecx");
+        codegen_gen_math_for_value("eax", "ecx", flags);
     }
 }
 

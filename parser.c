@@ -260,6 +260,21 @@ static bool parser_left_op_has_priority(const char *op_left, const char *op_righ
     return precedence_left <= precedence_right;
 }
 
+static bool parser_ops_equal_priority(const char *op_left, const char *op_right)
+{
+    struct op_precedence_group *group_left = NULL;
+    struct op_precedence_group *group_right = NULL;
+    int precedence_left = parser_get_precedence_for_operator(op_left, &group_left);
+    int precedence_right = parser_get_precedence_for_operator(op_right, &group_right);
+    if (group_left->associativity == ASSOCIATIVITY_RIGHT_TO_LEFT)
+    {
+        // Right to left associativity in the left group? and right group left_to_right?
+        // Then right group takes priority
+        return false;
+    }
+
+    return precedence_left == precedence_right;
+}
 static bool parser_is_unary_operator(const char *op)
 {
     return is_unary_operator(op);
@@ -436,7 +451,7 @@ void parse_single_token_to_node()
         break;
 
     case TOKEN_TYPE_STRING:
-        node = node_create(&(struct node){NODE_TYPE_STRING, .sval=token->sval});
+        node = node_create(&(struct node){NODE_TYPE_STRING, .sval = token->sval});
         break;
 
     default:
@@ -454,11 +469,10 @@ void make_exp_parentheses_node(struct node *exp_node)
     node_create(&(struct node){NODE_TYPE_EXPRESSION_PARENTHESIS, .parenthesis.exp = exp_node});
 }
 
-void make_if_node(struct node *cond_node, struct node *body_node, struct node* next_node)
+void make_if_node(struct node *cond_node, struct node *body_node, struct node *next_node)
 {
-    node_create(&(struct node){NODE_TYPE_STATEMENT_IF, .stmt._if.cond_node = cond_node, .stmt._if.body_node = body_node, .stmt._if.next=next_node});
+    node_create(&(struct node){NODE_TYPE_STATEMENT_IF, .stmt._if.cond_node = cond_node, .stmt._if.body_node = body_node, .stmt._if.next = next_node});
 }
-
 
 void make_else_node(struct node *body_node)
 {
@@ -653,6 +667,17 @@ void parser_node_shift_children_left(struct node *node)
     node->exp.right = new_right_operand;
     node->exp.op = right_op;
 }
+
+/**
+ * Swaps the left node with the right node.
+ */
+void parser_node_flip_children(struct node *node)
+{
+    struct node *tmp = node->exp.left;
+    node->exp.left = node->exp.right;
+    node->exp.right = tmp;
+}
+
 /**
  * Reorders the given expression and its children, based on operator priority. I.e 
  * multiplication takes priority over addition.
@@ -722,7 +747,7 @@ void parse_for_indirection_unary()
         // Lets pop off the left operand we need to make an expression here for multiplication
         struct node *left_operand = node_pop();
         make_exp_node(left_operand, unary_operand_node, "*");
-        struct node* exp_node = node_pop();
+        struct node *exp_node = node_pop();
         parser_reorder_expression(&exp_node);
         node_push(exp_node);
         return;
@@ -821,9 +846,9 @@ void parse_sizeof(struct history *history)
 }
 
 void parse_if(struct history *history);
-struct node* parse_else_or_else_if(struct history *history)
+struct node *parse_else_or_else_if(struct history *history)
 {
-    struct node* node = NULL;
+    struct node *node = NULL;
     if (token_next_is_keyword("else"))
     {
         // Ok we have an else keyword is this an else if?
@@ -857,12 +882,12 @@ void parse_if(struct history *history)
     size_t var_size = 0;
     parse_body(&var_size, history);
     struct node *body_node = node_pop();
-    struct node* next_node = parse_else_or_else_if(history);
+    struct node *next_node = parse_else_or_else_if(history);
 
     make_if_node(cond_node, body_node, next_node);
 }
 
-void parse_string(struct history* history)
+void parse_string(struct history *history)
 {
     parse_single_token_to_node();
 }

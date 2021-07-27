@@ -859,29 +859,6 @@ void codegen_generate_exp_node_for_logical_arithmetic(struct node *node, struct 
     }
 }
 
-void codegen_handle_special_operator_start(struct node *node)
-{
-    register_unset_flag(REGISTER_EAX_IS_USED);
-    if (is_bitwise_operator(node->exp.op))
-    {
-        return;
-    }
-
-    asm_push("push eax");
-}
-
-void codegen_handle_special_operator_end(struct node *node)
-{
-    if (is_bitwise_operator(node->exp.op))
-    {
-        asm_push("; HERE TEST");
-        return;
-    }
-
-    asm_push("pop ecx");
-    asm_push("add eax, ecx");
-}
-
 void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history *history)
 {
     assert(node->type == NODE_TYPE_EXPRESSION);
@@ -894,23 +871,37 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
         return;
     }
 
-    struct node* left_node = node->exp.left;
-    struct node* right_node = node->exp.right;
+    struct node *left_node = node->exp.left;
+    struct node *right_node = node->exp.right;
+    bool must_save_restore = node->exp.left->type == NODE_TYPE_EXPRESSION && node->exp.right->type == NODE_TYPE_EXPRESSION;
+    bool right_node_priority = node->exp.right->type == NODE_TYPE_EXPRESSION;
+    // When the right node is an expression is takes full priority
+    if (right_node_priority)
+    {
+        codegen_generate_expressionable(node->exp.right, history_down(history, flags));
+    }
 
-    // Is the right node an expression and special?
-    bool is_special = is_special_node(node->exp.right);
+    // If both left and right node are expressions they will break the assembly flow
+    // we must push and restore later on the EAX register
+    if (must_save_restore)
+    {
+        asm_push("push eax");
+        register_unset_flag(REGISTER_EAX_IS_USED);
+    }
+
     // We need to set the correct flag regarding which operator is being used
     flags |= codegen_set_flag_for_operator(node->exp.op);
-    if (is_special)
-    {
-        // Are we special? Then lets generate the right node first then the left
-        left_node = node->exp.right;
-        right_node = node->exp.left;
-    }
     codegen_generate_expressionable(left_node, history_down(history, flags));
-    codegen_generate_expressionable(right_node, history_down(history, flags | EXPRESSION_FLAG_RIGHT_NODE));
+    if (!right_node_priority)
+    {
+        codegen_generate_expressionable(right_node, history_down(history, flags | EXPRESSION_FLAG_RIGHT_NODE));
+    }
 
-
+    if (must_save_restore)
+    {
+        asm_push("pop ecx");
+        asm_push("add eax, ecx");
+    }
 }
 
 void codegen_generate_function_call(struct node *node, struct resolver_entity *entity, struct history *history)

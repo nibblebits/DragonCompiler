@@ -28,7 +28,8 @@ enum
     // Does not include situations where we are inside of a structure
     HISTORY_FLAG_IS_GLOBAL_SCOPE = 0b00000100,
     // This flag is set if the stack is growing upwards, i.e function arguments
-    HISTORY_FLAG_IS_UPWARD_STACK = 0b00001000
+    HISTORY_FLAG_IS_UPWARD_STACK = 0b00001000,
+    HISTORY_FLAG_IS_EXPRESSION = 0b00010000
 };
 
 // Expression flags
@@ -73,6 +74,7 @@ struct history
 {
     // Flags for this history.
     int flags;
+
 };
 
 static struct compile_process *current_process;
@@ -719,6 +721,7 @@ void parser_reorder_expression(struct node **node_out)
     }
 }
 
+int parse_expressionable_single(struct history *history);
 /**
  * Used for pointer access unary i.e ***abc = 50;
  */
@@ -730,29 +733,9 @@ void parse_for_indirection_unary()
 
     // Now lets parse the expression after this unary operator
     struct history history;
-    parse_expressionable(history_begin(&history, 0));
+    parse_expressionable_single(history_begin(&history, 0));
 
     struct node *unary_operand_node = node_pop();
-
-    // Let's ensure that this variable is capable of indirection
-    // as this could be simple multiplication arithmetic i.e 50 * 20 mistaken
-    // for a unary.
-    // Very unsure about this solution, consider revising
-    struct resolver_result *result = resolver_follow(current_process->resolver, unary_operand_node);
-    if (!resolver_result_ok(result) || !is_pointer_node(result->entity->node))
-    {
-        // Ok this is not something the unary is responsible for, therefore
-        // this is actually a multiplication node i.e a * b or 50 * 60
-
-        // Lets pop off the left operand we need to make an expression here for multiplication
-        struct node *left_operand = node_pop();
-        make_exp_node(left_operand, unary_operand_node, "*");
-        struct node *exp_node = node_pop();
-        parser_reorder_expression(&exp_node);
-        node_push(exp_node);
-        return;
-    }
-
     make_unary_node("*", unary_operand_node);
 
     struct node *unary_node = node_pop();
@@ -764,7 +747,7 @@ void parse_for_normal_unary(const char *unary_op)
 {
     // Now lets parse the expression after this unary operator
     struct history history;
-    parse_expressionable(history_begin(&history, 0));
+    parse_expressionable_single(history_begin(&history, 0));
 
     struct node *unary_operand_node = node_pop();
     make_unary_node(unary_op, unary_operand_node);
@@ -773,16 +756,13 @@ void parse_for_normal_unary(const char *unary_op)
 void parse_for_unary()
 {
     // Let's get the unary operator
-    const char *unary_op = token_peek_next()->sval;
+    const char *unary_op = token_next()->sval;
 
     if (op_is_indirection(unary_op))
     {
         parse_for_indirection_unary();
         return;
     }
-
-    // We have read the unary operator lets pop it off the token stack
-    token_next();
 
     // Read the normal unary
     parse_for_normal_unary(unary_op);
@@ -930,23 +910,55 @@ void parse_keyword(struct history *history)
 
 void parse_exp_normal(struct history *history)
 {
-    struct token *op_token = token_next();
+    struct token *op_token = token_peek_next();
     const char *op = op_token->sval;
     // We must pop the last node as this will be the left operand
-    struct node *node_left = node_pop();
+    struct node *node_left = node_peek_or_null();
+    if (!node_left)
+    {
+        // If we have a NULL Left node then this expression has no left operand
+        // I.e it looks like this "-a" or "*b". These are unary operators of course
+        // Let's deal with it
+        if (!parser_is_unary_operator(op))
+        {
+            compiler_error(current_process, "The given expression has no left operand");
+        }
+
+        parse_for_unary();
+        return;
+    }
+
+    // Pop operator token
+    token_next();
+    // Pop left node
+    node_pop();
     // Left node is now apart of an expression
     node_left->flags |= NODE_FLAG_INSIDE_EXPRESSION;
 
     int additional_flags = 0;
-    if (is_access_operator(op))
-    {
-        // We are accessing a structure here. Therefore we must set the flag in the history
-        // that this is a structure access.
-        additional_flags |= HISTORY_FLAG_STRUCTURE_ACCESS_RIGHT_OPERAND;
-    }
 
-    // We must parse the right operand
-    parse_expressionable(history_down(history, history->flags | additional_flags));
+    // We have another operator? Then this one must be a unary or possibly parentheses
+    if (token_peek_next()->type == TOKEN_TYPE_OPERATOR)
+    {
+        if (S_EQ(token_peek_next()->sval, "("))
+        {
+            parse_for_parentheses();
+        }
+        else if (parser_is_unary_operator(token_peek_next()->sval))
+        {
+            // Parse the unary
+            parse_for_unary();
+        }
+        else
+        {
+            compiler_error(current_process, "Two operators are not expected for a given expression for operator %s\n", token_peek_next()->sval);
+        }
+    }
+    else
+    {
+        // We must parse the right operand
+        parse_expressionable(history_down(history, history->flags | additional_flags));
+    }
 
     struct node *node_right = node_pop();
     // Right node is now apart of an expression
@@ -999,14 +1011,6 @@ void parse_exp(struct history *history)
         return;
     }
 
-    // Unaries must not have a whitespace after the unary operator. If it has a whitespace
-    // then it is not a unary.
-    if (parser_is_unary_operator(token_peek_next()->sval) && !token_peek_next()->whitespace)
-    {
-        parse_for_unary();
-        return;
-    }
-
     parse_exp_normal(history);
 }
 
@@ -1021,6 +1025,7 @@ int parse_expressionable_single(struct history *history)
     if (!token)
         return -1;
 
+    history->flags |= NODE_FLAG_INSIDE_EXPRESSION;
     int res = -1;
     switch (token->type)
     {
@@ -1047,11 +1052,11 @@ int parse_expressionable_single(struct history *history)
         res = 0;
         break;
     }
+
     return res;
 }
 void parse_expressionable(struct history *history)
 {
-    struct node *last_node = NULL;
     while (parse_expressionable_single(history) == 0)
     {
     }

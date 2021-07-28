@@ -1,5 +1,8 @@
 int test(char* msg)
 {
-    char x;
-    x = 56 * 10+5/10;
+    char* x;
+    char e;
+    char d;
+    int k;
+    k = 50 + -x;
 }

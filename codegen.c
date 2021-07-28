@@ -1053,6 +1053,11 @@ void codegen_generate_indirection_for_unary(struct node *node, struct history *h
 
 void codegen_generate_normal_unary(struct node *node, struct history *history)
 {
+    if (register_is_used("eax"))
+    {
+        register_unset_flag(REGISTER_EAX_IS_USED);
+        asm_push("push eax");
+    }
     codegen_generate_expressionable(node->unary.operand, history);
     // We have generated the value for the operand
     // Let's now decide what to do with the result based on the operator
@@ -1066,6 +1071,10 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
         // We are accessing a pointer
         codegen_generate_unary_indirection(node, history);
     }
+
+    asm_push("pop ecx");
+    codegen_gen_math_for_value("eax", "ecx", history->flags);
+
 }
 
 void codegen_generate_unary(struct node *node, struct history *history)

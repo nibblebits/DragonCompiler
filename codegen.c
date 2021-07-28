@@ -1079,8 +1079,8 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
     if (eax_is_used)
     {
         asm_push("pop ecx");
+        codegen_gen_math_for_value("ecx", "eax", history->flags);
     }
-    codegen_gen_math_for_value("ecx", "eax", history->flags);
 
 }
 

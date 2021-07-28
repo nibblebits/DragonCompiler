@@ -67,7 +67,7 @@ all: ${OBJECTS}
 
 clean:
 	rm -rf ${OBJECTS}
-	rm ./main
-	rm ./a.out
-	rm ./test.asm
+	rm -rf ./main
+	rm -rf ./a.out
+	rm -rf ./test.asm
 	cd ./tests && $(MAKE) clean

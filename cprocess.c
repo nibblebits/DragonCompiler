@@ -2,17 +2,36 @@
 #include "helpers/vector.h"
 #include <memory.h>
 
-struct compile_process* compile_process_create(const char* filename, struct compile_process* parent_process)
+void compile_process_destroy(struct compile_process* process)
+{
+    fclose(process->cfile);
+    if (process->ofile)
+    {
+        fclose(process->ofile);
+    }
+}
+struct compile_process* compile_process_create(const char* filename, const char* out_filename, int flags, struct compile_process* parent_process)
 {   
     FILE* file = fopen(filename, "r");
     if (!file)
     {
         return NULL;
     }
+    FILE* out_file = NULL;
+    if (out_filename)
+    {
+        out_file = fopen(out_filename, "w");
+        if (!out_file)
+        {
+            return NULL;
+        }
+    }
 
     struct compile_process* process = malloc(sizeof(struct compile_process));
     memset(process, 0, sizeof(struct compile_process));
+    process->flags = flags;
     process->cfile = file;
+    process->ofile = out_file;
     process->token_vec = vector_create(sizeof(struct token));
     process->token_vec_original = vector_create(sizeof(struct token));
     process->node_vec = vector_create(sizeof(struct node*));

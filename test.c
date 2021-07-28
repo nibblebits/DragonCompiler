@@ -1,6 +1,4 @@
-int test(char* msg)
+int main(char* msg)
 {
-    int* a;
-    int k;
-    k = 20+ ~k;
+    return -10;
 }

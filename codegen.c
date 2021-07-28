@@ -239,6 +239,15 @@ void asm_push(const char *ins, ...)
     vfprintf(stdout, ins, args);
     fprintf(stdout, "\n");
     va_end(args);
+
+    if (current_process->ofile)
+    {
+        va_list args;
+        va_start(args, ins);
+        vfprintf(current_process->ofile, ins, args);
+        fprintf(current_process->ofile, "\n");
+        va_end(args);
+    }
 }
 
 void codegen_stack_sub(size_t stack_size)
@@ -1067,7 +1076,7 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
         // We have negation operator, so negate.
         asm_push("neg eax");
     }
-    else if(S_EQ(node->unary.op, "~"))
+    else if (S_EQ(node->unary.op, "~"))
     {
         asm_push("not eax");
     }
@@ -1081,7 +1090,6 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
         asm_push("pop ecx");
         codegen_gen_math_for_value("ecx", "eax", history->flags);
     }
-
 }
 
 void codegen_generate_unary(struct node *node, struct history *history)
@@ -1408,7 +1416,7 @@ void codegen_generate_function(struct node *node)
 {
     // We must register this function
     codegen_register_function(node, 0);
-
+    asm_push("global %s", node->func.name);
     asm_push("; %s function", node->func.name);
     asm_push("%s:", node->func.name);
 
@@ -1462,12 +1470,29 @@ void codegen_generate_data_section()
         codegen_generate_data_section_part(node);
     }
 }
+
+void codegen_generate_start_symbol()
+{
+    asm_push("global _start");
+    asm_push("_start:");
+    asm_push("call main");
+    asm_push("mov ebx, eax");
+    asm_push("mov eax, 1");
+    asm_push("int 0x80");
+    asm_push("jmp $");
+}
 /**
  * Starts generating code from the root of the tree, working its way down the leafs
  */
 void codegen_generate_root()
 {
     asm_push("section .text");
+    // Let's first see if we need to generate a start label
+    if (!(current_process->flags & COMPILE_PROCESS_EXPORT_AS_OBJECT))
+    {
+        // Ok we are building an executable file we need a start symbol
+        codegen_generate_start_symbol();
+    }
     struct node *node = NULL;
     while ((node = node_next()) != NULL)
     {

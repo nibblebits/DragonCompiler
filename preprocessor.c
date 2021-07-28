@@ -929,7 +929,7 @@ struct preprocessor *preprocessor_create(struct vector *token_vec)
     return preprocessor;
 }
 
-int preprocessor_run(struct compile_process *compiler, const char *file)
+int preprocessor_run(struct compile_process *compiler)
 {
     vector_set_peek_pointer(compiler->token_vec_original, 0);
     struct token *token = preprocessor_next_token(compiler);

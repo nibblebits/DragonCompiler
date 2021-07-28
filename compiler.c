@@ -74,14 +74,14 @@ void test(struct node *node)
  */
 struct compile_process *compile_include(const char *filename, struct compile_process *parent_process)
 {
-    struct compile_process *process = compile_process_create(filename, parent_process);
+    struct compile_process *process = compile_process_create(filename, NULL, parent_process->flags, parent_process);
     if (!process)
         return NULL;
 
     if (lex(process) != LEXICAL_ANALYSIS_ALL_OK)
         return NULL;
 
-    if (preprocessor_run(process, filename) != 0)
+    if (preprocessor_run(process) != 0)
     {
         return NULL;
     }
@@ -89,16 +89,16 @@ struct compile_process *compile_include(const char *filename, struct compile_pro
     return process;
 }
 
-int compile_file(const char *filename)
+int compile_file(const char *filename, const char* out_filename, int flags)
 {
-    struct compile_process *process = compile_process_create(filename, NULL);
+    struct compile_process *process = compile_process_create(filename, out_filename, flags, NULL);
     if (!process)
         return COMPILER_FAILED_WITH_ERRORS;
 
     if (lex(process) != LEXICAL_ANALYSIS_ALL_OK)
         return COMPILER_FAILED_WITH_ERRORS;
 
-    if (preprocessor_run(process, filename) != 0)
+    if (preprocessor_run(process) != 0)
     {
         return COMPILER_FAILED_WITH_ERRORS;
     }
@@ -119,5 +119,6 @@ int compile_file(const char *filename)
     if (codegen(process) != CODEGEN_ALL_OK)
         return COMPILER_FAILED_WITH_ERRORS;
 
+    compile_process_destroy(process);
     return COMPILER_FILE_COMPILED_OK;
 }

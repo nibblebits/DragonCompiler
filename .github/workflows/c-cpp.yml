@@ -1,3 +1,18 @@
+ name: Set up NASM
+  # You may pin to the exact commit or the version.
+  # uses: ilammy/setup-nasm@9a15c8cb72fe84e3e00527b3014de04693cf60cf
+  uses: ilammy/setup-nasm@v1.2.0
+  with:
+    # NASM version to install
+    version: # default is 2.15.05
+    # Force or deny compilation from source code
+    from-source: # optional
+    # Override platform selection
+One of: `dos`, `linux`, `macosx`, `win32`, `win64`
+See https://www.nasm.us/pub/nasm/releasebuilds/ for available platforms.
+
+    platform: # optional
+    
 name: C/C++ CI
 
 on:

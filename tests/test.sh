@@ -36,9 +36,9 @@ else
     echo -e "Advanced expression passed"
 fi
 
-echo -e "Running advanced expression test with negation 54+25/40*90-20"
-./build/advanced_exp
-if [ $? -ne 34 ]; then
+echo -e "Running advanced expression test with negation 54+25/40*90+-50"
+./build/advanced_exp_neg
+if [ $? -ne 4 ]; then
     echo -e "Advanced expression with negation failed"
     res_code=1
 else

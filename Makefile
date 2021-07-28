@@ -2,6 +2,7 @@ INCLUDES= -I ./ -I ./helpers
 OBJECTS= ./build/misc.o ./build/lexer.o ./build/token.o ./build/expressionable.o ./build/parser.o ./build/symresolver.o ./build/scope.o ./build/resolver.o ./build/rdefault.o ./build/helper.o ./build/codegen.o ./build/helpers/vector.o ./build/helpers/buffer.o ./build/helpers/hashmap.o ./build/compiler.o ./build/cprocess.o ./build/preprocessor.o ./build/array.o ./build/node.o
 all: ${OBJECTS}
 	gcc main.c -o main ${OBJECTS} -g
+	cd ./tests && ./test.sh
 
 ./build/misc.o: ./misc.c
 	gcc misc.c ${INCLUDES} -o ./build/misc.o -g -c
@@ -67,3 +68,6 @@ all: ${OBJECTS}
 clean:
 	rm -rf ${OBJECTS}
 	rm ./main
+	rm ./a.out
+	rm ./test.asm
+	cd ./tests && $(MAKE) clean

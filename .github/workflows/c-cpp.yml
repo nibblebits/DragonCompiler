@@ -1,4 +1,5 @@
 
+
 name: C/C++ CI
 
 on:
@@ -12,10 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: gregdavill/setup-riscv-gnu-toolchain@v1.0
-    - uses: ilammy/setup-nasm@v1.2.0
     - uses: actions/checkout@v2
     - name: make
-      run: make
-      
+      run: sudo apt-get install nasm && sudo apt-get install gcc && make
      

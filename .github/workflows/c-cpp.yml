@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - uses: JohelEGP/gcc-snapshot@v1.0.0
     - uses: ilammy/setup-nasm@v1.2.0
     - uses: actions/checkout@v2
     - name: make

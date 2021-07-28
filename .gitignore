@@ -1,2 +1,6 @@
 build/*
 main
+.githistory
+
+.vscode/*
+

@@ -743,8 +743,9 @@ void parse_for_indirection_unary()
     node_push(unary_node);
 }
 
-void parse_for_normal_unary(const char *unary_op)
+void parse_for_normal_unary()
 {
+    const char *unary_op = token_next()->sval;
     // Now lets parse the expression after this unary operator
     struct history history;
     parse_expressionable_single(history_begin(&history, 0));
@@ -756,7 +757,7 @@ void parse_for_normal_unary(const char *unary_op)
 void parse_for_unary()
 {
     // Let's get the unary operator
-    const char *unary_op = token_next()->sval;
+    const char *unary_op = token_peek_next()->sval;
 
     if (op_is_indirection(unary_op))
     {
@@ -765,7 +766,7 @@ void parse_for_unary()
     }
 
     // Read the normal unary
-    parse_for_normal_unary(unary_op);
+    parse_for_normal_unary();
 }
 
 void parse_struct(struct datatype *dtype)

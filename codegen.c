@@ -900,7 +900,7 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     if (must_save_restore)
     {
         asm_push("pop ecx");
-        codegen_gen_math_for_value("eax", "ecx", flags);
+        codegen_gen_math_for_value("ecx", "eax", flags);
     }
 }
 
@@ -1053,7 +1053,8 @@ void codegen_generate_indirection_for_unary(struct node *node, struct history *h
 
 void codegen_generate_normal_unary(struct node *node, struct history *history)
 {
-    if (register_is_used("eax"))
+    bool eax_is_used = register_is_used("eax");
+    if (eax_is_used)
     {
         register_unset_flag(REGISTER_EAX_IS_USED);
         asm_push("push eax");
@@ -1066,14 +1067,20 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
         // We have negation operator, so negate.
         asm_push("neg eax");
     }
+    else if(S_EQ(node->unary.op, "~"))
+    {
+        asm_push("not eax");
+    }
     else if (S_EQ(node->unary.op, "*"))
     {
         // We are accessing a pointer
         codegen_generate_unary_indirection(node, history);
     }
-
-    asm_push("pop ecx");
-    codegen_gen_math_for_value("eax", "ecx", history->flags);
+    if (eax_is_used)
+    {
+        asm_push("pop ecx");
+    }
+    codegen_gen_math_for_value("ecx", "eax", history->flags);
 
 }
 

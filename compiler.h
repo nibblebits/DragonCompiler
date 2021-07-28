@@ -47,7 +47,8 @@
     case '(':                           \
     case '[':                           \
     case ',':                           \
-    case '.'
+    case '.'                            \
+    
 
 #define NUMERIC_CASE \
     case '0':        \

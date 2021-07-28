@@ -278,14 +278,29 @@ struct code_generator
     // Vector of struct string_table_element*
     struct vector *string_table;
 };
+
+enum
+{
+    COMPILE_PROCESS_EXPORT_AS_OBJECT = 0b00000001,
+    // If this flag is set NASM will be used after compliation, to assemble
+    // the file.
+    COMPILE_PROCESS_EXECUTE_NASM = 0b00000010
+};
+
 /**
  * This file represents a compilation process
  */
 struct compile_process
 {
+    // The flags in regards to how this file should be compiled
+    int flags;
+
     // The current file being compiled
     FILE *cfile;
 
+    // The output file to compile to. NULL if this is a sub-file included with "include"
+    FILE* ofile;
+    
     // Current line position information.
     struct pos pos;
 
@@ -926,7 +941,7 @@ void compiler_error(struct compile_process *compiler, const char *msg, ...);
 /**
  * Compiles the file
  */
-int compile_file(const char *filename);
+int compile_file(const char *filename, const char* out_filename, int flags);
 
 /**
  * Includes a file to be compiled, returns a new compile process that represents the file
@@ -961,7 +976,12 @@ bool keyword_is_datatype(const char *str);
 /**
  * Creates a new compile process
  */
-struct compile_process *compile_process_create(const char *filename, struct compile_process *parent_process);
+struct compile_process* compile_process_create(const char* filename, const char* out_filename, int flags, struct compile_process* parent_process);
+
+/**
+ * Destroys the compiler process
+ */
+void compile_process_destroy(struct compile_process* process);
 
 /**
  * Returns the current file thats being processed
@@ -1352,7 +1372,7 @@ bool token_is_symbol(struct token *token, char sym);
 bool token_is_identifier(struct token *token, const char *iden);
 
 // Preprocessor
-int preprocessor_run(struct compile_process *compiler, const char *file);
+int preprocessor_run(struct compile_process *compiler);
 
 /**
  * Creates a new preprocessor instance

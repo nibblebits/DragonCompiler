@@ -45,9 +45,10 @@ int main(int argc, char **argv)
         }
         else
         {
-            sprintf(nasm_cmd, "nasm -f elf32 %s -o %s && ld -melf_i386 %s -o %s", output_file, nasm_output_file, nasm_output_file, output_file);
+            sprintf(nasm_cmd, "nasm -f elf32 %s -o %s && gcc -m32 %s -o %s", output_file, nasm_output_file, nasm_output_file, output_file);
         }
 
+        printf("%s", nasm_cmd);
         int res = system(nasm_cmd);
         if (res < 0)
         {

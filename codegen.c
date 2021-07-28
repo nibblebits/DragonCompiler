@@ -1471,6 +1471,7 @@ void codegen_generate_data_section()
     }
 }
 
+// Unused for now.
 void codegen_generate_start_symbol()
 {
     asm_push("global _start");
@@ -1487,12 +1488,7 @@ void codegen_generate_start_symbol()
 void codegen_generate_root()
 {
     asm_push("section .text");
-    // Let's first see if we need to generate a start label
-    if (!(current_process->flags & COMPILE_PROCESS_EXPORT_AS_OBJECT))
-    {
-        // Ok we are building an executable file we need a start symbol
-        codegen_generate_start_symbol();
-    }
+
     struct node *node = NULL;
     while ((node = node_next()) != NULL)
     {

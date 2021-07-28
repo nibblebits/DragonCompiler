@@ -763,6 +763,10 @@ struct node
     int type;
     // Generic flags for the given node
     int flags;
+
+    // The body node this node is apart of. If theirs no body then its NULL.
+    // NULL means no scope is surrounding this node, it must be in the global space
+    struct node* owner;
     union
     {
         struct exp
@@ -836,7 +840,7 @@ struct node
             // The size of the combined variables in this body.
             // Useful for accessing the bodies of structures and unions
             // where you need to know the size.
-            size_t variable_size;
+            size_t size;
 
             // True if the variable size had to be increased due to padding in the body
             bool padded;
@@ -916,6 +920,7 @@ struct node
             } _else;
         } stmt;
     };
+
 
     // Literal values for nodes of generic types. I.e numbers and identifiers
     union
@@ -1196,6 +1201,13 @@ int padding(int val, int to);
  * Returns true if the given variable node is a primative variable
  */
 bool variable_node_is_primative(struct node *node);
+
+/**
+ * Returns the stack size for the node and all parent body nodes.
+ * Accept any node. Will iterate through every body until full scope size
+ * is summed.
+ */
+size_t node_sum_scope_size(struct node* node);
 
 struct node *node_from_symbol(struct compile_process *current_process, const char *name);
 struct node *node_from_sym(struct symbol *sym);

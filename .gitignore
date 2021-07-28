@@ -1,4 +1,5 @@
 build/*
+tests/build/*.o
 main
 .githistory
 

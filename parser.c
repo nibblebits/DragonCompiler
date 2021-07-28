@@ -9,6 +9,11 @@
 #include <string.h>
 #include <ctype.h>
 
+// The current body that the parser is in
+// Note: The set body may be uninitialized and should be used as reference only
+// don't use functionality
+struct node* parser_current_body = NULL;
+
 // First in the array = higher priority
 // This array is special, its essentially a group of arrays
 
@@ -427,6 +432,7 @@ static struct node *node_create(struct node *_node)
 {
     struct node *node = malloc(sizeof(struct node));
     memcpy(node, _node, sizeof(struct node));
+    node->owner = parser_current_body;
     node_push(node);
     return node;
 }
@@ -501,9 +507,9 @@ void make_function_node(struct datatype *ret_type, const char *name, struct vect
     node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body_n = body});
 }
 
-void make_body_node(struct vector *body_vec, size_t variable_size, bool padded, struct node *largest_var_node)
+void make_body_node(struct vector *body_vec, size_t size, bool padded, struct node *largest_var_node)
 {
-    node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.variable_size = variable_size, .body.padded = padded, .body.largest_var_node = largest_var_node});
+    node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.size = size, .body.padded = padded, .body.largest_var_node = largest_var_node});
 }
 
 void make_variable_node(struct datatype *datatype, struct token *name_token, struct node *value_node)
@@ -539,6 +545,7 @@ static void parser_append_size_for_node(size_t *_variable_size, struct node *nod
     }
 }
 
+
 /**
  * Parses a single body statement and in the event the statement is a variable
  * the variable_size variable will be incremented by the size of the variable
@@ -546,6 +553,13 @@ static void parser_append_size_for_node(size_t *_variable_size, struct node *nod
  */
 void parse_body_single_statement(size_t *variable_size, struct vector *body_vec, struct history *history)
 {
+
+      // We will create a blank body node here as we need it as a reference
+    make_body_node(NULL, 0, NULL, NULL);
+    struct node* body_node = node_pop();
+    body_node->owner = parser_current_body;
+    parser_current_body = body_node;
+
     struct node *stmt_node = NULL;
     parse_statement(history);
     stmt_node = node_pop();
@@ -563,6 +577,15 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
 
     // Let's make the body node for this one statement.
     make_body_node(body_vec, *variable_size, 0, largest_var_node);
+    body_node->body.largest_var_node = largest_var_node;
+    body_node->body.size = *variable_size;
+    body_node->body.statements = body_vec;
+
+    // Set the parser body node back to the previous one now that we are done.
+    parser_current_body = body_node->owner;
+
+    // Push the body node back to the stack
+    node_push(body_node);
 }
 
 /**
@@ -571,6 +594,13 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
  */
 void parse_body_multiple_statements(size_t *variable_size, struct vector *body_vec, struct history *history)
 {
+    
+    // We will create a blank body node here as we need it as a reference
+    make_body_node(NULL, 0, NULL, NULL);
+    struct node* body_node = node_pop();
+    body_node->owner = parser_current_body;
+    parser_current_body = body_node;
+
     struct node *stmt_node = NULL;
     struct node *largest_primative_var_node = NULL;
     // Ok we are parsing a full body with many statements.
@@ -609,7 +639,16 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
     }
     // Let's make the body node now we have parsed all statements.
     bool padded = padding != 0;
-    make_body_node(body_vec, *variable_size, padded, largest_primative_var_node);
+    body_node->body.largest_var_node = largest_primative_var_node;
+    body_node->body.padded = padded;
+    body_node->body.size = *variable_size;
+    body_node->body.statements = body_vec;
+   
+    // Let's not forget to set the old body back now that we are done with this body
+    parser_current_body = body_node->owner;
+    
+    // Push the body node back to the stack
+    node_push(body_node);
 }
 
 /**
@@ -783,7 +822,7 @@ void parse_struct(struct datatype *dtype)
     make_struct_node(dtype->type_str, body_node);
     struct node *struct_node = node_pop();
 
-    dtype->size = body_node->body.variable_size;
+    dtype->size = body_node->body.size;
     dtype->struct_node = struct_node;
 
     // Push the structure node back to the stack
@@ -1143,7 +1182,7 @@ static int size_of_struct(const char *struct_name)
     struct node *node = sym->data;
     assert(node->type == NODE_TYPE_STRUCT);
 
-    return node->_struct.body_n->body.variable_size;
+    return node->_struct.body_n->body.size;
 }
 
 void parser_datatype_init(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth)

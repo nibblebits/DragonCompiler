@@ -1254,7 +1254,7 @@ size_t codegen_compute_stack_size(struct vector *vec)
 }
 
 void codegen_generate_scope_no_new_scope(struct vector *statements);
-void codegen_generate_stack_scope(struct vector *statements)
+void codegen_generate_stack_scope(struct vector *statements, size_t scope_size)
 {
     // New body new scope.
 
@@ -1262,16 +1262,15 @@ void codegen_generate_stack_scope(struct vector *statements)
     codegen_new_scope(RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK);
 
     // We got to compute the stack size we need for our statements
-    size_t stack_size = codegen_compute_stack_size(statements);
-    codegen_stack_sub(stack_size);
+    codegen_stack_sub(C_ALIGN(scope_size));
     codegen_generate_scope_no_new_scope(statements);
-    codegen_stack_add(stack_size);
+    codegen_stack_add(C_ALIGN(scope_size));
     codegen_finish_scope();
 }
 
 void codegen_generate_body(struct node *node)
 {
-    codegen_generate_stack_scope(node->body.statements);
+    codegen_generate_stack_scope(node->body.statements, node->body.size);
 }
 void codegen_generate_scope_variable(struct node *node)
 {
@@ -1305,8 +1304,12 @@ void codegen_generate_statement_return(struct node *node)
     // Let's generate the expression of the return statement
     codegen_generate_expressionable(node->stmt.ret.exp, history_begin(&history, 0));
 
+    // Let's just check we have an owner for this statement, we should have
+    // Bug if we dont.
+    assert(node->owner);
+
     // Generate the stack subtraction.
-    // codegen_stack_add(codegen_align(codegen_scope_current()->size));
+    codegen_stack_add(C_ALIGN(node_sum_scope_size(node)));
 
     // Now we must leave the function
     asm_push("pop ebp");

@@ -172,3 +172,13 @@ struct node *node_from_symbol(struct compile_process *current_process, const cha
     }
     return node_from_sym(sym);
 }
+
+size_t node_sum_scope_size(struct node* node)
+{
+    if (!node->owner)
+    {
+        return 0;
+    }
+
+    return node_sum_scope_size(node->owner) + node->owner->body.size;
+}

@@ -1,6 +1,10 @@
 #/usr/bin/bash
 
 # Run the make file
+# ATTENTION, ENSURE THAT ALL TESTING RETURNS INTEGERS BETWEEN 0-255
+# THIS IS THE RANGE OF THE ERROR CODE, DO NOT ATTEMPT TO OVERFLOW
+# IF YOU RETURN -1 FROM YOUR UNIT TEST THEN BE PREPARED TO COMPARE FOR UNSIGNED INTEGER
+# 255 
 make clean
 make
 echo -e "\n\n"
@@ -22,6 +26,16 @@ if [ $? -ne 143 ]; then
 else
     echo -e "Variable assignment test passed"
 fi
+
+echo -e "Running advanced expression test 54+25/40*90"
+./build/advanced_exp
+if [ $? -ne 54 ]; then
+    echo -e "Advanced expression failed"
+    res_code=1
+else
+    echo -e "Advanced expression passed"
+fi
+
 
 echo -e "All tests finished"
 exit $res_code

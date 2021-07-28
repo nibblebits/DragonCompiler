@@ -15,5 +15,5 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: make
-      run: sudo apt-get install nasm && sudo apt-get install gcc && make
+      run: sudo apt-get install nasm && sudo apt-get install gcc && sudo apt-get install gcc-multilib && make
      

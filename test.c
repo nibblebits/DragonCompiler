@@ -1,6 +1,9 @@
+int special(char c1, int i1, short mm)
+{
+   return c1+i1+mm;
+}
+
 int main()
 {
-    int x;
-    x = 54+25/40*90+-50;
-    return x;
+    special(5, 20, 30);
 }

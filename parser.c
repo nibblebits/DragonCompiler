@@ -153,9 +153,28 @@ struct parser_scope_entity *parser_new_scope_entity(struct node *node, int stack
 
 void parser_scope_offset_for_stack(struct node *node, struct history *history)
 {
-    bool upward_stack = history->flags & HISTORY_FLAG_IS_UPWARD_STACK;
-    int offset = upward_stack ? variable_size(node) : -variable_size(node);
     struct parser_scope_entity *last_entity = parser_scope_last_entity();
+    bool upward_stack = history->flags & HISTORY_FLAG_IS_UPWARD_STACK;
+    int offset = -variable_size(node);
+    if (upward_stack)
+    {
+        // Do not use the variable size for the offset on an upward stack.
+        // The reason is because PUSH instructions consume 4 bytes of the stack,
+        // therefore we cannot trust anything that does not modulo into four.
+        // We will have to access everything as an integer and cast it down into 
+        // the correct data type.
+
+        // The correct offset is 4 bytes since 32 bit arch's PUSH is 4 bytes long.
+        offset = DATA_SIZE_DWORD;
+
+        // Are we also the first entity? If so then the offset must start at EIGHT Bytes
+        if (!last_entity)
+        {
+            // I don't like this solution think of something better.
+            offset += DATA_SIZE_DWORD;
+        }
+    }
+
 
     if (last_entity)
     {
@@ -167,6 +186,7 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
         }
     }
 
+
     bool first_entity = !last_entity;
 
     // If this is a structure variable then we must align the padding to a 4-byte boundary so long
@@ -177,13 +197,6 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
         node->var.padding = padding(upward_stack ? offset : -offset, DATA_SIZE_DWORD);
     }
     node->var.aoffset = offset + (upward_stack ? node->var.padding : -node->var.padding);
-    if (upward_stack && first_entity)
-    {
-        // Since we are an upward stack we must add an extra 4 bytes to skip the return
-        // We only do this for the first entity of course as all other variables
-        // will follow suit.
-        node->var.aoffset += DATA_SIZE_DWORD;
-    }
 }
 
 void parser_scope_offset_for_structure(struct node *node, struct history *history)

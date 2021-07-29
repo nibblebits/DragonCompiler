@@ -207,8 +207,25 @@ static struct token* token_make_newline()
     return token_create(&(struct token){TOKEN_TYPE_NEWLINE});
 }
 
+/**
+ * Flushes the buffer back to the character stream, except the first operator.
+ * Ignores the null terminator
+ */
+void read_op_flush_back_keep_first(struct buffer* buffer)
+{
+    const char* data = buffer_ptr(buffer);
+    int len = buffer->len;
+    for (int i = len; i >= 1; i--)
+    {
+        if (buffer->data[i] == 0x00)
+            continue;
+        pushc(buffer->data[i]);
+    }   
+}
+
 static const char *read_op()
 {
+    bool single_operator = true;
     char op = nextc();
     struct buffer *buffer = buffer_create();
     buffer_write(buffer, op);
@@ -220,18 +237,31 @@ static const char *read_op()
         {
             buffer_write(buffer, op);
             nextc();
+            single_operator = false;
         }
     }
     
+    char* ptr = buffer_ptr(buffer);
     // Null terminator.
     buffer_write(buffer, 0x00);
-
-    const char *buf_ptr = buffer_ptr(buffer);
-    if (!op_valid(buf_ptr))
+    if (!single_operator)
     {
-        error("Invalid operator: %s\n", buf_ptr);
+        // In the event the operator is not valid we will need to split the operators
+        // back into single ones again, we accomplish this by flushing the buffer except
+        // the first byte. We then assign null terminator to the second byte of the buffer
+        // causing the string to terminator after the first operator.
+        if (!op_valid(ptr))
+        {
+            read_op_flush_back_keep_first(buffer);
+            // Create a new null terminator to ignore the rest of the buffer.
+            ptr[1] = 0x00;
+        }
     }
-    return buf_ptr;
+    else if(!op_valid(ptr))
+    {
+        compiler_error(current_process, "The operator %s is invalid\n", ptr);
+    }
+    return ptr;
 }
 
 static struct token *token_make_operator_for_value(const char *val)

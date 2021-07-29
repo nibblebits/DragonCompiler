@@ -45,6 +45,24 @@ else
     echo -e "Advanced expression with negation passed"
 fi
 
+echo -e "Running function call test with one argument"
+./build/function_call_test_one_argument
+if [ $? -ne 60 ]; then
+    echo -e "Function call test with one argument failed"
+    res_code=1
+else
+    echo -e "Function call test with one argument passed"
+fi
+
+echo -e "Running function call test with two arguments"
+./build/function_call_test_two_arguments
+if [ $? -ne 32 ]; then
+    echo -e "Function call test with two arguments failed"
+    res_code=1
+else
+    echo -e "Function call test with two arguments passed"
+fi
+
 
 
 echo -e "All tests finished"

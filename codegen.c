@@ -1346,9 +1346,11 @@ void _codegen_generate_if_stmt(struct node *node, int end_label_id)
     int if_label_id = codegen_label_count();
     codegen_generate_expressionable(node->stmt._if.cond_node, history_begin(&history, 0));
     asm_push("cmp eax, 0");
-    asm_push("je .if_%i:", if_label_id);
+    asm_push("je .if_%i", if_label_id);
+    // Unset the EAX register flag we are not using it now
+    register_unset_flag(REGISTER_EAX_IS_USED);
     codegen_generate_body(node->stmt._if.body_node);
-    asm_push("jmp .if_end_%i:", end_label_id);
+    asm_push("jmp .if_end_%i", end_label_id);
     asm_push(".if_%i:", if_label_id);
 
     if (node->stmt._if.next)

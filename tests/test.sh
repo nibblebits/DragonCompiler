@@ -63,6 +63,16 @@ else
     echo -e "Function call test with two arguments passed"
 fi
 
+echo -e "Running IF statement test"
+./build/if_statement_test
+if [ $? -ne 20 ]; then
+    echo -e "IF statement test failed"
+    res_code=1
+else
+    echo -e "IF statement test passed"
+fi
+
+
 
 
 echo -e "All tests finished"

@@ -65,12 +65,24 @@ fi
 
 echo -e "Running IF statement test"
 ./build/if_statement_test
-if [ $? -ne 20 ]; then
+if [ $? -eq 20 ]; then
     echo -e "IF statement test failed"
     res_code=1
 else
     echo -e "IF statement test passed"
 fi
+
+
+echo -e "Running preprocessor macro test"
+./build/if_statement_test
+if [ $? -eq 45 ]; then
+    echo -e "preprocessor macro test failed"
+    res_code=1
+else
+    echo -e "preprocessor macro test passed"
+fi
+
+
 
 
 

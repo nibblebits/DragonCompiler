@@ -205,7 +205,7 @@ struct resolver_entity *resolver_create_new_entity_for_var_node(struct resolver_
     return entity;
 }
 
-struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private)
+struct resolver_entity *resolver_new_entity_for_var_node_no_push(struct resolver_process *process, struct node *var_node, void *private)
 {
     struct resolver_entity *entity = resolver_create_new_entity_for_var_node(process, var_node, private);
     if (!entity)
@@ -215,6 +215,12 @@ struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process
     {
         entity->flags |= RESOLVER_ENTITY_FLAG_IS_STACK;
     }
+    return entity;
+}
+struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private)
+{
+
+    struct resolver_entity* entity = resolver_new_entity_for_var_node_no_push(process, var_node, private);
     vector_push(process->scope.current->entities, &entity);
     return entity;
 }
@@ -259,7 +265,7 @@ struct resolver_entity *resolver_get_entity_in_scope_with_entity_type(struct res
         struct resolver_scope *scope = result->last_struct_entity->scope;
         struct node *out_node = NULL;
         int offset = struct_offset(resolver_compiler(resolver), node_var_type_str(result->last_struct_entity->node), entity_name, &out_node, 0, 0);
-        return resolver_new_entity_for_var_node(resolver, out_node, resolver->callbacks.new_struct_entity(result, out_node, offset, scope));
+        return resolver_new_entity_for_var_node_no_push(resolver, out_node, resolver->callbacks.new_struct_entity(result, out_node, offset, scope));
     }
 
     // Ok this is not a structure variable, lets search the scopes
@@ -352,7 +358,7 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
     if (is_array_node(node->exp.left) && is_access_node_with_op(node->exp.right, "->"))
     {
         struct resolver_entity *extra_entity = resolver_result_pop(result);
-        result_entity = resolver_new_entity_for_var_node(resolver, left_entity->node, resolver->callbacks.merge_struct_entity(result, extra_entity, left_entity, var_scope));
+        result_entity = resolver_new_entity_for_var_node_no_push(resolver, left_entity->node, resolver->callbacks.merge_struct_entity(result, extra_entity, left_entity, var_scope));
         resolver_result_entity_push(result, result_entity);
         resolver_result_entity_push(result, right_entity);
 
@@ -367,7 +373,7 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
         return result_entity;
     }
 
-    result_entity = resolver_new_entity_for_var_node(resolver, right_entity->node, resolver->callbacks.merge_struct_entity(result, left_entity, right_entity, var_scope));
+    result_entity = resolver_new_entity_for_var_node_no_push(resolver, right_entity->node, resolver->callbacks.merge_struct_entity(result, left_entity, right_entity, var_scope));
 
     // Push the right entity back to the stack as it has been merged with the left_entity
     resolver_result_entity_push(result, result_entity);
@@ -446,7 +452,7 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
 
 static struct resolver_entity *resolver_follow_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result);
 
-static void resolver_build_function_call_arguments(struct resolver_process *resolver, struct node *argument_node, struct resolver_entity *root_func_call_entity, size_t* total_size_out)
+static void resolver_build_function_call_arguments(struct resolver_process *resolver, struct node *argument_node, struct resolver_entity *root_func_call_entity, size_t *total_size_out)
 {
     if (is_argument_node(argument_node))
     {
@@ -455,15 +461,13 @@ static void resolver_build_function_call_arguments(struct resolver_process *reso
         resolver_build_function_call_arguments(resolver, argument_node->exp.left, root_func_call_entity, total_size_out);
         // Build the right node for this function argument
         resolver_build_function_call_arguments(resolver, argument_node->exp.right, root_func_call_entity, total_size_out);
-
     }
-    else if(argument_node->type == NODE_TYPE_EXPRESSION_PARENTHESIS)
+    else if (argument_node->type == NODE_TYPE_EXPRESSION_PARENTHESIS)
     {
-        // Every function call argument starts with an expression parenthesis node.
-        // Probably should deprecate the parenthesis node, its a problem...
-        #warning "This design could result in a bug take for example test((((55)))), 65) test this before release"
+// Every function call argument starts with an expression parenthesis node.
+// Probably should deprecate the parenthesis node, its a problem...
+#warning "This design could result in a bug take for example test((((55)))), 65) test this before release"
         resolver_build_function_call_arguments(resolver, argument_node->parenthesis.exp, root_func_call_entity, total_size_out);
-
     }
     else
     {
@@ -472,7 +476,6 @@ static void resolver_build_function_call_arguments(struct resolver_process *reso
         // It will use 4 bytes on the stack
         *total_size_out += DATA_SIZE_DWORD;
     }
-
 }
 
 static struct resolver_entity *resolver_follow_function_call(struct resolver_process *resolver, struct resolver_result *result, struct node *node)
@@ -526,6 +529,7 @@ static struct resolver_entity *resolver_follow_exp(struct resolver_process *reso
 struct resolver_entity *resolver_follow_identifier(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     struct resolver_entity *entity = resolver_entity_clone(resolver_get_entity(result, resolver, node->sval));
+    assert(entity);
     if (!entity)
     {
         return NULL;
@@ -554,7 +558,7 @@ static struct resolver_entity *resolver_follow_exp_parenthesis(struct resolver_p
     return resolver_follow_part_return_entity(resolver, node->parenthesis.exp, result);
 }
 
-static struct resolver_entity* resolver_follow_unary_exp(struct resolver_process* resolver, struct node* node, struct resolver_result* result)
+static struct resolver_entity *resolver_follow_unary_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     return resolver_follow_part_return_entity(resolver, node->unary.operand, result);
 }

@@ -83,6 +83,16 @@ else
 fi
 
 
+echo -e "Running structure test"
+./build/structure_test
+if [ $? -ne 103 ]; then
+    echo -e "structure test failed"
+    res_code=1
+else
+    echo -e "structuretest passed"
+fi
+
+
 
 
 

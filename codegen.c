@@ -570,24 +570,32 @@ const char *codegen_sub_register(const char *original_register, size_t size)
 /**
  * Finds weather this is a byte operation, word operation or double word operation based on the size provided
  * Returns either "byte", "word", or "dword" 
+ * 
+ * Note: the reg_to_use pointer should be pointing to the register you intend to use. I.e "eax", "ebx". Only 32 bit registers accepted.
+ * \param size The size of the data you are accessing
+ * \param reg_to_use pointer to a const char pointer, this will be set to the register you should use for this operation. 32 bit register, 16 bit register or 8 bit register for full register eax, ebx, ecx, edx will be returned 
  */
-const char *codegen_byte_word_or_dword(size_t size)
+const char *codegen_byte_word_or_dword(size_t size, const char **reg_to_use)
 {
     const char *type = NULL;
-
+    const char *new_register = *reg_to_use;
     if (size == DATA_SIZE_BYTE)
     {
         type = "byte";
+        new_register = codegen_sub_register(*reg_to_use, 1);
     }
     else if (size == DATA_SIZE_WORD)
     {
         type = "word";
+        new_register = codegen_sub_register(*reg_to_use, 2);
     }
     else if (size == DATA_SIZE_DWORD)
     {
         type = "dword";
+        new_register = codegen_sub_register(*reg_to_use, 4);
     }
 
+    *reg_to_use = new_register;
     return type;
 }
 
@@ -666,7 +674,11 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     codegen_generate_expressionable(node->exp.right, history);
 
     register_unset_flag(REGISTER_EAX_IS_USED);
-    asm_push("mov %s [%s], eax", codegen_byte_word_or_dword(datatype_size(&left_entity->node->var.type)), codegen_entity_private(left_entity)->address);
+
+    const char* reg_to_use = "eax";
+    const char* mov_type_keyword = codegen_byte_word_or_dword(datatype_size(&left_entity->node->var.type), &reg_to_use);
+
+    asm_push("mov %s [%s], %s", mov_type_keyword, codegen_entity_private(left_entity)->address, reg_to_use);
 }
 
 void codegen_generate_expressionable_function_arguments(struct node *func_call_args_exp_node, size_t *arguments_size)

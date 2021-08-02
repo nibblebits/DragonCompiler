@@ -39,6 +39,7 @@ void test(struct node *node)
         if (node->exp.right)
             test(node->exp.right);
         printf("%c", ']');
+        printf("\n");
     }
     else if (node->type == NODE_TYPE_UNARY)
     {

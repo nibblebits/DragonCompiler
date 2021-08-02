@@ -57,6 +57,15 @@ int codegen_label_count()
     return count;
 }
 
+bool codegen_is_exp_root_for_flags(int flags)
+{
+    return !(flags & EXPRESSION_IS_NOT_ROOT_NODE);
+}
+bool codegen_is_exp_root(struct history *history)
+{
+    return codegen_is_exp_root_for_flags(history->flags);
+}
+
 const char *codegen_get_label_for_string(const char *str);
 
 /**
@@ -121,6 +130,111 @@ struct resolver_default_scope_data *codegen_scope_private(struct resolver_scope 
     return resolver_default_scope_private(scope);
 }
 
+/**
+ * Finds the correct sub register to use for the original register provided.
+ * 
+ * I.e if the size is one byte and you provide eax as the original register then al will be returned
+ * 
+ * \attention The original register must be a 32-bit wide general purpose register i.e eax, ecx, edx, or ebx
+ */
+const char *codegen_sub_register(const char *original_register, size_t size)
+{
+    const char *reg = NULL;
+    if (S_EQ(original_register, "eax"))
+    {
+        if (size == DATA_SIZE_BYTE)
+        {
+            reg = "al";
+        }
+        else if (size == DATA_SIZE_WORD)
+        {
+            reg = "ax";
+        }
+        else if (size == DATA_SIZE_DWORD)
+        {
+            reg = "eax";
+        }
+    }
+    else if (S_EQ(original_register, "ebx"))
+    {
+        if (size == DATA_SIZE_BYTE)
+        {
+            reg = "bl";
+        }
+        else if (size == DATA_SIZE_WORD)
+        {
+            reg = "bx";
+        }
+        else if (size == DATA_SIZE_DWORD)
+        {
+            reg = "ebx";
+        }
+    }
+    else if (S_EQ(original_register, "ecx"))
+    {
+        if (size == DATA_SIZE_BYTE)
+        {
+            reg = "cl";
+        }
+        else if (size == DATA_SIZE_WORD)
+        {
+            reg = "cx";
+        }
+        else if (size == DATA_SIZE_DWORD)
+        {
+            reg = "ecx";
+        }
+    }
+    else if (S_EQ(original_register, "edx"))
+    {
+        if (size == DATA_SIZE_BYTE)
+        {
+            reg = "dl";
+        }
+        else if (size == DATA_SIZE_WORD)
+        {
+            reg = "dx";
+        }
+        else if (size == DATA_SIZE_DWORD)
+        {
+            reg = "edx";
+        }
+    }
+    return reg;
+}
+
+/**
+ * Finds weather this is a byte operation, word operation or double word operation based on the size provided
+ * Returns either "byte", "word", or "dword" 
+ * 
+ * Note: the reg_to_use pointer should be pointing to the register you intend to use. I.e "eax", "ebx". Only 32 bit registers accepted.
+ * \param size The size of the data you are accessing
+ * \param reg_to_use pointer to a const char pointer, this will be set to the register you should use for this operation. 32 bit register, 16 bit register or 8 bit register for full register eax, ebx, ecx, edx will be returned 
+ */
+const char *codegen_byte_word_or_dword(size_t size, const char **reg_to_use)
+{
+    const char *type = NULL;
+    const char *new_register = *reg_to_use;
+    if (size == DATA_SIZE_BYTE)
+    {
+        type = "byte";
+        new_register = codegen_sub_register(*reg_to_use, 1);
+    }
+    else if (size == DATA_SIZE_WORD)
+    {
+        type = "word";
+        new_register = codegen_sub_register(*reg_to_use, 2);
+    }
+    else if (size == DATA_SIZE_DWORD)
+    {
+        type = "dword";
+        new_register = codegen_sub_register(*reg_to_use, 4);
+    }
+
+    *reg_to_use = new_register;
+    return type;
+}
+
 size_t codegen_align(size_t size)
 {
     if (size % C_STACK_ALIGNMENT)
@@ -182,6 +296,18 @@ void codegen_new_scope(int flags)
 void codegen_finish_scope()
 {
     resolver_default_finish_scope(current_process->resolver);
+}
+
+/**
+ * Returns true if the register must be saved to the stack
+ * as this combination of nodes risks corruption of the register, therefore
+ * if this function returns true, save the affected register and restore later
+ */
+static bool codegen_must_save_restore(struct node *node)
+{
+    return !is_access_node(node->exp.left) &&
+           node->exp.left->type == NODE_TYPE_EXPRESSION &&
+           node->exp.right->type == NODE_TYPE_EXPRESSION;
 }
 
 int codegen_get_enum_for_register(const char *reg)
@@ -446,21 +572,78 @@ static void codegen_gen_mov_or_math_for_value(const char *reg, const char *value
 
 static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, int flags, struct resolver_entity *entity)
 {
-    codegen_gen_mov_or_math_for_value(reg, codegen_get_fmt_for_value(value_node, entity), flags);
+    // We possibly need a subregister
+    const char *real_reg = reg;
+    codegen_gen_mov_or_math_for_value(real_reg, codegen_get_fmt_for_value(value_node, entity), flags);
+}
+
+static void codegen_gen_mem_access_get_address(struct node *value_node, int flags, struct resolver_entity *entity)
+{
+    codegen_use_register("ebx");
+    // We have indirection, therefore we should load the address into EBX.
+    // rather than mov instruction
+    asm_push("mov ebx, [%s]", codegen_entity_private(entity)->address);
+}
+
+static void codegen_gen_mem_access_first_for_expression(struct node *value_node, int flags, struct resolver_entity *entity)
+{
+    const char* reg_to_use = "eax";
+    // This is the first node therefore, as we are accessing a variable
+    // it is very important that we get a subregister to prevent us loading in
+    // other bytes that might not be required as part of this expression
+    // For example if we have one byte on the stack and we load the full integer into EAX
+    // then we will also load the value of the other registers into the expression result
+    // not something that we want at all
+
+    reg_to_use = codegen_sub_register("eax", entity->node->var.type.size);
+    if (!S_EQ(reg_to_use, "eax"))
+    {
+        // Okay we are not using the full 32 bit, lets XOR this thing we need 0s.
+        // No corruption that way
+        asm_push("xor eax, eax");
+    }
+
+    codegen_gen_mov_or_math(reg_to_use, value_node, flags, entity);
+}
+
+static void codegen_gen_mem_access_for_continueing_expression(struct node *value_node, int flags, struct resolver_entity *entity)
+{
+    const char *new_reg_to_use = codegen_sub_register("ecx", entity->node->var.type.size);
+    if (!S_EQ(new_reg_to_use, "ecx"))
+    {
+        // Okay we are not using the full 32 bit, lets XOR this thing we need 0s.
+        // No corruption that way
+        //asm_push("xor eax, eax");
+
+        // Okay lets use ECX here and we will need to preform the operation later.
+        asm_push("xor ecx, ecx");
+        asm_push("mov %s, %s", new_reg_to_use, codegen_get_fmt_for_value(value_node, entity));
+        codegen_gen_math_for_value("eax", "ecx", flags);
+        return;
+    }
+
+    // Is this a full 4 byte value, then their is no need to do anything special
+    // generate a normal expression
+    codegen_gen_mov_or_math("eax", value_node, flags, entity);
 }
 
 static void codegen_gen_mem_access(struct node *value_node, int flags, struct resolver_entity *entity)
 {
     if (flags & EXPRESSION_GET_ADDRESS)
     {
-        codegen_use_register("ebx");
-        // We have indirection, therefore we should load the address into EBX.
-        // rather than mov instruction
-        asm_push("mov ebx, [%s]", codegen_entity_private(entity)->address);
+        codegen_gen_mem_access_get_address(value_node, flags, entity);
+        return;
+    }
+    // Register is not used? Okay then we need to ensure EAX does not get corrupted
+    // with additional data on the stack, lets XOR the eax and use what we care about, not the
+    // whole register unless the variable size is 4 bytes.
+    if (!register_is_used("eax"))
+    {
+        codegen_gen_mem_access_first_for_expression(value_node, flags, entity);
         return;
     }
 
-    codegen_gen_mov_or_math("eax", value_node, flags, entity);
+    codegen_gen_mem_access_for_continueing_expression(value_node, flags, entity);
 }
 /**
  * For literal numbers
@@ -492,111 +675,6 @@ static bool is_node_assignment(struct node *node)
 static bool is_node_array_access(struct node *node)
 {
     return node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op);
-}
-
-/**
- * Finds the correct sub register to use for the original register provided.
- * 
- * I.e if the size is one byte and you provide eax as the original register then al will be returned
- * 
- * \attention The original register must be a 32-bit wide general purpose register i.e eax, ecx, edx, or ebx
- */
-const char *codegen_sub_register(const char *original_register, size_t size)
-{
-    const char *reg = NULL;
-    if (S_EQ(original_register, "eax"))
-    {
-        if (size == DATA_SIZE_BYTE)
-        {
-            reg = "al";
-        }
-        else if (size == DATA_SIZE_WORD)
-        {
-            reg = "ax";
-        }
-        else if (size == DATA_SIZE_DWORD)
-        {
-            reg = "eax";
-        }
-    }
-    else if (S_EQ(original_register, "ebx"))
-    {
-        if (size == DATA_SIZE_BYTE)
-        {
-            reg = "bl";
-        }
-        else if (size == DATA_SIZE_WORD)
-        {
-            reg = "bx";
-        }
-        else if (size == DATA_SIZE_DWORD)
-        {
-            reg = "ebx";
-        }
-    }
-    else if (S_EQ(original_register, "ecx"))
-    {
-        if (size == DATA_SIZE_BYTE)
-        {
-            reg = "cl";
-        }
-        else if (size == DATA_SIZE_WORD)
-        {
-            reg = "cx";
-        }
-        else if (size == DATA_SIZE_DWORD)
-        {
-            reg = "ecx";
-        }
-    }
-    else if (S_EQ(original_register, "edx"))
-    {
-        if (size == DATA_SIZE_BYTE)
-        {
-            reg = "dl";
-        }
-        else if (size == DATA_SIZE_WORD)
-        {
-            reg = "dx";
-        }
-        else if (size == DATA_SIZE_DWORD)
-        {
-            reg = "edx";
-        }
-    }
-    return reg;
-}
-
-/**
- * Finds weather this is a byte operation, word operation or double word operation based on the size provided
- * Returns either "byte", "word", or "dword" 
- * 
- * Note: the reg_to_use pointer should be pointing to the register you intend to use. I.e "eax", "ebx". Only 32 bit registers accepted.
- * \param size The size of the data you are accessing
- * \param reg_to_use pointer to a const char pointer, this will be set to the register you should use for this operation. 32 bit register, 16 bit register or 8 bit register for full register eax, ebx, ecx, edx will be returned 
- */
-const char *codegen_byte_word_or_dword(size_t size, const char **reg_to_use)
-{
-    const char *type = NULL;
-    const char *new_register = *reg_to_use;
-    if (size == DATA_SIZE_BYTE)
-    {
-        type = "byte";
-        new_register = codegen_sub_register(*reg_to_use, 1);
-    }
-    else if (size == DATA_SIZE_WORD)
-    {
-        type = "word";
-        new_register = codegen_sub_register(*reg_to_use, 2);
-    }
-    else if (size == DATA_SIZE_DWORD)
-    {
-        type = "dword";
-        new_register = codegen_sub_register(*reg_to_use, 4);
-    }
-
-    *reg_to_use = new_register;
-    return type;
 }
 
 void codegen_generate_variable_access_for_array(struct resolver_entity *entity, struct history *history)
@@ -675,8 +753,8 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
 
     register_unset_flag(REGISTER_EAX_IS_USED);
 
-    const char* reg_to_use = "eax";
-    const char* mov_type_keyword = codegen_byte_word_or_dword(datatype_size(&left_entity->node->var.type), &reg_to_use);
+    const char *reg_to_use = "eax";
+    const char *mov_type_keyword = codegen_byte_word_or_dword(datatype_size(&left_entity->node->var.type), &reg_to_use);
 
     asm_push("mov %s [%s], %s", mov_type_keyword, codegen_entity_private(left_entity)->address, reg_to_use);
 }
@@ -894,7 +972,7 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
 
     struct node *left_node = node->exp.left;
     struct node *right_node = node->exp.right;
-    bool must_save_restore = node->exp.left->type == NODE_TYPE_EXPRESSION && node->exp.right->type == NODE_TYPE_EXPRESSION;
+    bool must_save_restore = codegen_must_save_restore(node);
     bool right_node_priority = node->exp.right->type == NODE_TYPE_EXPRESSION;
     // When the right node is an expression is takes full priority
     if (right_node_priority)
@@ -1131,6 +1209,13 @@ void codegen_generate_string(struct node *node, struct history *history)
 
 void codegen_generate_expressionable(struct node *node, struct history *history)
 {
+    bool is_root = codegen_is_exp_root(history);
+    if (is_root)
+    {
+        // Set the flag for when we go down the tree, they are not the root we are
+        history->flags |= EXPRESSION_IS_NOT_ROOT_NODE;
+    }
+
     switch (node->type)
     {
     case NODE_TYPE_NUMBER:

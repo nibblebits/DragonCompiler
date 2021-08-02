@@ -102,6 +102,18 @@ else
 fi
 
 
+echo -e "Running bitshift left with and test"
+./build/bitshift_and_test
+if [ $? -ne 2 ]; then
+    echo -e "Running bitshift left with and failed"
+    res_code=1
+else
+    echo -e "Running bitshift left with and passed"
+fi
+
+
+
+
 
 
 echo -e "All tests finished"

@@ -388,6 +388,7 @@ static void expect_keyword(const char *keyword)
         parse_err("Expecting keyword %s however something else was provided", keyword);
 }
 
+
 static struct node *node_peek_or_null()
 {
     return vector_back_ptr_or_null(current_process->node_vec);
@@ -819,6 +820,18 @@ void parse_for_unary()
 
     // Read the normal unary
     parse_for_normal_unary();
+
+    // We got an operator? If so theirs an expression after this
+    if (is_operator_token(token_peek_next()))
+    {
+        // Alright lets deal with it.
+        struct history history;
+
+        // parse_expressionable will deal with the operator
+        // as the unary has now been pushed to the stack
+        // it shall be popped off and merged into a new expression.
+        parse_expressionable(history_begin(&history, 0));
+    }
 }
 
 void parse_struct(struct datatype *dtype)

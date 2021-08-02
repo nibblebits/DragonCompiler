@@ -1172,6 +1172,11 @@ bool is_access_node_with_op(struct node *node, const char *op);
  */
 bool is_access_operator_node(struct node *node);
 
+/**
+ * Returns true if this token represents an operator
+ */
+bool is_operator_token(struct token* token);
+
 bool op_is_indirection(const char *op);
 
 int align_value(int val, int to);

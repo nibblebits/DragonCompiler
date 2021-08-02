@@ -1,6 +1,6 @@
 # Builds the tests
-OBJECTS=./build/variable_assignment.o ./build/advanced_exp.o ./build/advanced_exp_neg.o ./build/function_call_test_one_argument.o ./build/function_call_test_two_arguments.o ./build/if_statement_test.o ./build/preprocessor_macro_test.o ./build/structure_test.o
-EXECUTABLES=./build/variable_assignment ./build/advanced_exp ./build/advanced_exp_neg ./build/function_call_test_one_argument ./build/function_call_test_two_arguments ./build/if_statement_test ./build/preprocessor_macro_test ./build/structure_test
+OBJECTS=./build/variable_assignment.o ./build/advanced_exp.o ./build/advanced_exp_neg.o ./build/function_call_test_one_argument.o ./build/function_call_test_two_arguments.o ./build/if_statement_test.o ./build/preprocessor_macro_test.o ./build/structure_test.o ./build/bitwise_not_with_addition.o
+EXECUTABLES=./build/variable_assignment ./build/advanced_exp ./build/advanced_exp_neg ./build/function_call_test_one_argument ./build/function_call_test_two_arguments ./build/if_statement_test ./build/preprocessor_macro_test ./build/structure_test ./build/bitwise_not_with_addition
 all: ${OBJECTS}
 
 ./build/variable_assignment.o:./units/variable_assignment.c
@@ -26,6 +26,9 @@ all: ${OBJECTS}
 
 ./build/structure_test.o:./units/structure_test.c
 	../main ./units/structure_test.c ./build/structure_test
+
+./build/bitwise_not_with_addition.o:./units/bitwise_not_with_addition.c
+	../main ./units/bitwise_not_with_addition.c ./build/bitwise_not_with_addition
 
 clean:
 	rm -rf ${OBJECTS}

@@ -287,6 +287,11 @@ bool is_parentheses_node(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_parentheses_operator(node->exp.op);
 }
 
+bool is_operator_token(struct token* token)
+{
+    return token->type == TOKEN_TYPE_OPERATOR;
+}
+
 static bool is_exp_compile_computable(struct node *node)
 {
     if (S_EQ(node->exp.op, "->"))

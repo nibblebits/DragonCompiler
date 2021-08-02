@@ -92,7 +92,14 @@ else
     echo -e "structure test passed"
 fi
 
-
+echo -e "Running bitwise not with addition test"
+./build/bitwise_not_with_addition
+if [ $? -ne 39 ]; then
+    echo -e "bitwise not with addition test failed"
+    res_code=1
+else
+    echo -e "bitwise not with addition test passed"
+fi
 
 
 

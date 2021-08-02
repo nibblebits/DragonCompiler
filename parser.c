@@ -807,6 +807,22 @@ void parse_for_normal_unary()
     make_unary_node(unary_op, unary_operand_node);
 }
 
+
+void parser_deal_with_additional_expression()
+{
+    // We got an operator? If so theirs an expression after this
+    if (is_operator_token(token_peek_next()))
+    {
+        // Alright lets deal with it.
+        struct history history;
+
+        // parse_expressionable will deal with the operator
+        // as the unary has now been pushed to the stack
+        // it shall be popped off and merged into a new expression.
+        parse_expressionable(history_begin(&history, 0));
+    }
+}
+
 void parse_for_unary()
 {
     // Let's get the unary operator
@@ -821,17 +837,8 @@ void parse_for_unary()
     // Read the normal unary
     parse_for_normal_unary();
 
-    // We got an operator? If so theirs an expression after this
-    if (is_operator_token(token_peek_next()))
-    {
-        // Alright lets deal with it.
-        struct history history;
-
-        // parse_expressionable will deal with the operator
-        // as the unary has now been pushed to the stack
-        // it shall be popped off and merged into a new expression.
-        parse_expressionable(history_begin(&history, 0));
-    }
+    // We should deal with any additional expression if there is one.
+    parser_deal_with_additional_expression();
 }
 
 void parse_struct(struct datatype *dtype)
@@ -1155,6 +1162,9 @@ void parse_for_parentheses()
         struct node *parentheses_node = node_pop();
         make_exp_node(left_node, parentheses_node, "()");
     }
+
+    // We got anything else?
+    parser_deal_with_additional_expression();
 }
 
 void parse_for_symbol()

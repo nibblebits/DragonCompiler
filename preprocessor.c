@@ -56,6 +56,16 @@ struct preprocessor_node
     const char *sval;
 };
 
+
+struct vector* preprocessor_build_value_vector_for_integer(int value)
+{
+    struct vector* token_vec = vector_create(sizeof(struct token));
+    struct token t1 = {};
+    t1.type = TOKEN_TYPE_NUMBER;
+    t1.llnum = value;
+    vector_push(token_vec, &t1);
+    return token_vec;
+}
 void *preprocessor_node_create(struct preprocessor_node *node)
 {
     struct preprocessor_node *result = calloc(sizeof(struct preprocessor_node), 1);
@@ -240,6 +250,11 @@ struct preprocessor *compiler_preprocessor(struct compile_process *compiler)
 {
     return compiler->preprocessor;
 }
+
+static struct token* preprocessor_previous_token(struct compile_process* compiler)
+{
+    return vector_peek_at(compiler->token_vec_original, compiler->token_vec_original->pindex-1);
+}
 static struct token *preprocessor_next_token(struct compile_process *compiler)
 {
     return vector_peek(compiler->token_vec_original);
@@ -312,6 +327,66 @@ static bool preprocessor_token_is_if(struct token *token)
     return (S_EQ(token->sval, "if"));
 }
 
+struct compile_process *preprocessor_compiler(struct preprocessor *preprocessor)
+{
+    return preprocessor->compiler;
+}
+
+
+struct vector* preprocessor_definition_value_for_standard(struct preprocessor_definition* definition)
+{
+    return definition->standard.value;
+}
+
+struct vector* preprocessor_definition_value_for_native(struct preprocessor_definition* definition)
+{
+    return definition->native.value(definition);
+}
+
+
+/**
+ * Returns the token value vector for this given definition
+ */
+struct vector* preprocessor_definition_value(struct preprocessor_definition* definition)
+{
+    if (definition->type == PREPROCESSOR_DEFINITION_NATIVE_CALLBACK)
+    {
+        return preprocessor_definition_value_for_native(definition);
+    }
+
+    return preprocessor_definition_value_for_standard(definition);
+}
+
+int preprocessor_definition_evaluated_value_for_standard(struct preprocessor_definition *definition)
+{
+    struct token *token = vector_back(definition->standard.value);
+    if (token->type != TOKEN_TYPE_NUMBER)
+    {
+        compiler_error(preprocessor_compiler(definition->preprocessor), "The definition %s must hold a number value, unable to use macro IF", definition->name);
+    }
+    return token->llnum;
+}
+
+
+int preprocessor_definition_evaluated_value_for_native(struct preprocessor_definition* definition)
+{
+    return definition->native.evaluate(definition);
+}
+
+int preprocessor_definition_evaluated_value(struct preprocessor_definition *definition)
+{
+    if (definition->type == PREPROCESSOR_DEFINITION_STANDARD)
+    {
+        return preprocessor_definition_evaluated_value_for_standard(definition);
+    }
+    else if(definition->type == PREPROCESSOR_DEFINITION_NATIVE_CALLBACK)
+    {
+        return preprocessor_definition_evaluated_value_for_native(definition);
+    }
+
+    compiler_error(preprocessor_compiler(definition->preprocessor), "The definition %s cannot be evaluated into a number");
+}
+
 /**
  * Searches for a hashtag symbol along with the given identifier.
  * If found the hashtag token and identifier token are both popped from the stack
@@ -378,19 +453,34 @@ static bool preprocessor_token_is_definition_identifier(struct compile_process *
     return false;
 }
 
-struct preprocessor_definition *preprocessor_definition_create(const char *name, struct vector *value_vec, struct vector *arguments)
+struct preprocessor_definition *preprocessor_definition_create_native(const char *name, PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE evaluate, PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE value, struct preprocessor* preprocessor)
+{
+    struct preprocessor_definition *definition = calloc(sizeof(struct preprocessor_definition), 1);
+    definition->type = PREPROCESSOR_DEFINITION_NATIVE_CALLBACK;
+    definition->name = name;
+    definition->native.evaluate = evaluate;
+    definition->native.value = value;
+    definition->preprocessor = preprocessor;
+
+    vector_push(preprocessor->definitions, &definition);
+    return definition;
+}
+
+struct preprocessor_definition *preprocessor_definition_create(const char *name, struct vector *value_vec, struct vector *arguments, struct preprocessor* preprocessor)
 {
     struct preprocessor_definition *definition = calloc(sizeof(struct preprocessor_definition), 1);
     definition->type = PREPROCESSOR_DEFINITION_STANDARD;
     definition->name = name;
-    definition->value = value_vec;
-    definition->arguments = arguments;
+    definition->standard.value = value_vec;
+    definition->standard.arguments = arguments;
+    definition->preprocessor = preprocessor;
 
-    if (vector_count(definition->arguments))
+    if (vector_count(definition->standard.arguments))
     {
         definition->type = PREPROCESSOR_DEFINITION_MACRO_FUNCTION;
     }
 
+    vector_push(preprocessor->definitions, &definition);
     return definition;
 }
 
@@ -458,8 +548,7 @@ static void preprocessor_handle_definition_token(struct compile_process *compile
     preprocessor_multi_value_insert_to_vector(compiler, value_token_vec);
 
     struct preprocessor *preprocessor = compiler->preprocessor;
-    struct preprocessor_definition *definition = preprocessor_definition_create(name_token->sval, value_token_vec, arguments);
-    vector_push(preprocessor->definitions, &definition);
+    preprocessor_definition_create(name_token->sval, value_token_vec, arguments, preprocessor);
 }
 
 static void preprocessor_handle_include_token(struct compile_process *compiler)
@@ -534,22 +623,17 @@ static int preprocessor_evaluate_identifier(struct compile_process *compiler, st
         return true;
     }
 
-    if (vector_count(definition->value) > 1)
+    if (vector_count(preprocessor_definition_value(definition)) > 1)
     {
         compiler_error(compiler, "The given definition %s has over one value, unable to use macro IF", definition->name);
     }
 
-    if (vector_count(definition->value) == 0)
+    if (vector_count(preprocessor_definition_value(definition)) == 0)
     {
         return false;
     }
 
-    struct token *token = vector_back(definition->value);
-    if (token->type != TOKEN_TYPE_NUMBER)
-    {
-        compiler_error(compiler, "The definition %s must hold a number value, unable to use macro IF", definition->name);
-    }
-    return token->llnum;
+    return preprocessor_definition_evaluated_value(definition);
 }
 
 int preprocessor_arithmetic(struct compile_process *compiler, long left_operand, long right_operand, const char *op)
@@ -722,16 +806,16 @@ static struct token *preprocessor_handle_identifier_macro_call_argument_parse(st
  */
 int preprocessor_definition_argument_exists(struct preprocessor_definition *definition, const char *name)
 {
-    vector_set_peek_pointer(definition->arguments, 0);
+    vector_set_peek_pointer(definition->standard.arguments, 0);
     int i = 0;
-    const char *current = vector_peek(definition->arguments);
+    const char *current = vector_peek(definition->standard.arguments);
     while (current)
     {
         if (S_EQ(current, name))
             return i;
 
         i++;
-        current = vector_peek(definition->arguments);
+        current = vector_peek(definition->standard.arguments);
     }
 
     return -1;
@@ -767,15 +851,16 @@ void preprocessor_macro_function_execute(struct compile_process *compiler, const
         FAIL_ERR("This definition is not a macro function");
     }
 
-    if (vector_count(definition->arguments) != preprocessor_function_arguments_count(arguments))
+    if (vector_count(definition->standard.arguments) != preprocessor_function_arguments_count(arguments))
     {
         FAIL_ERR("You passed too many arguments to this macro functon, expecting %i arguments");
     }
 
     // Let's create a special vector for this value as its being injected with function arugments
     struct vector *value_vec_target = vector_create(sizeof(struct token));
-    vector_set_peek_pointer(definition->value, 0);
-    struct token *token = vector_peek(definition->value);
+    struct vector* definition_token_vec = preprocessor_definition_value(definition);
+    vector_set_peek_pointer(definition_token_vec, 0);
+    struct token *token = vector_peek(definition_token_vec);
     while (token)
     {
         if (token->type == TOKEN_TYPE_IDENTIFIER)
@@ -788,13 +873,13 @@ void preprocessor_macro_function_execute(struct compile_process *compiler, const
                 // Ok we have an argument, we need to populate the output vector
                 // a little differently.
                 preprocessor_function_argument_push_to_vec(preprocessor_function_argument_at(arguments, argument_index), value_vec_target);
-                token = vector_peek(definition->value);
+                token = vector_peek(definition_token_vec);
                 continue;
             }
         }
         // Push the token it does not need modfiying
         vector_push(value_vec_target, token);
-        token = vector_peek(definition->value);
+        token = vector_peek(definition_token_vec);
     }
 
     // We have our target vector, lets inject it into the output vector.
@@ -848,7 +933,7 @@ static void preprocessor_handle_identifier(struct compile_process *compiler, str
     }
 
     // Normal macro function, then push its entire value stack to the destination stack
-    preprocessor_token_vec_push_dst(compiler, definition->value);
+    preprocessor_token_vec_push_dst(compiler, preprocessor_definition_value(definition));
 }
 
 static int preprocessor_handle_hashtag_token(struct compile_process *compiler, struct token *token)
@@ -916,16 +1001,43 @@ void preprocessor_handle_token(struct compile_process *compiler, struct token *t
     }
 }
 
+int preprocessor_line_macro_evaluate(struct preprocessor_definition *definition)
+{
+    struct preprocessor* preprocessor = definition->preprocessor;
+    struct compile_process* compiler = preprocessor->compiler;
+    struct token* previous_token = preprocessor_previous_token(compiler);
+    return previous_token->pos.line;
+}
+
+struct vector* preprocessor_line_macro_value(struct preprocessor_definition* definition)
+{
+    struct preprocessor* preprocessor = definition->preprocessor;
+    struct compile_process* compiler = preprocessor->compiler;
+    struct token* previous_token = preprocessor_previous_token(compiler);
+    return preprocessor_build_value_vector_for_integer(previous_token->pos.line);
+}
+
+/**
+ * This creates the definitions for the preprocessor that should always exist
+ */
+void preprocessor_create_definitions(struct preprocessor *preprocessor)
+{
+    preprocessor_definition_create_native("__LINE__", preprocessor_line_macro_evaluate, preprocessor_line_macro_value, preprocessor);
+}
+
 void preprocessor_initialize(struct vector *token_vec, struct preprocessor *preprocessor)
 {
     memset(preprocessor, 0, sizeof(struct preprocessor));
     preprocessor->definitions = vector_create(sizeof(struct preprocessor_definition));
+    preprocessor_create_definitions(preprocessor);
 }
 
-struct preprocessor *preprocessor_create(struct vector *token_vec)
+struct preprocessor *preprocessor_create(struct compile_process *compiler)
 {
+    assert(compiler);
     struct preprocessor *preprocessor = calloc(sizeof(struct preprocessor), 1);
-    preprocessor_initialize(token_vec, preprocessor);
+    preprocessor_initialize(compiler->token_vec, preprocessor);
+    preprocessor->compiler = compiler;
     return preprocessor;
 }
 

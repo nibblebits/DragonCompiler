@@ -30,6 +30,9 @@ struct compile_process* compile_process_create(const char* filename, const char*
     struct compile_process* process = malloc(sizeof(struct compile_process));
     memset(process, 0, sizeof(struct compile_process));
     process->flags = flags;
+    // Line's don't start from zero. First line of this file is 1
+    process->pos.line = 1;
+    
     process->cfile = file;
     process->ofile = out_file;
     process->token_vec = vector_create(sizeof(struct token));
@@ -50,7 +53,7 @@ struct compile_process* compile_process_create(const char* filename, const char*
     else
     {
         // Dislike else optomize this.
-        process->preprocessor = preprocessor_create(process->token_vec_original);
+        process->preprocessor = preprocessor_create(process);
     }
     return process;
 }

@@ -47,8 +47,7 @@
     case '(':                           \
     case '[':                           \
     case ',':                           \
-    case '.'                            \
-    
+    case '.'
 
 #define NUMERIC_CASE \
     case '0':        \
@@ -133,12 +132,12 @@ enum
 
 };
 
-#define EXPRESSION_UNINHERITABLE_FLAGS                                                                 \
-    (EXPRESSION_FLAG_RIGHT_NODE | EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS |                              \
-     EXPRESSION_IS_ADDITION | EXPRESSION_IS_SUBTRACTION | EXPRESSION_IS_MULTIPLICATION |               \
-     EXPRESSION_IS_DIVISION | EXPRESSION_IS_ABOVE | EXPRESSION_IS_ABOVE_OR_EQUAL |                     \
-     EXPRESSION_IS_BELOW | EXPRESSION_IS_BELOW_OR_EQUAL | EXPRESSION_IS_EQUAL |                        \
-     EXPRESSION_IS_NOT_EQUAL | EXPRESSION_LOGICAL_AND |                                                \
+#define EXPRESSION_UNINHERITABLE_FLAGS                                                               \
+    (EXPRESSION_FLAG_RIGHT_NODE | EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS |                            \
+     EXPRESSION_IS_ADDITION | EXPRESSION_IS_SUBTRACTION | EXPRESSION_IS_MULTIPLICATION |             \
+     EXPRESSION_IS_DIVISION | EXPRESSION_IS_ABOVE | EXPRESSION_IS_ABOVE_OR_EQUAL |                   \
+     EXPRESSION_IS_BELOW | EXPRESSION_IS_BELOW_OR_EQUAL | EXPRESSION_IS_EQUAL |                      \
+     EXPRESSION_IS_NOT_EQUAL | EXPRESSION_LOGICAL_AND |                                              \
      EXPRESSION_IN_LOGICAL_EXPRESSION | EXPRESSION_IS_BITSHIFT_LEFT | EXPRESSION_IS_BITSHIFT_RIGHT | \
      EXPRESSION_IS_BITWISE_OR | EXPRESSION_IS_BITWISE_AND | EXPRESSION_IS_BITWISE_XOR)
 
@@ -221,9 +220,25 @@ struct expression_state
 enum
 {
     PREPROCESSOR_DEFINITION_STANDARD,
-    PREPROCESSOR_DEFINITION_MACRO_FUNCTION
+    PREPROCESSOR_DEFINITION_MACRO_FUNCTION,
+    // Signifies that this preprocessor definition must call a
+    // function pointer that decides what value should be returned.
+    PREPROCESSOR_DEFINITION_NATIVE_CALLBACK
 };
 
+
+struct preprocessor;
+struct preprocessor_definition;
+/**
+ * Should evaluate the given definition into an integer
+ */
+typedef int(*PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE)(struct preprocessor_definition* definition);
+
+/**
+ * Function pointer must return a vector of struct token. That represents the value
+ * of this native definition
+ */
+typedef struct vector*(*PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE)(struct preprocessor_definition* definition);
 struct preprocessor_definition
 {
     // The type of definition i.e standard or macro function
@@ -232,14 +247,25 @@ struct preprocessor_definition
     // The name of this definition i.e #define ABC . ABC would be the name
     const char *name;
 
-    // A vector of definition value tokens, values can be multiple lines
-    // Values can also be multiple tokens.
-    // vector of "struct token"
-    struct vector *value;
+    struct standard_preprocessor_definition
+    {
+        // A vector of definition value tokens, values can be multiple lines
+        // Values can also be multiple tokens.
+        // vector of "struct token"
+        struct vector *value;
 
-    // A vector of const char* representing function arguments in order.
-    // i.e ABC(a, b, c) a b and c would be in this arguments vector.
-    struct vector *arguments;
+        // A vector of const char* representing function arguments in order.
+        // i.e ABC(a, b, c) a b and c would be in this arguments vector.
+        struct vector *arguments;
+    } standard;
+
+    struct native_callback_preprocessor_definition
+    {
+        PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE evaluate;
+        PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE value;
+    } native;
+
+    struct preprocessor* preprocessor;
 };
 
 struct preprocessor
@@ -253,6 +279,8 @@ struct preprocessor
 
     // Used for parsing expressions.
     struct expressionable *expressionable;
+
+    struct compile_process* compiler;
 };
 
 struct string_table_element
@@ -304,8 +332,8 @@ struct compile_process
     FILE *cfile;
 
     // The output file to compile to. NULL if this is a sub-file included with "include"
-    FILE* ofile;
-    
+    FILE *ofile;
+
     // Current line position information.
     struct pos pos;
 
@@ -771,7 +799,7 @@ struct node
 
     // The body node this node is apart of. If theirs no body then its NULL.
     // NULL means no scope is surrounding this node, it must be in the global space
-    struct node* owner;
+    struct node *owner;
     union
     {
         struct exp
@@ -926,7 +954,6 @@ struct node
         } stmt;
     };
 
-
     // Literal values for nodes of generic types. I.e numbers and identifiers
     union
     {
@@ -951,7 +978,7 @@ void compiler_error(struct compile_process *compiler, const char *msg, ...);
 /**
  * Compiles the file
  */
-int compile_file(const char *filename, const char* out_filename, int flags);
+int compile_file(const char *filename, const char *out_filename, int flags);
 
 /**
  * Includes a file to be compiled, returns a new compile process that represents the file
@@ -986,12 +1013,12 @@ bool keyword_is_datatype(const char *str);
 /**
  * Creates a new compile process
  */
-struct compile_process* compile_process_create(const char* filename, const char* out_filename, int flags, struct compile_process* parent_process);
+struct compile_process *compile_process_create(const char *filename, const char *out_filename, int flags, struct compile_process *parent_process);
 
 /**
  * Destroys the compiler process
  */
-void compile_process_destroy(struct compile_process* process);
+void compile_process_destroy(struct compile_process *process);
 
 /**
  * Returns the current file thats being processed
@@ -1175,7 +1202,7 @@ bool is_access_operator_node(struct node *node);
 /**
  * Returns true if this token represents an operator
  */
-bool is_operator_token(struct token* token);
+bool is_operator_token(struct token *token);
 
 bool op_is_indirection(const char *op);
 
@@ -1217,7 +1244,7 @@ bool variable_node_is_primative(struct node *node);
  * Accept any node. Will iterate through every body until full scope size
  * is summed.
  */
-size_t node_sum_scope_size(struct node* node);
+size_t node_sum_scope_size(struct node *node);
 
 struct node *node_from_symbol(struct compile_process *current_process, const char *name);
 struct node *node_from_sym(struct symbol *sym);
@@ -1286,9 +1313,9 @@ bool is_argument_node(struct node *node);
  * unable to rely on just one, Or they may need multiple instructions to compute them correctly
  */
 bool is_special_operator(const char *op);
-bool is_special_node(struct node* node);
+bool is_special_node(struct node *node);
 
-bool is_bitwise_operator(const char* op);
+bool is_bitwise_operator(const char *op);
 
 /**
  * Returns true if the given operator is a logical comparision operator
@@ -1399,7 +1426,7 @@ int preprocessor_run(struct compile_process *compiler);
 /**
  * Creates a new preprocessor instance
  */
-struct preprocessor *preprocessor_create(struct vector *token_vec);
+struct preprocessor *preprocessor_create(struct compile_process* compiler);
 
 // Expressionable system, parses expressions
 

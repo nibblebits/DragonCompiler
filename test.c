@@ -1,7 +1,8 @@
 int main()
 {
     int x;
-    x = 10;
-    x = (~x) + 50; 
-    return x;
+    int y;
+    x = __LINE__;
+    x = __LINE__;
+    y = __LINE__;
 }

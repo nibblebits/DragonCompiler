@@ -44,6 +44,7 @@ void* vector_at(struct vector* vector, int index);
 void* vector_peek_ptr_at(struct vector* vector, int index);
 void* vector_peek_no_increment(struct vector* vector);
 void* vector_peek(struct vector* vector);
+void *vector_peek_at(struct vector *vector, int index);
 void vector_set_flag(struct vector* vector, int flag);
 void vector_unset_flag(struct vector* vector, int flag);
 

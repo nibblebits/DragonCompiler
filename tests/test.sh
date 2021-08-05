@@ -112,6 +112,15 @@ else
 fi
 
 
+echo -e "Running preprocessor __LINE__ macro test"
+./build/preprocessor_line_macro_test
+if [ $? -ne 12 ]; then
+    echo -e "preprocessor __LINE__ macro failed"
+    res_code=1
+else
+    echo -e "preprocessor __LINE__ macro passed"
+fi
+
 
 
 

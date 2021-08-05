@@ -56,10 +56,9 @@ struct preprocessor_node
     const char *sval;
 };
 
-
-struct vector* preprocessor_build_value_vector_for_integer(int value)
+struct vector *preprocessor_build_value_vector_for_integer(int value)
 {
-    struct vector* token_vec = vector_create(sizeof(struct token));
+    struct vector *token_vec = vector_create(sizeof(struct token));
     struct token t1 = {};
     t1.type = TOKEN_TYPE_NUMBER;
     t1.llnum = value;
@@ -251,9 +250,9 @@ struct preprocessor *compiler_preprocessor(struct compile_process *compiler)
     return compiler->preprocessor;
 }
 
-struct token* preprocessor_previous_token(struct compile_process* compiler)
+struct token *preprocessor_previous_token(struct compile_process *compiler)
 {
-    return vector_peek_at(compiler->token_vec_original, compiler->token_vec_original->pindex-1);
+    return vector_peek_at(compiler->token_vec_original, compiler->token_vec_original->pindex - 1);
 }
 struct token *preprocessor_next_token(struct compile_process *compiler)
 {
@@ -282,10 +281,19 @@ void preprocessor_token_vec_push_dst(struct compile_process *compiler, struct ve
     }
 }
 
+bool preprocessor_is_preprocessor_keyword(const char *value)
+{
+    return S_EQ(value, "define") ||
+           S_EQ(value, "if") ||
+           S_EQ(value, "ifdef") ||
+           S_EQ(value, "ifndef") ||
+           S_EQ(value, "endif") ||
+           S_EQ(value, "include") ||
+           S_EQ(value, "typedef");
+}
 bool preprocessor_token_is_preprocessor_keyword(struct token *token)
 {
-    return token->type == TOKEN_TYPE_IDENTIFIER || token->type == TOKEN_TYPE_KEYWORD &&
-                                                       (S_EQ(token->sval, "define") || S_EQ(token->sval, "if") || S_EQ(token->sval, "ifdef") || S_EQ(token->sval, "ifndef") || S_EQ(token->sval, "endif") || S_EQ(token->sval, "include"));
+    return token->type == TOKEN_TYPE_IDENTIFIER || token->type == TOKEN_TYPE_KEYWORD && preprocessor_is_preprocessor_keyword(token->sval);
 }
 
 bool preprocessor_token_is_include(struct token *token)
@@ -295,6 +303,16 @@ bool preprocessor_token_is_include(struct token *token)
         return false;
     }
     return S_EQ(token->sval, "include");
+}
+
+bool preprocessor_token_is_typedef(struct token* token)
+{
+    if (!preprocessor_token_is_preprocessor_keyword(token))
+    {
+        return false;
+    }
+
+    return S_EQ(token->sval, "typedef");
 }
 
 bool preprocessor_token_is_define(struct token *token)
@@ -332,26 +350,35 @@ struct compile_process *preprocessor_compiler(struct preprocessor *preprocessor)
     return preprocessor->compiler;
 }
 
-
-struct vector* preprocessor_definition_value_for_standard(struct preprocessor_definition* definition)
+struct vector *preprocessor_definition_value_for_standard(struct preprocessor_definition *definition)
 {
     return definition->standard.value;
 }
 
-struct vector* preprocessor_definition_value_for_native(struct preprocessor_definition* definition)
+struct vector *preprocessor_definition_value_for_native(struct preprocessor_definition *definition)
 {
     return definition->native.value(definition);
 }
+
+struct vector *preprocessor_definition_value_for_typedef(struct preprocessor_definition *definition)
+{
+    return definition->_typedef.value;
+}
+
 
 
 /**
  * Returns the token value vector for this given definition
  */
-struct vector* preprocessor_definition_value(struct preprocessor_definition* definition)
+struct vector *preprocessor_definition_value(struct preprocessor_definition *definition)
 {
     if (definition->type == PREPROCESSOR_DEFINITION_NATIVE_CALLBACK)
     {
         return preprocessor_definition_value_for_native(definition);
+    }
+    else if(definition->type == PREPROCESSOR_DEFINITION_TYPEDEF)
+    {
+        return preprocessor_definition_value_for_typedef(definition);
     }
 
     return preprocessor_definition_value_for_standard(definition);
@@ -367,8 +394,7 @@ int preprocessor_definition_evaluated_value_for_standard(struct preprocessor_def
     return token->llnum;
 }
 
-
-int preprocessor_definition_evaluated_value_for_native(struct preprocessor_definition* definition)
+int preprocessor_definition_evaluated_value_for_native(struct preprocessor_definition *definition)
 {
     return definition->native.evaluate(definition);
 }
@@ -379,7 +405,7 @@ int preprocessor_definition_evaluated_value(struct preprocessor_definition *defi
     {
         return preprocessor_definition_evaluated_value_for_standard(definition);
     }
-    else if(definition->type == PREPROCESSOR_DEFINITION_NATIVE_CALLBACK)
+    else if (definition->type == PREPROCESSOR_DEFINITION_NATIVE_CALLBACK)
     {
         return preprocessor_definition_evaluated_value_for_native(definition);
     }
@@ -453,7 +479,7 @@ bool preprocessor_token_is_definition_identifier(struct compile_process *compile
     return false;
 }
 
-struct preprocessor_definition *preprocessor_definition_create_native(const char *name, PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE evaluate, PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE value, struct preprocessor* preprocessor)
+struct preprocessor_definition *preprocessor_definition_create_native(const char *name, PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE evaluate, PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE value, struct preprocessor *preprocessor)
 {
     struct preprocessor_definition *definition = calloc(sizeof(struct preprocessor_definition), 1);
     definition->type = PREPROCESSOR_DEFINITION_NATIVE_CALLBACK;
@@ -466,7 +492,21 @@ struct preprocessor_definition *preprocessor_definition_create_native(const char
     return definition;
 }
 
-struct preprocessor_definition *preprocessor_definition_create(const char *name, struct vector *value_vec, struct vector *arguments, struct preprocessor* preprocessor)
+
+struct preprocessor_definition *preprocessor_definition_create_typedef(const char *name, struct vector *value_vec, struct preprocessor *preprocessor)
+{
+    struct preprocessor_definition *definition = calloc(sizeof(struct preprocessor_definition), 1);
+    definition->type = PREPROCESSOR_DEFINITION_TYPEDEF;
+    definition->name = name;
+    definition->_typedef.value = value_vec;
+    definition->preprocessor = preprocessor;
+
+    vector_push(preprocessor->definitions, &definition);
+    return definition;
+}
+
+
+struct preprocessor_definition *preprocessor_definition_create(const char *name, struct vector *value_vec, struct vector *arguments, struct preprocessor *preprocessor)
 {
     struct preprocessor_definition *definition = calloc(sizeof(struct preprocessor_definition), 1);
     definition->type = PREPROCESSOR_DEFINITION_STANDARD;
@@ -569,6 +609,37 @@ void preprocessor_handle_include_token(struct compile_process *compiler)
 
     // Now that we have the new compile process we must merge the tokens with our own
     preprocessor_token_vec_push_dst(compiler, new_compile_process->token_vec);
+}
+
+void preprocessor_handle_typedef_token(struct compile_process* compiler)
+{
+    // We expect a format like "typedef unsigned int ABC;" the final identifier
+    // is the name of this typedef, the rest are what is represented.
+
+    struct vector* token_vec = vector_create(sizeof(struct token));
+    struct token* token = preprocessor_next_token(compiler);
+    while(token)
+    {
+        if (token_is_symbol(token, ';'))
+        {
+            break;
+        }
+        vector_push(token_vec, token);
+        token = preprocessor_next_token(compiler);
+    }
+
+    // Okay the last element is the name
+    struct token* name_token = vector_back_or_null(token_vec);
+    if (!name_token)
+    {
+        compiler_error(compiler, "Typedef expects values and a name");
+    }
+
+    // Pop off the name token
+    vector_pop(token_vec);
+    
+    struct preprocessor *preprocessor = compiler->preprocessor;
+    preprocessor_definition_create_typedef(name_token->sval, token_vec, preprocessor);
 }
 
 void preprocessor_read_to_end_if(struct compile_process *compiler, bool true_clause)
@@ -858,7 +929,7 @@ void preprocessor_macro_function_execute(struct compile_process *compiler, const
 
     // Let's create a special vector for this value as its being injected with function arugments
     struct vector *value_vec_target = vector_create(sizeof(struct token));
-    struct vector* definition_token_vec = preprocessor_definition_value(definition);
+    struct vector *definition_token_vec = preprocessor_definition_value(definition);
     vector_set_peek_pointer(definition_token_vec, 0);
     struct token *token = vector_peek(definition_token_vec);
     while (token)
@@ -960,7 +1031,6 @@ int preprocessor_handle_hashtag_token(struct compile_process *compiler, struct t
         preprocessor_handle_include_token(compiler);
         is_preprocessed = true;
     }
-
     return is_preprocessed;
 }
 
@@ -978,6 +1048,20 @@ void preprocessor_handle_symbol(struct compile_process *compiler, struct token *
         preprocessor_token_push_dst(compiler, token);
     }
 }
+
+void preprocessor_handle_keyword(struct compile_process* compiler, struct token* token)
+{
+    if(preprocessor_token_is_typedef(token))
+    {
+        preprocessor_handle_typedef_token(compiler);
+    }
+    else
+    {
+        // Not for us to deal with? Then just push it to the stack
+        preprocessor_token_push_dst(compiler, token);
+    }
+}
+
 void preprocessor_handle_token(struct compile_process *compiler, struct token *token)
 {
     switch (token->type)
@@ -986,6 +1070,10 @@ void preprocessor_handle_token(struct compile_process *compiler, struct token *t
     {
         preprocessor_handle_symbol(compiler, token);
     }
+    break;
+
+    case TOKEN_TYPE_KEYWORD:
+        preprocessor_handle_keyword(compiler, token);
     break;
 
     case TOKEN_TYPE_IDENTIFIER:

@@ -223,49 +223,57 @@ enum
     PREPROCESSOR_DEFINITION_MACRO_FUNCTION,
     // Signifies that this preprocessor definition must call a
     // function pointer that decides what value should be returned.
-    PREPROCESSOR_DEFINITION_NATIVE_CALLBACK
+    PREPROCESSOR_DEFINITION_NATIVE_CALLBACK,
+    PREPROCESSOR_DEFINITION_TYPEDEF
 };
-
 
 struct preprocessor;
 struct preprocessor_definition;
 /**
  * Should evaluate the given definition into an integer
  */
-typedef int(*PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE)(struct preprocessor_definition* definition);
+typedef int (*PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE)(struct preprocessor_definition *definition);
 
 /**
  * Function pointer must return a vector of struct token. That represents the value
  * of this native definition
  */
-typedef struct vector*(*PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE)(struct preprocessor_definition* definition);
+typedef struct vector *(*PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE)(struct preprocessor_definition *definition);
 struct preprocessor_definition
 {
     // The type of definition i.e standard or macro function
     int type;
 
     // The name of this definition i.e #define ABC . ABC would be the name
+
     const char *name;
-
-    struct standard_preprocessor_definition
+    union
     {
-        // A vector of definition value tokens, values can be multiple lines
-        // Values can also be multiple tokens.
-        // vector of "struct token"
-        struct vector *value;
+        struct standard_preprocessor_definition
+        {
+            // A vector of definition value tokens, values can be multiple lines
+            // Values can also be multiple tokens.
+            // vector of "struct token"
+            struct vector *value;
 
-        // A vector of const char* representing function arguments in order.
-        // i.e ABC(a, b, c) a b and c would be in this arguments vector.
-        struct vector *arguments;
-    } standard;
+            // A vector of const char* representing function arguments in order.
+            // i.e ABC(a, b, c) a b and c would be in this arguments vector.
+            struct vector *arguments;
+        } standard;
 
-    struct native_callback_preprocessor_definition
-    {
-        PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE evaluate;
-        PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE value;
-    } native;
+        struct typdef_preprocessor_definition
+        {
+            struct vector *value;
+        } _typedef;
 
-    struct preprocessor* preprocessor;
+        struct native_callback_preprocessor_definition
+        {
+            PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE evaluate;
+            PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE value;
+        } native;
+    };
+
+    struct preprocessor *preprocessor;
 };
 
 struct preprocessor
@@ -280,7 +288,7 @@ struct preprocessor
     // Used for parsing expressions.
     struct expressionable *expressionable;
 
-    struct compile_process* compiler;
+    struct compile_process *compiler;
 };
 
 struct string_table_element
@@ -1422,22 +1430,21 @@ bool token_is_identifier(struct token *token, const char *iden);
 
 // Preprocessor
 int preprocessor_run(struct compile_process *compiler);
-struct vector* preprocessor_build_value_vector_for_integer(int value);
-struct preprocessor_definition *preprocessor_definition_create_native(const char *name, PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE evaluate, PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE value, struct preprocessor* preprocessor);
-struct token* preprocessor_previous_token(struct compile_process* compiler);
+struct vector *preprocessor_build_value_vector_for_integer(int value);
+struct preprocessor_definition *preprocessor_definition_create_native(const char *name, PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE evaluate, PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE value, struct preprocessor *preprocessor);
+struct token *preprocessor_previous_token(struct compile_process *compiler);
 struct token *preprocessor_next_token(struct compile_process *compiler);
 int preprocessor_line_macro_evaluate(struct preprocessor_definition *definition);
-struct vector* preprocessor_line_macro_value(struct preprocessor_definition* definition);
+struct vector *preprocessor_line_macro_value(struct preprocessor_definition *definition);
 /**
  * This creates the definitions for the preprocessor that should always exist
  */
 void preprocessor_create_definitions(struct preprocessor *preprocessor);
 
-
 /**
  * Creates a new preprocessor instance
  */
-struct preprocessor *preprocessor_create(struct compile_process* compiler);
+struct preprocessor *preprocessor_create(struct compile_process *compiler);
 
 // Expressionable system, parses expressions
 

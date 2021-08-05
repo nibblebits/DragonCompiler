@@ -121,6 +121,15 @@ else
     echo -e "preprocessor __LINE__ macro passed"
 fi
 
+echo -e "Running typedef macro test"
+./build/typedef_test
+if [ $? -ne 50 ]; then
+    echo -e "typedef macro failed"
+    res_code=1
+else
+    echo -e "typedef macro passed"
+fi
+
 
 
 

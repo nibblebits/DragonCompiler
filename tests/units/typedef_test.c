@@ -4,9 +4,14 @@ struct Point{
 };
 typedef struct Point Point;
 
+typedef unsigned int uint32_t;
 int main()
 {
     Point a;
     a.x = 50;
-    a.b = 60;
+    a.y = 60;
+
+    uint32_t abc;
+    abc = 50;
+    return abc;
 }

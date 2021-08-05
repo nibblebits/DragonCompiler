@@ -1422,6 +1422,17 @@ bool token_is_identifier(struct token *token, const char *iden);
 
 // Preprocessor
 int preprocessor_run(struct compile_process *compiler);
+struct vector* preprocessor_build_value_vector_for_integer(int value);
+struct preprocessor_definition *preprocessor_definition_create_native(const char *name, PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE evaluate, PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE value, struct preprocessor* preprocessor);
+struct token* preprocessor_previous_token(struct compile_process* compiler);
+struct token *preprocessor_next_token(struct compile_process *compiler);
+int preprocessor_line_macro_evaluate(struct preprocessor_definition *definition);
+struct vector* preprocessor_line_macro_value(struct preprocessor_definition* definition);
+/**
+ * This creates the definitions for the preprocessor that should always exist
+ */
+void preprocessor_create_definitions(struct preprocessor *preprocessor);
+
 
 /**
  * Creates a new preprocessor instance

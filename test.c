@@ -1,8 +1,13 @@
+struct abc
+{
+    int a;
+    char b;
+    int c;
+};
+
+
+struct abc d;
 int main()
 {
-    int x;
-    int y;
-    x = __LINE__;
-    x = __LINE__;
-    y = __LINE__;
+    return __LINE__;
 }

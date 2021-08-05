@@ -251,21 +251,21 @@ struct preprocessor *compiler_preprocessor(struct compile_process *compiler)
     return compiler->preprocessor;
 }
 
-static struct token* preprocessor_previous_token(struct compile_process* compiler)
+struct token* preprocessor_previous_token(struct compile_process* compiler)
 {
     return vector_peek_at(compiler->token_vec_original, compiler->token_vec_original->pindex-1);
 }
-static struct token *preprocessor_next_token(struct compile_process *compiler)
+struct token *preprocessor_next_token(struct compile_process *compiler)
 {
     return vector_peek(compiler->token_vec_original);
 }
 
-static struct token *preprocessor_next_token_no_increment(struct compile_process *compiler)
+struct token *preprocessor_next_token_no_increment(struct compile_process *compiler)
 {
     return vector_peek_no_increment(compiler->token_vec_original);
 }
 
-static void preprocessor_token_push_dst(struct compile_process *compiler, struct token *token)
+void preprocessor_token_push_dst(struct compile_process *compiler, struct token *token)
 {
     struct token t = *token;
     vector_push(compiler->token_vec, &t);
@@ -282,13 +282,13 @@ void preprocessor_token_vec_push_dst(struct compile_process *compiler, struct ve
     }
 }
 
-static bool preprocessor_token_is_preprocessor_keyword(struct token *token)
+bool preprocessor_token_is_preprocessor_keyword(struct token *token)
 {
     return token->type == TOKEN_TYPE_IDENTIFIER || token->type == TOKEN_TYPE_KEYWORD &&
                                                        (S_EQ(token->sval, "define") || S_EQ(token->sval, "if") || S_EQ(token->sval, "ifdef") || S_EQ(token->sval, "ifndef") || S_EQ(token->sval, "endif") || S_EQ(token->sval, "include"));
 }
 
-static bool preprocessor_token_is_include(struct token *token)
+bool preprocessor_token_is_include(struct token *token)
 {
     if (!preprocessor_token_is_preprocessor_keyword(token))
     {
@@ -297,7 +297,7 @@ static bool preprocessor_token_is_include(struct token *token)
     return S_EQ(token->sval, "include");
 }
 
-static bool preprocessor_token_is_define(struct token *token)
+bool preprocessor_token_is_define(struct token *token)
 {
     if (!preprocessor_token_is_preprocessor_keyword(token))
     {
@@ -307,7 +307,7 @@ static bool preprocessor_token_is_define(struct token *token)
     return (S_EQ(token->sval, "define"));
 }
 
-static bool preprocessor_token_is_ifdef(struct token *token)
+bool preprocessor_token_is_ifdef(struct token *token)
 {
     if (!preprocessor_token_is_preprocessor_keyword(token))
     {
@@ -317,7 +317,7 @@ static bool preprocessor_token_is_ifdef(struct token *token)
     return (S_EQ(token->sval, "ifdef"));
 }
 
-static bool preprocessor_token_is_if(struct token *token)
+bool preprocessor_token_is_if(struct token *token)
 {
     if (!preprocessor_token_is_preprocessor_keyword(token))
     {
@@ -394,7 +394,7 @@ int preprocessor_definition_evaluated_value(struct preprocessor_definition *defi
  * 
  * NO match return null.
  */
-static struct token *preprocessor_hashtag_and_identifier(struct compile_process *compiler, const char *str)
+struct token *preprocessor_hashtag_and_identifier(struct compile_process *compiler, const char *str)
 {
     // No token then how can we continue?
     if (!preprocessor_next_token_no_increment(compiler))
@@ -440,7 +440,7 @@ struct preprocessor_definition *preprocessor_get_definition(struct preprocessor 
     return definition;
 }
 
-static bool preprocessor_token_is_definition_identifier(struct compile_process *compiler, struct token *token)
+bool preprocessor_token_is_definition_identifier(struct compile_process *compiler, struct token *token)
 {
     if (token->type != TOKEN_TYPE_IDENTIFIER)
         return false;
@@ -507,7 +507,7 @@ void preprocessor_multi_value_insert_to_vector(struct compile_process *compiler,
         value_token = preprocessor_next_token(compiler);
     }
 }
-static void preprocessor_handle_definition_token(struct compile_process *compiler)
+void preprocessor_handle_definition_token(struct compile_process *compiler)
 {
     struct token *name_token = preprocessor_next_token(compiler);
 
@@ -551,7 +551,7 @@ static void preprocessor_handle_definition_token(struct compile_process *compile
     preprocessor_definition_create(name_token->sval, value_token_vec, arguments, preprocessor);
 }
 
-static void preprocessor_handle_include_token(struct compile_process *compiler)
+void preprocessor_handle_include_token(struct compile_process *compiler)
 {
     // We are expecting a file to include, lets check the next token
 
@@ -594,7 +594,7 @@ void preprocessor_read_to_end_if(struct compile_process *compiler, bool true_cla
         preprocessor_next_token(compiler);
     }
 }
-static void preprocessor_handle_ifdef_token(struct compile_process *compiler)
+void preprocessor_handle_ifdef_token(struct compile_process *compiler)
 {
     struct token *condition_token = preprocessor_next_token(compiler);
     if (!condition_token)
@@ -608,12 +608,12 @@ static void preprocessor_handle_ifdef_token(struct compile_process *compiler)
     preprocessor_read_to_end_if(compiler, definition != NULL);
 }
 
-static int preprocessor_evaluate_number(struct preprocessor_node *node)
+int preprocessor_evaluate_number(struct preprocessor_node *node)
 {
     return node->const_val.llnum;
 }
 
-static int preprocessor_evaluate_identifier(struct compile_process *compiler, struct preprocessor_node *node)
+int preprocessor_evaluate_identifier(struct compile_process *compiler, struct preprocessor_node *node)
 {
     struct preprocessor *preprocessor = compiler_preprocessor(compiler);
     struct preprocessor_definition *definition = preprocessor_get_definition(preprocessor, node->sval);
@@ -759,7 +759,7 @@ int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_
     }
     return result;
 }
-static void preprocessor_handle_if_token(struct compile_process *compiler)
+void preprocessor_handle_if_token(struct compile_process *compiler)
 {
     struct vector *node_vector = vector_create(sizeof(struct preprocessor_node *));
     // We will have an expression after the if token that needs to be preprocessed
@@ -776,7 +776,7 @@ void preprocessor_handle_identifier_macro_call_argument(struct preprocessor_func
     preprocessor_function_argument_push(arguments, token_vec);
 }
 
-static struct token *preprocessor_handle_identifier_macro_call_argument_parse(struct compile_process *compiler, struct vector *value_vec, struct preprocessor_function_arguments *arguments, struct token *token)
+struct token *preprocessor_handle_identifier_macro_call_argument_parse(struct compile_process *compiler, struct vector *value_vec, struct preprocessor_function_arguments *arguments, struct token *token)
 {
     if (token_is_symbol(token, ')'))
     {
@@ -886,7 +886,7 @@ void preprocessor_macro_function_execute(struct compile_process *compiler, const
     preprocessor_token_vec_push_dst(compiler, value_vec_target);
     // vector_free(value_vec_target);
 }
-static struct preprocessor_function_arguments *preprocessor_handle_identifier_macro_call_arguments(struct compile_process *compiler)
+struct preprocessor_function_arguments *preprocessor_handle_identifier_macro_call_arguments(struct compile_process *compiler)
 {
     // Skip the left bracket
     preprocessor_next_token(compiler);
@@ -907,7 +907,7 @@ static struct preprocessor_function_arguments *preprocessor_handle_identifier_ma
     return arguments;
 }
 
-static void preprocessor_handle_identifier(struct compile_process *compiler, struct token *token)
+void preprocessor_handle_identifier(struct compile_process *compiler, struct token *token)
 {
     // We have an identifier, it could represent a variable or a definition
     // lets check if its a definition if so we have to handle it.
@@ -936,7 +936,7 @@ static void preprocessor_handle_identifier(struct compile_process *compiler, str
     preprocessor_token_vec_push_dst(compiler, preprocessor_definition_value(definition));
 }
 
-static int preprocessor_handle_hashtag_token(struct compile_process *compiler, struct token *token)
+int preprocessor_handle_hashtag_token(struct compile_process *compiler, struct token *token)
 {
     bool is_preprocessed = false;
     struct token *next_token = preprocessor_next_token(compiler);
@@ -964,7 +964,7 @@ static int preprocessor_handle_hashtag_token(struct compile_process *compiler, s
     return is_preprocessed;
 }
 
-static void preprocessor_handle_symbol(struct compile_process *compiler, struct token *token)
+void preprocessor_handle_symbol(struct compile_process *compiler, struct token *token)
 {
     int is_preprocessed = false;
     if (token->cval == '#')
@@ -999,30 +999,6 @@ void preprocessor_handle_token(struct compile_process *compiler, struct token *t
     default:
         preprocessor_token_push_dst(compiler, token);
     }
-}
-
-int preprocessor_line_macro_evaluate(struct preprocessor_definition *definition)
-{
-    struct preprocessor* preprocessor = definition->preprocessor;
-    struct compile_process* compiler = preprocessor->compiler;
-    struct token* previous_token = preprocessor_previous_token(compiler);
-    return previous_token->pos.line;
-}
-
-struct vector* preprocessor_line_macro_value(struct preprocessor_definition* definition)
-{
-    struct preprocessor* preprocessor = definition->preprocessor;
-    struct compile_process* compiler = preprocessor->compiler;
-    struct token* previous_token = preprocessor_previous_token(compiler);
-    return preprocessor_build_value_vector_for_integer(previous_token->pos.line);
-}
-
-/**
- * This creates the definitions for the preprocessor that should always exist
- */
-void preprocessor_create_definitions(struct preprocessor *preprocessor)
-{
-    preprocessor_definition_create_native("__LINE__", preprocessor_line_macro_evaluate, preprocessor_line_macro_value, preprocessor);
 }
 
 void preprocessor_initialize(struct vector *token_vec, struct preprocessor *preprocessor)

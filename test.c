@@ -1,12 +1,12 @@
-struct Point{
-  int x;
-  int y;
-};
-typedef struct Point Point;
+typedef struct AAA
+{
+    int a;
+    int b;
+} ABC;
 
+ABC aa;
 int main()
 {
-    Point a;
-    a.x = 50;
-    a.b = 60;
+    aa.a = 50;
+    aa.b = 20;
 }

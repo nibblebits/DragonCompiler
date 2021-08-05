@@ -5,6 +5,25 @@
 
 enum
 {
+    TYPEDEF_TYPE_STANDARD,
+    // A structure typedef that looks something like this "typedef struct ABC { int x; } AAA;"
+    TYPEDEF_TYPE_STRUCTURE_TYPEDEF
+};
+
+struct typedef_type
+{
+    int type;
+    const char *definition_name;
+    struct vector *value;
+    struct typedef_structure
+    {
+        // The structure name.
+        const char *sname;
+    } structure;
+};
+
+enum
+{
     PREPROCESSOR_NUMBER_NODE,
     PREPROCESSOR_IDENTIFIER_NODE,
     PREPROCESSOR_UNARY_NODE,
@@ -64,6 +83,19 @@ struct vector *preprocessor_build_value_vector_for_integer(int value)
     t1.llnum = value;
     vector_push(token_vec, &t1);
     return token_vec;
+}
+
+void preprocessor_token_vec_push_keyword_and_identifier(struct vector *token_vec, const char *keyword, const char *identifier)
+{
+    struct token t1 = {};
+    t1.type = TOKEN_TYPE_KEYWORD;
+    t1.sval = keyword;
+    struct token t2 = {};
+    t2.type = TOKEN_TYPE_IDENTIFIER;
+    t2.sval = identifier;
+
+    vector_push(token_vec, &t1);
+    vector_push(token_vec, &t2);
 }
 void *preprocessor_node_create(struct preprocessor_node *node)
 {
@@ -264,6 +296,14 @@ struct token *preprocessor_next_token_no_increment(struct compile_process *compi
     return vector_peek_no_increment(compiler->token_vec_original);
 }
 
+void preprocessor_token_push_semicolon(struct compile_process *compiler)
+{
+    struct token t1;
+    t1.type = TOKEN_TYPE_SYMBOL;
+    t1.cval = ';';
+    vector_push(compiler->token_vec, &t1);
+}
+
 void preprocessor_token_push_dst(struct compile_process *compiler, struct token *token)
 {
     struct token t = *token;
@@ -305,7 +345,7 @@ bool preprocessor_token_is_include(struct token *token)
     return S_EQ(token->sval, "include");
 }
 
-bool preprocessor_token_is_typedef(struct token* token)
+bool preprocessor_token_is_typedef(struct token *token)
 {
     if (!preprocessor_token_is_preprocessor_keyword(token))
     {
@@ -365,8 +405,6 @@ struct vector *preprocessor_definition_value_for_typedef(struct preprocessor_def
     return definition->_typedef.value;
 }
 
-
-
 /**
  * Returns the token value vector for this given definition
  */
@@ -376,7 +414,7 @@ struct vector *preprocessor_definition_value(struct preprocessor_definition *def
     {
         return preprocessor_definition_value_for_native(definition);
     }
-    else if(definition->type == PREPROCESSOR_DEFINITION_TYPEDEF)
+    else if (definition->type == PREPROCESSOR_DEFINITION_TYPEDEF)
     {
         return preprocessor_definition_value_for_typedef(definition);
     }
@@ -492,7 +530,6 @@ struct preprocessor_definition *preprocessor_definition_create_native(const char
     return definition;
 }
 
-
 struct preprocessor_definition *preprocessor_definition_create_typedef(const char *name, struct vector *value_vec, struct preprocessor *preprocessor)
 {
     struct preprocessor_definition *definition = calloc(sizeof(struct preprocessor_definition), 1);
@@ -504,7 +541,6 @@ struct preprocessor_definition *preprocessor_definition_create_typedef(const cha
     vector_push(preprocessor->definitions, &definition);
     return definition;
 }
-
 
 struct preprocessor_definition *preprocessor_definition_create(const char *name, struct vector *value_vec, struct vector *arguments, struct preprocessor *preprocessor)
 {
@@ -611,35 +647,102 @@ void preprocessor_handle_include_token(struct compile_process *compiler)
     preprocessor_token_vec_push_dst(compiler, new_compile_process->token_vec);
 }
 
-void preprocessor_handle_typedef_token(struct compile_process* compiler)
+void preprocessor_handle_typedef_body_for_brackets(struct compile_process *compiler, struct vector *token_vec)
 {
-    // We expect a format like "typedef unsigned int ABC;" the final identifier
-    // is the name of this typedef, the rest are what is represented.
-
-    struct vector* token_vec = vector_create(sizeof(struct token));
-    struct token* token = preprocessor_next_token(compiler);
-    while(token)
+    struct token *token = preprocessor_next_token(compiler);
+    while (token)
     {
+        if (token_is_symbol(token, '{'))
+        {
+            vector_push(token_vec, token);
+            preprocessor_handle_typedef_body_for_brackets(compiler, token_vec);
+            token = preprocessor_next_token(compiler);
+            continue;
+        }
+        vector_push(token_vec, token);
+        if (token_is_symbol(token, '}'))
+        {
+            break;
+        }
+
+        token = preprocessor_next_token(compiler);
+    }
+}
+void preprocessor_handle_typedef_body(struct compile_process *compiler, struct vector *token_vec, struct typedef_type *td)
+{
+    memset(td, 0, sizeof(struct typedef_type));
+    td->type = TYPEDEF_TYPE_STANDARD;
+
+    struct token *token = preprocessor_next_token(compiler);
+    bool next_is_struct_name = false;
+    if (token_is_keyword(token, "struct"))
+    {
+        next_is_struct_name = true;
+    }
+    while (token)
+    {
+        if (token_is_symbol(token, '{'))
+        {
+            // Aha we have a body here assume a structure typedef
+            td->type = TYPEDEF_TYPE_STRUCTURE_TYPEDEF;
+            vector_push(token_vec, token);
+            preprocessor_handle_typedef_body_for_brackets(compiler, token_vec);
+            token = preprocessor_next_token(compiler);
+
+            continue;
+        }
+
         if (token_is_symbol(token, ';'))
         {
             break;
         }
+
         vector_push(token_vec, token);
         token = preprocessor_next_token(compiler);
+
+        if (next_is_struct_name)
+        {
+            td->structure.sname = token->sval;
+            next_is_struct_name = false;
+        }
     }
 
-    // Okay the last element is the name
-    struct token* name_token = vector_back_or_null(token_vec);
+    struct token *name_token = vector_back_or_null(token_vec);
     if (!name_token)
     {
-        compiler_error(compiler, "Typedef expects values and a name");
+        compiler_error(compiler, "We expected a name token for your typedef");
     }
 
+    td->definition_name = name_token->sval;
+}
+
+void preprocessor_handle_typedef_token(struct compile_process *compiler)
+{
+    // We expect a format like "typedef unsigned int ABC;" the final identifier
+    // is the name of this typedef, the rest are what is represented.
+
+    struct vector *token_vec = vector_create(sizeof(struct token));
+    struct typedef_type td;
+    preprocessor_handle_typedef_body(compiler, token_vec, &td);
     // Pop off the name token
     vector_pop(token_vec);
-    
+
+    // If this is a typedef struct we need to push the structure body
+    // to the output so it can be found.
+    if (td.type == TYPEDEF_TYPE_STRUCTURE_TYPEDEF)
+    {
+        preprocessor_token_vec_push_dst(compiler, token_vec);
+        // Let's also push a semicolon
+        preprocessor_token_push_semicolon(compiler);
+
+        // We need to create a new token vector which contains "struct struct_name"
+        // for the value. This will then assign a typedef to the structure
+        // that we just dealt with.
+        token_vec = vector_create(sizeof(struct token));
+        preprocessor_token_vec_push_keyword_and_identifier(token_vec, "struct", td.structure.sname);
+    }
     struct preprocessor *preprocessor = compiler->preprocessor;
-    preprocessor_definition_create_typedef(name_token->sval, token_vec, preprocessor);
+    preprocessor_definition_create_typedef(td.definition_name, token_vec, preprocessor);
 }
 
 void preprocessor_read_to_end_if(struct compile_process *compiler, bool true_clause)
@@ -1049,9 +1152,9 @@ void preprocessor_handle_symbol(struct compile_process *compiler, struct token *
     }
 }
 
-void preprocessor_handle_keyword(struct compile_process* compiler, struct token* token)
+void preprocessor_handle_keyword(struct compile_process *compiler, struct token *token)
 {
-    if(preprocessor_token_is_typedef(token))
+    if (preprocessor_token_is_typedef(token))
     {
         preprocessor_handle_typedef_token(compiler);
     }
@@ -1074,7 +1177,7 @@ void preprocessor_handle_token(struct compile_process *compiler, struct token *t
 
     case TOKEN_TYPE_KEYWORD:
         preprocessor_handle_keyword(compiler, token);
-    break;
+        break;
 
     case TOKEN_TYPE_IDENTIFIER:
         preprocessor_handle_identifier(compiler, token);

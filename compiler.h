@@ -779,6 +779,7 @@ enum
     NODE_TYPE_STATEMENT_RETURN,
     NODE_TYPE_STATEMENT_IF,   // Used for both IF and ELSE IF statements
     NODE_TYPE_STATEMENT_ELSE, // This is an ELSE statement of an IF
+    NODE_TYPE_STATEMENT_WHILE, // While statements i.e while(1) { }
     NODE_TYPE_UNARY,
     NODE_TYPE_STRUCT,
     NODE_TYPE_BRACKET // Array brackets i.e [50][20] Two node brackets.
@@ -959,6 +960,16 @@ struct node
                 // Body node i.e { printf("test"); }
                 struct node *body_node;
             } _else;
+
+
+            // While statements. i.e while(1) {}
+            struct while_stmt
+            {
+                struct node* cond;
+                struct node* body;
+            } _while;
+            
+
         } stmt;
     };
 

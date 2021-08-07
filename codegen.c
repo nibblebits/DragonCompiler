@@ -1241,6 +1241,13 @@ void codegen_generate_expressionable(struct node *node, struct history *history)
     }
 }
 
+void codegen_generate_brand_new_expression(struct node* node, struct history* history)
+{  
+    register_unset_flag(REGISTER_EAX_IS_USED);
+    codegen_generate_expressionable(node, history);
+    register_unset_flag(REGISTER_EAX_IS_USED);
+}
+
 static void codegen_generate_variable_for_array(struct node *node)
 {
     if (node->var.val != NULL)
@@ -1441,7 +1448,7 @@ void _codegen_generate_if_stmt(struct node *node, int end_label_id)
 {
     struct history history;
     int if_label_id = codegen_label_count();
-    codegen_generate_expressionable(node->stmt._if.cond_node, history_begin(&history, 0));
+    codegen_generate_brand_new_expression(node->stmt._if.cond_node, history_begin(&history, 0));
     asm_push("cmp eax, 0");
     asm_push("je .if_%i", if_label_id);
     // Unset the EAX register flag we are not using it now
@@ -1462,6 +1469,24 @@ void codegen_generate_if_stmt(struct node *node)
     _codegen_generate_if_stmt(node, end_label_id);
 
     asm_push(".if_end_%i:", end_label_id);
+}
+
+void codegen_generate_while_stmt(struct node* node)
+{
+    struct history history;
+    int while_start_id = codegen_label_count();
+    int while_end_id = codegen_label_count();
+    asm_push(".while_start_%i:", while_start_id);
+
+    // Generate the expressionable condition
+    codegen_generate_brand_new_expression(node->stmt._while.cond, history_begin(&history, 0));
+    asm_push("cmp eax, 0");
+    asm_push("je .while_end_%i", while_end_id);
+    // Okay, let us now generate the body
+    codegen_generate_body(node->stmt._while.body);
+    asm_push("jmp .while_start_%i", while_start_id);
+    asm_push(".while_end_%i:", while_end_id);
+
 }
 
 void codegen_generate_statement(struct node *node)
@@ -1488,6 +1513,10 @@ void codegen_generate_statement(struct node *node)
 
     case NODE_TYPE_STATEMENT_IF:
         codegen_generate_if_stmt(node);
+        break;
+
+    case NODE_TYPE_STATEMENT_WHILE:
+        codegen_generate_while_stmt(node);
         break;
     }
 }

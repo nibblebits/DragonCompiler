@@ -496,6 +496,11 @@ void make_if_node(struct node *cond_node, struct node *body_node, struct node *n
     node_create(&(struct node){NODE_TYPE_STATEMENT_IF, .stmt._if.cond_node = cond_node, .stmt._if.body_node = body_node, .stmt._if.next = next_node});
 }
 
+void make_while_node(struct node* cond_node, struct node* body_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_WHILE, .stmt._while.cond=cond_node, .stmt._while.body=body_node});
+}
+
 void make_else_node(struct node *body_node)
 {
     node_create(&(struct node){NODE_TYPE_STATEMENT_ELSE, .stmt._else.body_node = body_node});
@@ -924,6 +929,21 @@ struct node *parse_else_or_else_if(struct history *history)
 
     return node;
 }
+
+void parse_while(struct history* history)
+{
+    expect_keyword("while");
+    expect_op("(");
+    parse_expressionable(history);
+    expect_sym(')');
+
+    struct node* cond_node = node_pop();
+    size_t var_size = 0;
+    parse_body(&var_size, history);
+    struct node* body_node = node_pop();
+    make_while_node(cond_node, body_node);
+}
+
 void parse_if(struct history *history)
 {
     expect_keyword("if");
@@ -975,6 +995,11 @@ void parse_keyword(struct history *history)
     else if (S_EQ(token->sval, "if"))
     {
         parse_if(history);
+        return;
+    }
+    else if(S_EQ(token->sval, "while"))
+    {
+        parse_while(history);
         return;
     }
 

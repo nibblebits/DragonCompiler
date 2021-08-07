@@ -130,6 +130,15 @@ else
     echo -e "typedef macro passed"
 fi
 
+echo -e "Running while statement test"
+./build/while_test
+if [ $? -ne 2 ]; then
+    echo -e "while statement test failed"
+    res_code=1
+else
+    echo -e "while statement test passed"
+fi
+
 
 
 

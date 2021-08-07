@@ -67,6 +67,9 @@ bool is_keyword(const char *str)
            S_EQ(str, "sizeof") ||
            S_EQ(str, "if") ||
            S_EQ(str, "else") ||
+           S_EQ(str, "while") ||
+           S_EQ(str, "for") ||
+           S_EQ(str, "do") ||
            S_EQ(str, "typedef");
 }
 

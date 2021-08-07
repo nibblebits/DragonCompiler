@@ -1,11 +1,11 @@
 int main()
 {
     int x;
-    x = 5;
+    x = 60;
     do
     {
         x = x -1;
     }
-    while(x != 0);
-
+    while(x != 3);
+    return x;
 }

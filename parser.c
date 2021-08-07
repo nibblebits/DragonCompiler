@@ -501,6 +501,11 @@ void make_while_node(struct node* cond_node, struct node* body_node)
     node_create(&(struct node){NODE_TYPE_STATEMENT_WHILE, .stmt._while.cond=cond_node, .stmt._while.body=body_node});
 }
 
+void make_do_while_node(struct node* body_node, struct node* cond_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_DO_WHILE, .stmt._do_while.cond=cond_node, .stmt._do_while.body=body_node});
+}
+
 void make_else_node(struct node *body_node)
 {
     node_create(&(struct node){NODE_TYPE_STATEMENT_ELSE, .stmt._else.body_node = body_node});
@@ -903,6 +908,15 @@ void parse_sizeof(struct history *history)
     expect_sym(')');
 }
 
+void parse_keyword_parentheses_expression(const char* keyword)
+{
+    struct history history;
+    expect_keyword(keyword);
+    expect_op("(");
+    parse_expressionable(history_begin(&history, 0));
+    expect_sym(')');
+}
+
 void parse_if(struct history *history);
 struct node *parse_else_or_else_if(struct history *history)
 {
@@ -932,16 +946,26 @@ struct node *parse_else_or_else_if(struct history *history)
 
 void parse_while(struct history* history)
 {
-    expect_keyword("while");
-    expect_op("(");
-    parse_expressionable(history);
-    expect_sym(')');
-
+    parse_keyword_parentheses_expression("while");
     struct node* cond_node = node_pop();
     size_t var_size = 0;
     parse_body(&var_size, history);
     struct node* body_node = node_pop();
     make_while_node(cond_node, body_node);
+}
+
+void parse_do_while(struct history* history)
+{
+    expect_keyword("do");
+    size_t var_size = 0;
+    parse_body(&var_size, history);
+    struct node* body_node = node_pop();
+    parse_keyword_parentheses_expression("while");
+    struct node* cond_node = node_pop();
+    // We always have a semicolon after a do while ;)
+    expect_sym(';');
+
+    make_do_while_node(body_node, cond_node);
 }
 
 void parse_if(struct history *history)
@@ -1000,6 +1024,11 @@ void parse_keyword(struct history *history)
     else if(S_EQ(token->sval, "while"))
     {
         parse_while(history);
+        return;
+    }
+    else if(S_EQ(token->sval, "do"))
+    {
+        parse_do_while(history);
         return;
     }
 

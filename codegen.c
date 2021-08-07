@@ -1489,6 +1489,17 @@ void codegen_generate_while_stmt(struct node* node)
 
 }
 
+void codegen_generate_do_while_stmt(struct node* node)
+{
+    struct history history;
+    int do_while_start_id = codegen_label_count();
+    asm_push(".do_while_start_%i:", do_while_start_id);
+    codegen_generate_body(node->stmt._do_while.body);
+    codegen_generate_brand_new_expression(node->stmt._do_while.cond, history_begin(&history, 0));
+    asm_push("cmp eax, 0");
+    asm_push("jne .do_while_start_%i", do_while_start_id);
+}
+
 void codegen_generate_statement(struct node *node)
 {
     struct history history;
@@ -1517,6 +1528,10 @@ void codegen_generate_statement(struct node *node)
 
     case NODE_TYPE_STATEMENT_WHILE:
         codegen_generate_while_stmt(node);
+        break;
+
+    case NODE_TYPE_STATEMENT_DO_WHILE:
+        codegen_generate_do_while_stmt(node);
         break;
     }
 }

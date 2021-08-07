@@ -139,6 +139,16 @@ else
     echo -e "while statement test passed"
 fi
 
+echo -e "Running do while statement test"
+./build/do_while_test
+if [ $? -ne 3 ]; then
+    echo -e "do while statementtest failed"
+    res_code=1
+else
+    echo -e "do while statement test passed"
+fi
+
+
 
 
 

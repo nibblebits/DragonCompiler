@@ -70,6 +70,8 @@ bool is_keyword(const char *str)
            S_EQ(str, "while") ||
            S_EQ(str, "for") ||
            S_EQ(str, "do") ||
+           S_EQ(str, "break") || 
+           S_EQ(str, "continue") || 
            S_EQ(str, "typedef");
 }
 

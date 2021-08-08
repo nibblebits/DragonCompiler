@@ -318,6 +318,11 @@ struct code_generator
 
     // Vector of struct string_table_element*
     struct vector *string_table;
+
+    // A vector/stack of struct codegen_exit_point
+    // In the event of a "break" we must go to the current exit point.
+    // i.e .exit_point_%i where %i is stored in this exit_points vector;
+    struct vector* exit_points;
 };
 
 enum
@@ -781,6 +786,7 @@ enum
     NODE_TYPE_STATEMENT_ELSE, // This is an ELSE statement of an IF
     NODE_TYPE_STATEMENT_WHILE, // While statements i.e while(1) { }
     NODE_TYPE_STATEMENT_DO_WHILE,
+    NODE_TYPE_STATEMENT_BREAK,
     NODE_TYPE_UNARY,
     NODE_TYPE_STRUCT,
     NODE_TYPE_BRACKET // Array brackets i.e [50][20] Two node brackets.
@@ -975,7 +981,7 @@ struct node
                 struct node* body;
                 struct node* cond;
             } _do_while;
-            
+
         } stmt;
     };
 

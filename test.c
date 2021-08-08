@@ -4,7 +4,16 @@ int main()
     x = 5;
     do
     {
-        x = x -1;
+        int d;
+        if(1)
+        {
+            int y;
+            int e;
+            int dd;
+            int mm;
+            break;
+            x = x -1;
+        }
     }
     while(x != 0);
 

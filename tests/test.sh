@@ -142,12 +142,20 @@ fi
 echo -e "Running do while statement test"
 ./build/do_while_test
 if [ $? -ne 3 ]; then
-    echo -e "do while statementtest failed"
+    echo -e "do while statement test failed"
     res_code=1
 else
     echo -e "do while statement test passed"
 fi
 
+echo -e "Running break test"
+./build/do_while_test
+if [ $? -ne 3 ]; then
+    echo -e "break test failed"
+    res_code=1
+else
+    echo -e "break test passed"
+fi
 
 
 

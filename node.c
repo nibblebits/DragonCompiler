@@ -180,5 +180,6 @@ size_t node_sum_scope_size(struct node* node)
         return 0;
     }
 
-    return node_sum_scope_size(node->owner) + node->owner->body.size;
+    size_t result = node_sum_scope_size(node->owner) + node->owner->body.size;
+    return result;
 }

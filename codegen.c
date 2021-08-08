@@ -12,6 +12,12 @@ static struct expression_state blank_state = {};
 #define codegen_err(...) \
     compiler_error(current_process, __VA_ARGS__)
 
+struct codegen_exit_point
+{
+    // The ID of this exit point.
+    int id;
+};
+
 // Represents a history expression
 struct history_exp
 {
@@ -477,6 +483,45 @@ static const char *codegen_get_fmt_for_value(struct node *value_node, struct res
     // The entity address is all we care about.
     sprintf(tmp_buf, "[%s]", codegen_entity_private(entity)->address);
     return tmp_buf;
+}
+
+
+void codegen_register_exit_point(int exit_point_id)
+{
+    struct code_generator* gen = current_process->generator;
+    struct codegen_exit_point* exit_point = calloc(sizeof(struct codegen_exit_point), 1);
+    exit_point->id = exit_point_id;
+    vector_push(gen->exit_points, &exit_point);
+}
+
+struct codegen_exit_point* codegen_current_exit_point()
+{
+    struct code_generator* gen = current_process->generator;
+    return vector_back_ptr_or_null(gen->exit_points);
+}
+
+void codegen_begin_exit_point()
+{
+    int exit_point_id = codegen_label_count();
+    codegen_register_exit_point(exit_point_id);
+}
+
+void codegen_end_exit_point()
+{
+    struct code_generator* gen = current_process->generator;
+    struct codegen_exit_point* exit_point = codegen_current_exit_point();
+    asm_push(".exit_point_%i:", exit_point->id);
+    assert(exit_point);
+    free(exit_point);
+    vector_pop(gen->exit_points);
+}
+
+void codegen_goto_exit_point(struct node* current_node)
+{
+    struct code_generator* gen = current_process->generator;
+    struct codegen_exit_point* exit_point = codegen_current_exit_point();
+    codegen_stack_add(C_ALIGN(node_sum_scope_size(current_node)));
+    asm_push("jmp .exit_point_%i", exit_point->id);
 }
 
 void codegen_gen_cmp(const char *value, const char *set_ins)
@@ -1492,12 +1537,20 @@ void codegen_generate_while_stmt(struct node* node)
 void codegen_generate_do_while_stmt(struct node* node)
 {
     struct history history;
+    codegen_begin_exit_point();
     int do_while_start_id = codegen_label_count();
     asm_push(".do_while_start_%i:", do_while_start_id);
     codegen_generate_body(node->stmt._do_while.body);
     codegen_generate_brand_new_expression(node->stmt._do_while.cond, history_begin(&history, 0));
     asm_push("cmp eax, 0");
     asm_push("jne .do_while_start_%i", do_while_start_id);
+    codegen_end_exit_point();
+}
+
+void codegen_generate_break_stmt(struct node* node)
+{
+    // Okay we have a break, we must jump to the last registered exit point.
+    codegen_goto_exit_point(node);
 }
 
 void codegen_generate_statement(struct node *node)
@@ -1532,6 +1585,10 @@ void codegen_generate_statement(struct node *node)
 
     case NODE_TYPE_STATEMENT_DO_WHILE:
         codegen_generate_do_while_stmt(node);
+        break;
+
+    case NODE_TYPE_STATEMENT_BREAK:
+        codegen_generate_break_stmt(node);
         break;
     }
 }
@@ -1667,5 +1724,6 @@ struct code_generator *codegenerator_new(struct compile_process *process)
     struct code_generator *generator = calloc(sizeof(struct code_generator), 1);
     generator->states.expr = vector_create(sizeof(struct expression_state *));
     generator->string_table = vector_create(sizeof(struct string_table_element *));
+    generator->exit_points = vector_create(sizeof(struct exit_point*));
     return generator;
 }

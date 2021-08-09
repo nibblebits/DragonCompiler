@@ -323,6 +323,11 @@ struct code_generator
     // In the event of a "break" we must go to the current exit point.
     // i.e .exit_point_%i where %i is stored in this exit_points vector;
     struct vector* exit_points;
+
+    // A vector/stack of the struct codegen_entry_point
+    // In the even of a "continue" we must go to the current entry point.
+    // This will allow a loop to restart.
+    struct vector* entry_points;
 };
 
 enum
@@ -787,6 +792,7 @@ enum
     NODE_TYPE_STATEMENT_WHILE, // While statements i.e while(1) { }
     NODE_TYPE_STATEMENT_DO_WHILE,
     NODE_TYPE_STATEMENT_BREAK,
+    NODE_TYPE_STATEMENT_CONTINUE,
     NODE_TYPE_UNARY,
     NODE_TYPE_STRUCT,
     NODE_TYPE_BRACKET // Array brackets i.e [50][20] Two node brackets.

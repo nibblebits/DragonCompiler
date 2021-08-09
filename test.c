@@ -2,19 +2,12 @@ int main()
 {
     int x;
     x = 5;
-    do
+    while(x != 0)
     {
         int d;
-        if(1)
-        {
-            int y;
-            int e;
-            int dd;
-            int mm;
-            break;
-            x = x -1;
-        }
+        x = x -1;
+        continue;
+
     }
-    while(x != 0);
 
 }

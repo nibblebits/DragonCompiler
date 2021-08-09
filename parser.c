@@ -496,6 +496,11 @@ void make_break_node()
     node_create(&(struct node){NODE_TYPE_STATEMENT_BREAK});
 }
 
+void make_continue_node()
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_CONTINUE});
+}
+
 void make_if_node(struct node *cond_node, struct node *body_node, struct node *next_node)
 {
     node_create(&(struct node){NODE_TYPE_STATEMENT_IF, .stmt._if.cond_node = cond_node, .stmt._if.body_node = body_node, .stmt._if.next = next_node});
@@ -967,6 +972,15 @@ void parse_break(struct history* history)
     make_break_node();
 }
 
+void parse_continue(struct history* history)
+{
+    expect_keyword("continue");
+    expect_sym(';');
+
+    make_continue_node();
+}
+
+
 void parse_do_while(struct history* history)
 {
     expect_keyword("do");
@@ -1047,6 +1061,11 @@ void parse_keyword(struct history *history)
     else if(S_EQ(token->sval, "break"))
     {
         parse_break(history);
+        return;
+    }
+    else if(S_EQ(token->sval, "continue"))
+    {
+        parse_continue(history);
         return;
     }
 

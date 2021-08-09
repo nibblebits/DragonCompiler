@@ -18,6 +18,15 @@ struct codegen_exit_point
     int id;
 };
 
+/**
+ * Entry points represent the start of loop
+ */
+struct codegen_entry_point
+{
+    // The ID of this entry point;
+    int id;
+};
+
 // Represents a history expression
 struct history_exp
 {
@@ -522,6 +531,45 @@ void codegen_goto_exit_point(struct node* current_node)
     struct codegen_exit_point* exit_point = codegen_current_exit_point();
     codegen_stack_add(C_ALIGN(node_sum_scope_size(current_node)));
     asm_push("jmp .exit_point_%i", exit_point->id);
+}
+
+
+void codegen_register_entry_point(int entry_point_id)
+{
+    struct code_generator* gen = current_process->generator;
+    struct codegen_entry_point* entry_point = calloc(sizeof(struct codegen_entry_point), 1);
+    entry_point->id = entry_point_id;
+    vector_push(gen->entry_points, &entry_point);
+}
+
+struct codegen_entry_point* codegen_current_entry_point()
+{
+    struct code_generator* gen = current_process->generator;
+    return vector_back_ptr_or_null(gen->entry_points);
+}
+
+void codegen_begin_entry_point()
+{
+    int entry_point_id = codegen_label_count();
+    codegen_register_entry_point(entry_point_id);
+    asm_push(".entry_point_%i:", entry_point_id);
+}
+
+void codegen_end_entry_point()
+{
+    struct code_generator* gen = current_process->generator;
+    struct codegen_entry_point* entry_point = codegen_current_entry_point();
+    assert(entry_point);
+    free(entry_point);
+    vector_pop(gen->entry_points);
+}
+
+void codegen_goto_entry_point(struct node* current_node)
+{
+    struct code_generator* gen = current_process->generator;
+    struct codegen_entry_point* entry_point = codegen_current_entry_point();
+    codegen_stack_add(C_ALIGN(node_sum_scope_size(current_node)));
+    asm_push("jmp .entry_point_%i", entry_point->id);
 }
 
 void codegen_gen_cmp(const char *value, const char *set_ins)
@@ -1519,6 +1567,8 @@ void codegen_generate_if_stmt(struct node *node)
 void codegen_generate_while_stmt(struct node* node)
 {
     struct history history;
+    codegen_begin_entry_point();
+    codegen_begin_exit_point();
     int while_start_id = codegen_label_count();
     int while_end_id = codegen_label_count();
     asm_push(".while_start_%i:", while_start_id);
@@ -1531,12 +1581,14 @@ void codegen_generate_while_stmt(struct node* node)
     codegen_generate_body(node->stmt._while.body);
     asm_push("jmp .while_start_%i", while_start_id);
     asm_push(".while_end_%i:", while_end_id);
-
+    codegen_end_exit_point();
+    codegen_end_entry_point();
 }
 
 void codegen_generate_do_while_stmt(struct node* node)
 {
     struct history history;
+    codegen_begin_entry_point();
     codegen_begin_exit_point();
     int do_while_start_id = codegen_label_count();
     asm_push(".do_while_start_%i:", do_while_start_id);
@@ -1545,12 +1597,18 @@ void codegen_generate_do_while_stmt(struct node* node)
     asm_push("cmp eax, 0");
     asm_push("jne .do_while_start_%i", do_while_start_id);
     codegen_end_exit_point();
+    codegen_end_entry_point();
 }
 
 void codegen_generate_break_stmt(struct node* node)
 {
     // Okay we have a break, we must jump to the last registered exit point.
     codegen_goto_exit_point(node);
+}
+
+void codegen_generate_continue_stmt(struct node* node)
+{
+    codegen_goto_entry_point(node);
 }
 
 void codegen_generate_statement(struct node *node)
@@ -1589,6 +1647,10 @@ void codegen_generate_statement(struct node *node)
 
     case NODE_TYPE_STATEMENT_BREAK:
         codegen_generate_break_stmt(node);
+        break;
+
+    case NODE_TYPE_STATEMENT_CONTINUE:
+        codegen_generate_continue_stmt(node);
         break;
     }
 }
@@ -1725,5 +1787,6 @@ struct code_generator *codegenerator_new(struct compile_process *process)
     generator->states.expr = vector_create(sizeof(struct expression_state *));
     generator->string_table = vector_create(sizeof(struct string_table_element *));
     generator->exit_points = vector_create(sizeof(struct exit_point*));
+    generator->entry_points = vector_create(sizeof(struct entry_point*));
     return generator;
 }

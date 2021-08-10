@@ -708,7 +708,7 @@ void parse_body(size_t *variable_size, struct history *history)
 
     struct vector *body_vec = vector_create(sizeof(struct node *));
     // We don't have a left curly? Then this body composes of only one statement
-    if (!token_peek_next('{'))
+    if (!token_next_is_symbol('{'))
     {
         parse_body_single_statement(variable_size, body_vec, history);
         return;

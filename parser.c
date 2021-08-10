@@ -12,7 +12,7 @@
 // The current body that the parser is in
 // Note: The set body may be uninitialized and should be used as reference only
 // don't use functionality
-struct node* parser_current_body = NULL;
+struct node *parser_current_body = NULL;
 
 // First in the array = higher priority
 // This array is special, its essentially a group of arrays
@@ -79,7 +79,6 @@ struct history
 {
     // Flags for this history.
     int flags;
-
 };
 
 static struct compile_process *current_process;
@@ -161,7 +160,7 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
         // Do not use the variable size for the offset on an upward stack.
         // The reason is because PUSH instructions consume 4 bytes of the stack,
         // therefore we cannot trust anything that does not modulo into four.
-        // We will have to access everything as an integer and cast it down into 
+        // We will have to access everything as an integer and cast it down into
         // the correct data type.
 
         // The correct offset is 4 bytes since 32 bit arch's PUSH is 4 bytes long.
@@ -175,7 +174,6 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
         }
     }
 
-
     if (last_entity)
     {
         offset += last_entity->node->var.aoffset;
@@ -185,7 +183,6 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
             last_entity->node->var.padding_after = node->var.padding;
         }
     }
-
 
     bool first_entity = !last_entity;
 
@@ -345,6 +342,7 @@ static bool token_next_is_symbol(char sym)
 static struct token *token_next_expected(int type)
 {
     struct token *token = token_next();
+
     if (token->type != type)
         parse_err("Unexpected token\n");
 
@@ -387,7 +385,6 @@ static void expect_keyword(const char *keyword)
     if (next_token == NULL || next_token->type != TOKEN_TYPE_KEYWORD || !S_EQ(next_token->sval, keyword))
         parse_err("Expecting keyword %s however something else was provided", keyword);
 }
-
 
 static struct node *node_peek_or_null()
 {
@@ -481,6 +478,11 @@ void parse_single_token_to_node()
     }
 }
 
+void make_for_node(struct node *init_node, struct node *cond_node, struct node *loop_node, struct node *body_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_FOR, .stmt._for.init = init_node, .stmt._for.cond = cond_node, .stmt._for.loop = loop_node, .stmt._for.body = body_node});
+}
+
 void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
 {
     node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
@@ -506,14 +508,14 @@ void make_if_node(struct node *cond_node, struct node *body_node, struct node *n
     node_create(&(struct node){NODE_TYPE_STATEMENT_IF, .stmt._if.cond_node = cond_node, .stmt._if.body_node = body_node, .stmt._if.next = next_node});
 }
 
-void make_while_node(struct node* cond_node, struct node* body_node)
+void make_while_node(struct node *cond_node, struct node *body_node)
 {
-    node_create(&(struct node){NODE_TYPE_STATEMENT_WHILE, .stmt._while.cond=cond_node, .stmt._while.body=body_node});
+    node_create(&(struct node){NODE_TYPE_STATEMENT_WHILE, .stmt._while.cond = cond_node, .stmt._while.body = body_node});
 }
 
-void make_do_while_node(struct node* body_node, struct node* cond_node)
+void make_do_while_node(struct node *body_node, struct node *cond_node)
 {
-    node_create(&(struct node){NODE_TYPE_STATEMENT_DO_WHILE, .stmt._do_while.cond=cond_node, .stmt._do_while.body=body_node});
+    node_create(&(struct node){NODE_TYPE_STATEMENT_DO_WHILE, .stmt._do_while.cond = cond_node, .stmt._do_while.body = body_node});
 }
 
 void make_else_node(struct node *body_node)
@@ -579,7 +581,6 @@ static void parser_append_size_for_node(size_t *_variable_size, struct node *nod
     }
 }
 
-
 /**
  * Parses a single body statement and in the event the statement is a variable
  * the variable_size variable will be incremented by the size of the variable
@@ -588,9 +589,9 @@ static void parser_append_size_for_node(size_t *_variable_size, struct node *nod
 void parse_body_single_statement(size_t *variable_size, struct vector *body_vec, struct history *history)
 {
 
-      // We will create a blank body node here as we need it as a reference
+    // We will create a blank body node here as we need it as a reference
     make_body_node(NULL, 0, NULL, NULL);
-    struct node* body_node = node_pop();
+    struct node *body_node = node_pop();
     body_node->owner = parser_current_body;
     parser_current_body = body_node;
 
@@ -628,10 +629,10 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
  */
 void parse_body_multiple_statements(size_t *variable_size, struct vector *body_vec, struct history *history)
 {
-    
+
     // We will create a blank body node here as we need it as a reference
     make_body_node(NULL, 0, NULL, NULL);
-    struct node* body_node = node_pop();
+    struct node *body_node = node_pop();
     body_node->owner = parser_current_body;
     parser_current_body = body_node;
 
@@ -677,10 +678,10 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
     body_node->body.padded = padded;
     body_node->body.size = *variable_size;
     body_node->body.statements = body_vec;
-   
+
     // Let's not forget to set the old body back now that we are done with this body
     parser_current_body = body_node->owner;
-    
+
     // Push the body node back to the stack
     node_push(body_node);
 }
@@ -827,7 +828,6 @@ void parse_for_normal_unary()
     make_unary_node(unary_op, unary_operand_node);
 }
 
-
 void parser_deal_with_additional_expression()
 {
     // We got an operator? If so theirs an expression after this
@@ -918,7 +918,7 @@ void parse_sizeof(struct history *history)
     expect_sym(')');
 }
 
-void parse_keyword_parentheses_expression(const char* keyword)
+void parse_keyword_parentheses_expression(const char *keyword)
 {
     struct history history;
     expect_keyword(keyword);
@@ -954,17 +954,76 @@ struct node *parse_else_or_else_if(struct history *history)
     return node;
 }
 
-void parse_while(struct history* history)
+void parse_while(struct history *history)
 {
     parse_keyword_parentheses_expression("while");
-    struct node* cond_node = node_pop();
+    struct node *cond_node = node_pop();
     size_t var_size = 0;
     parse_body(&var_size, history);
-    struct node* body_node = node_pop();
+    struct node *body_node = node_pop();
     make_while_node(cond_node, body_node);
 }
 
-void parse_break(struct history* history)
+bool parse_for_loop_part(struct history *history)
+{
+    if (token_next_is_symbol(';'))
+    {
+        // We have nothing here i.e "for (; "
+        // Ignore it
+        token_next();
+        return false;
+    }
+
+    parse_expressionable(history);
+    // We must ignore the semicolon after each expression
+    expect_sym(';');
+    return true;
+}
+
+bool parse_for_loop_part_loop(struct history *history)
+{
+    if (token_next_is_symbol(')'))
+    {
+        return false;
+    }
+
+    parse_expressionable(history);
+    return true;
+}
+
+void parse_for(struct history *history)
+{
+    struct node *init_node = NULL;
+    struct node *cond_node = NULL;
+    struct node *loop_node = NULL;
+    struct node *body_node = NULL;
+    expect_keyword("for");
+    expect_op("(");
+    if (parse_for_loop_part(history))
+    {
+        init_node = node_pop();
+    }
+
+    if (parse_for_loop_part(history))
+    {
+        cond_node = node_pop();
+    }
+
+    if (parse_for_loop_part_loop(history))
+    {
+        loop_node = node_pop();
+    }
+    expect_sym(')');
+
+    // For loops will have a body
+    size_t variable_size = 0;
+    parse_body(&variable_size, history);
+
+    body_node = node_pop();
+    make_for_node(init_node, cond_node, loop_node, body_node);
+}
+
+void parse_break(struct history *history)
 {
     expect_keyword("break");
     expect_sym(';');
@@ -972,7 +1031,7 @@ void parse_break(struct history* history)
     make_break_node();
 }
 
-void parse_continue(struct history* history)
+void parse_continue(struct history *history)
 {
     expect_keyword("continue");
     expect_sym(';');
@@ -980,15 +1039,14 @@ void parse_continue(struct history* history)
     make_continue_node();
 }
 
-
-void parse_do_while(struct history* history)
+void parse_do_while(struct history *history)
 {
     expect_keyword("do");
     size_t var_size = 0;
     parse_body(&var_size, history);
-    struct node* body_node = node_pop();
+    struct node *body_node = node_pop();
     parse_keyword_parentheses_expression("while");
-    struct node* cond_node = node_pop();
+    struct node *cond_node = node_pop();
     // We always have a semicolon after a do while ;)
     expect_sym(';');
 
@@ -1048,22 +1106,27 @@ void parse_keyword(struct history *history)
         parse_if(history);
         return;
     }
-    else if(S_EQ(token->sval, "while"))
+    else if (S_EQ(token->sval, "while"))
     {
         parse_while(history);
         return;
     }
-    else if(S_EQ(token->sval, "do"))
+    else if (S_EQ(token->sval, "for"))
+    {
+        parse_for(history);
+        return;
+    }
+    else if (S_EQ(token->sval, "do"))
     {
         parse_do_while(history);
         return;
     }
-    else if(S_EQ(token->sval, "break"))
+    else if (S_EQ(token->sval, "break"))
     {
         parse_break(history);
         return;
     }
-    else if(S_EQ(token->sval, "continue"))
+    else if (S_EQ(token->sval, "continue"))
     {
         parse_continue(history);
         return;

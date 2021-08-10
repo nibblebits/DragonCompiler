@@ -572,6 +572,18 @@ void codegen_goto_entry_point(struct node* current_node)
     asm_push("jmp .entry_point_%i", entry_point->id);
 }
 
+void codegen_begin_entry_exit_point()
+{
+    codegen_begin_entry_point();
+    codegen_begin_exit_point();
+}
+
+void codegen_end_entry_exit_point()
+{
+    codegen_end_entry_point();
+    codegen_end_exit_point();
+}
+
 void codegen_gen_cmp(const char *value, const char *set_ins)
 {
     asm_push("cmp eax, %s", value);
@@ -1567,8 +1579,7 @@ void codegen_generate_if_stmt(struct node *node)
 void codegen_generate_while_stmt(struct node* node)
 {
     struct history history;
-    codegen_begin_entry_point();
-    codegen_begin_exit_point();
+    codegen_begin_entry_exit_point();
     int while_start_id = codegen_label_count();
     int while_end_id = codegen_label_count();
     asm_push(".while_start_%i:", while_start_id);
@@ -1581,23 +1592,57 @@ void codegen_generate_while_stmt(struct node* node)
     codegen_generate_body(node->stmt._while.body);
     asm_push("jmp .while_start_%i", while_start_id);
     asm_push(".while_end_%i:", while_end_id);
-    codegen_end_exit_point();
-    codegen_end_entry_point();
+    codegen_end_entry_exit_point();
 }
 
 void codegen_generate_do_while_stmt(struct node* node)
 {
     struct history history;
-    codegen_begin_entry_point();
-    codegen_begin_exit_point();
+    codegen_begin_entry_exit_point();
     int do_while_start_id = codegen_label_count();
     asm_push(".do_while_start_%i:", do_while_start_id);
     codegen_generate_body(node->stmt._do_while.body);
     codegen_generate_brand_new_expression(node->stmt._do_while.cond, history_begin(&history, 0));
     asm_push("cmp eax, 0");
     asm_push("jne .do_while_start_%i", do_while_start_id);
-    codegen_end_exit_point();
-    codegen_end_entry_point();
+    codegen_end_entry_exit_point();
+}
+
+void codegen_generate_for_stmt(struct node* node)
+{
+    struct for_stmt* for_stmt = &node->stmt._for;
+    struct history history;
+    codegen_begin_entry_exit_point();
+    int for_loop_start_id = codegen_label_count();
+    int for_loop_end_id = codegen_label_count();
+    if (for_stmt->init)
+    {
+        // We have our FOR loop initialization, lets initialize.
+        codegen_generate_brand_new_expression(for_stmt->init, history_begin(&history, 0));
+    }
+
+    asm_push(".for_loop%i:", for_loop_start_id);
+    if (for_stmt->cond)
+    {
+        // We have our FOR loop condition, lets condition it.
+        codegen_generate_brand_new_expression(for_stmt->cond, history_begin(&history, 0));
+        asm_push("cmp eax, 0");
+        asm_push("je .for_loop_end%i", for_loop_end_id);
+    }
+
+    if (for_stmt->body)
+    {
+        codegen_generate_body(for_stmt->body);
+    }
+
+    if (for_stmt->loop)
+    {
+        codegen_generate_brand_new_expression(for_stmt->loop, history_begin(&history, 0));
+    }
+    asm_push("jmp .for_loop%i", for_loop_start_id);
+    asm_push(".for_loop_end%i:", for_loop_end_id);
+    codegen_end_entry_exit_point();
+
 }
 
 void codegen_generate_break_stmt(struct node* node)
@@ -1644,6 +1689,10 @@ void codegen_generate_statement(struct node *node)
     case NODE_TYPE_STATEMENT_DO_WHILE:
         codegen_generate_do_while_stmt(node);
         break;
+
+    case NODE_TYPE_STATEMENT_FOR:
+        codegen_generate_for_stmt(node);
+    break;
 
     case NODE_TYPE_STATEMENT_BREAK:
         codegen_generate_break_stmt(node);

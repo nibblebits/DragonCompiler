@@ -157,6 +157,15 @@ else
     echo -e "break test passed"
 fi
 
+echo -e "Running for loop test"
+./build/for_loop_test
+if [ $? -ne 26 ]; then
+    echo -e "for loop test failed"
+    res_code=1
+else
+    echo -e "for loop test test passed"
+fi
+
 
 
 

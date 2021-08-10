@@ -791,6 +791,7 @@ enum
     NODE_TYPE_STATEMENT_ELSE, // This is an ELSE statement of an IF
     NODE_TYPE_STATEMENT_WHILE, // While statements i.e while(1) { }
     NODE_TYPE_STATEMENT_DO_WHILE,
+    NODE_TYPE_STATEMENT_FOR,
     NODE_TYPE_STATEMENT_BREAK,
     NODE_TYPE_STATEMENT_CONTINUE,
     NODE_TYPE_UNARY,
@@ -987,6 +988,14 @@ struct node
                 struct node* body;
                 struct node* cond;
             } _do_while;
+
+            struct for_stmt
+            {
+                struct node* init;
+                struct node* cond;
+                struct node* loop;
+                struct node* body;
+            } _for;
 
         } stmt;
     };

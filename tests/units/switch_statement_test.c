@@ -16,9 +16,11 @@ int main()
             switch(5)
             {
                 case 1:
+                case 6:
                     res = 5;
                 break;
                 case 5:
+                case 7:
                     res = 10;
                 break;
             }
@@ -31,6 +33,16 @@ int main()
             res = 2;
             break;
         }
+    }
+
+    switch(4)
+    {
+        case 2:
+
+        break;
+
+        default:
+            res = res + 7;
     }
 
     return res;

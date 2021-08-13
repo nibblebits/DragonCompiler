@@ -77,6 +77,14 @@ static struct op_precedence_group op_precedence[TOTAL_OPERATOR_GROUPS] = {
 };
 
 
+struct history_cases
+{
+    // A vector of struct parsed_switch_case
+    struct vector* cases;
+    // Do we have a default case in the switch statement
+    bool has_default_case;
+};
+
 struct history
 {
     // Flags for this history.
@@ -84,8 +92,11 @@ struct history
     
     struct parser_history_switch
     {
-        // A vector of struct parsed_switch_case
-        struct vector* cases;
+        // Must be a pointer because history is cloned as we go down the stack
+        // we cant pass values up only down.
+        // With a pointer the history_cases can maintain its value throughout a parse
+        // and wont be cloned.
+        struct history_cases* case_data;
     } _switch;
 };
 
@@ -133,7 +144,8 @@ static struct history *history_begin(struct history *history_out, int flags)
 struct parser_history_switch parser_new_switch_statement(struct history* history)
 {
     memset(&history->_switch, 0x00, sizeof(history->_switch));
-    history->_switch.cases = vector_create(sizeof(struct parsed_switch_case));
+    history->_switch.case_data = calloc(sizeof(struct history_cases), 1);
+    history->_switch.case_data->cases = vector_create(sizeof(struct parsed_switch_case));
     history->flags |= HISTORY_FLAG_IN_SWITCH_STATEMENT;
     return history->_switch;
 }
@@ -148,7 +160,7 @@ void parser_register_case(struct history* history, struct node* case_node)
     assert(history->flags & HISTORY_FLAG_IN_SWITCH_STATEMENT);
     struct parsed_switch_case scase;
     scase.index = case_node->stmt._case.exp->llnum;
-    vector_push(history->_switch.cases, &scase);
+    vector_push(history->_switch.case_data->cases, &scase);
 }
 
 // Simple bitmask for scope entity rules.
@@ -520,9 +532,14 @@ void make_case_node(struct node* exp_node)
     node_create(&(struct node){NODE_TYPE_STATEMENT_CASE, .stmt._case.exp=exp_node});
 }
 
-void make_switch_node(struct node* exp_node, struct node* body_node, struct vector* cases)
+void make_default_node()
 {
-    node_create(&(struct node){NODE_TYPE_STATEMENT_SWITCH, .stmt._switch.exp=exp_node, .stmt._switch.body=body_node, .stmt._switch.cases=cases});
+    node_create(&(struct node){NODE_TYPE_STATEMENT_DEFAULT});
+}
+
+void make_switch_node(struct node* exp_node, struct node* body_node, struct vector* cases, bool has_default_case)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_SWITCH, .stmt._switch.exp=exp_node, .stmt._switch.body=body_node, .stmt._switch.cases=cases, .stmt._switch.has_default_case=has_default_case});
 }
 
 void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
@@ -1084,6 +1101,15 @@ void parse_case(struct history* history)
     parser_register_case(history, case_node);
 }
 
+void parse_default(struct history* history)
+{
+    expect_keyword("default");
+    expect_sym(':');
+    make_default_node();
+
+    history->_switch.case_data->has_default_case = true;
+}
+
 void parse_switch(struct history* history)
 {
     struct parser_history_switch switch_history = parser_new_switch_statement(history);
@@ -1093,7 +1119,7 @@ void parse_switch(struct history* history)
     size_t variable_size = 0;
     parse_body(&variable_size, history_down(history, history->flags));
     struct node* body_node = node_pop();
-    make_switch_node(switch_exp_node, body_node, switch_history.cases);
+    make_switch_node(switch_exp_node, body_node, switch_history.case_data->cases, switch_history.case_data->has_default_case);
     parser_end_switch_statement(&switch_history);
 }
 
@@ -1213,6 +1239,11 @@ void parse_keyword(struct history *history)
     else if(S_EQ(token->sval, "case"))
     {
         parse_case(history);
+        return;
+    }
+    else if(S_EQ(token->sval, "default"))
+    {
+        parse_default(history);
         return;
     }
 

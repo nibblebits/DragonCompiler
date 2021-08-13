@@ -524,6 +524,13 @@ void codegen_end_exit_point()
     vector_pop(gen->exit_points);
 }
 
+void codegen_goto_exit_point_maintain_stack(struct node *node)
+{
+    struct code_generator *gen = current_process->generator;
+    struct codegen_exit_point *exit_point = codegen_current_exit_point();
+    asm_push("jmp .exit_point_%i", exit_point->id);
+}
+
 void codegen_goto_exit_point(struct node *current_node)
 {
     struct code_generator *gen = current_process->generator;
@@ -1685,12 +1692,12 @@ void codegen_generate_for_stmt(struct node *node)
     codegen_end_entry_exit_point();
 }
 
-void codegen_generate_switch_case_stmt(struct node* node)
+void codegen_generate_switch_case_stmt(struct node *node)
 {
     // We don't yet support numeric expressions for cases. I.e 50+20 in a case is 100% valid.
     // We do not support that yet, static numbers only, no expressions supported in a case.
 
-    struct node* case_stmt_exp = node->stmt._case.exp;
+    struct node *case_stmt_exp = node->stmt._case.exp;
     assert(case_stmt_exp->type == NODE_TYPE_NUMBER);
     struct history history;
     codegen_begin_case_statement(case_stmt_exp->llnum);
@@ -1698,19 +1705,35 @@ void codegen_generate_switch_case_stmt(struct node* node)
     codegen_end_case_statement();
 }
 
-void codegen_generate_switch_stmt_case_jumps(struct node* node)
+void codegen_generate_switch_default_stmt(struct node *node)
+{
+    asm_push("; DEFAULT CASE");
+    struct code_generator *generator = current_process->generator;
+    struct generator_switch_stmt *switch_stmt_data = &generator->_switch;
+    asm_push(".switch_stmt_%i_case_default:", switch_stmt_data->current.id);
+}
+
+void codegen_generate_switch_stmt_case_jumps(struct node *node)
 {
     vector_set_peek_pointer(node->stmt._switch.cases, 0);
-    struct parsed_switch_case* switch_case = vector_peek(node->stmt._switch.cases);
-    while(switch_case)
+    struct parsed_switch_case *switch_case = vector_peek(node->stmt._switch.cases);
+    while (switch_case)
     {
         asm_push("cmp eax, %i", switch_case->index);
         asm_push("je .switch_stmt_%i_case_%i", codegen_switch_id(), switch_case->index);
         switch_case = vector_peek(node->stmt._switch.cases);
     }
 
-    // Not equal to any case? Then go to the exit point
-    codegen_goto_exit_point(node);
+    // Do we have a default case in the switch statement?
+    // Then lets jump to the default label
+    if (node->stmt._switch.has_default_case)
+    {
+        asm_push("jmp .switch_stmt_%i_case_default", codegen_switch_id());
+        return;
+    }
+    // Not equal to any case? Then go to the exit point, no need to restore
+    // any stack of any kind as we have not even gone into the body of the switch
+    codegen_goto_exit_point_maintain_stack(node);
 }
 void codegen_generate_switch_stmt(struct node *node)
 {
@@ -1718,7 +1741,7 @@ void codegen_generate_switch_stmt(struct node *node)
     struct history history;
     codegen_begin_entry_exit_point();
     codegen_begin_switch_statement();
-    
+
     codegen_generate_brand_new_expression(node->stmt._switch.exp, history_begin(&history, 0));
     codegen_generate_switch_stmt_case_jumps(node);
 
@@ -1785,6 +1808,11 @@ void codegen_generate_statement(struct node *node)
     case NODE_TYPE_STATEMENT_CASE:
         codegen_generate_switch_case_stmt(node);
         break;
+
+    case NODE_TYPE_STATEMENT_DEFAULT:
+        codegen_generate_switch_default_stmt(node);
+        break;
+
     case NODE_TYPE_STATEMENT_BREAK:
         codegen_generate_break_stmt(node);
         break;

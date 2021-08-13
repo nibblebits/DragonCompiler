@@ -818,6 +818,7 @@ enum
     NODE_TYPE_STATEMENT_CONTINUE,
     NODE_TYPE_STATEMENT_SWITCH,
     NODE_TYPE_STATEMENT_CASE,
+    NODE_TYPE_STATEMENT_DEFAULT,
     NODE_TYPE_UNARY,
     NODE_TYPE_STRUCT,
     NODE_TYPE_BRACKET // Array brackets i.e [50][20] Two node brackets.
@@ -1026,6 +1027,7 @@ struct node
                 struct node* exp;
                 struct node* body;
                 struct vector* cases;
+                bool has_default_case;
             } _switch;
 
             struct _case_stmt

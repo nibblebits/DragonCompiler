@@ -3,14 +3,47 @@
 int main()
 {
 
-            int res;
+    int res;
     res = 0;
-    while(1)
+    if (1)
     {
-        int e;
-        e = 50;
-        break;
+        int m;
+        m = 1;
+        switch (m)
+        {
+
+        case 1:
+            switch(5)
+            {
+                case 1:
+                case 6:
+                    res = 5;
+                break;
+                case 5:
+                case 7:
+                    res = 10;
+                break;
+            }
+            break;
+
+        case 4:
+            res = 4;
+            break;
+        case 2:
+            res = 2;
+            break;
+        }
     }
 
-    return 1;
+    switch(4)
+    {
+        case 2:
+
+        break;
+
+        default:
+            res = res + 7;
+    }
+
+    return res;
 }

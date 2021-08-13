@@ -168,7 +168,7 @@ fi
 
 echo -e "Running switch statement test"
 ./build/switch_statement_test
-if [ $? -ne 10 ]; then
+if [ $? -ne 17 ]; then
     echo -e "switch statement failed"
     res_code=1
 else

@@ -1,7 +1,16 @@
+
+
 int main()
 {
-    int i;
-    for (i = 5; i < 3; i=i+1)
-        i = 50;
-    return i;
+
+            int res;
+    res = 0;
+    while(1)
+    {
+        int e;
+        e = 50;
+        break;
+    }
+
+    return 1;
 }

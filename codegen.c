@@ -494,18 +494,17 @@ static const char *codegen_get_fmt_for_value(struct node *value_node, struct res
     return tmp_buf;
 }
 
-
 void codegen_register_exit_point(int exit_point_id)
 {
-    struct code_generator* gen = current_process->generator;
-    struct codegen_exit_point* exit_point = calloc(sizeof(struct codegen_exit_point), 1);
+    struct code_generator *gen = current_process->generator;
+    struct codegen_exit_point *exit_point = calloc(sizeof(struct codegen_exit_point), 1);
     exit_point->id = exit_point_id;
     vector_push(gen->exit_points, &exit_point);
 }
 
-struct codegen_exit_point* codegen_current_exit_point()
+struct codegen_exit_point *codegen_current_exit_point()
 {
-    struct code_generator* gen = current_process->generator;
+    struct code_generator *gen = current_process->generator;
     return vector_back_ptr_or_null(gen->exit_points);
 }
 
@@ -517,34 +516,33 @@ void codegen_begin_exit_point()
 
 void codegen_end_exit_point()
 {
-    struct code_generator* gen = current_process->generator;
-    struct codegen_exit_point* exit_point = codegen_current_exit_point();
+    struct code_generator *gen = current_process->generator;
+    struct codegen_exit_point *exit_point = codegen_current_exit_point();
     asm_push(".exit_point_%i:", exit_point->id);
     assert(exit_point);
     free(exit_point);
     vector_pop(gen->exit_points);
 }
 
-void codegen_goto_exit_point(struct node* current_node)
+void codegen_goto_exit_point(struct node *current_node)
 {
-    struct code_generator* gen = current_process->generator;
-    struct codegen_exit_point* exit_point = codegen_current_exit_point();
-    codegen_stack_add(C_ALIGN(node_sum_scope_size(current_node)));
+    struct code_generator *gen = current_process->generator;
+    struct codegen_exit_point *exit_point = codegen_current_exit_point();
+    codegen_stack_add(C_ALIGN(current_node->owner->body.size));
     asm_push("jmp .exit_point_%i", exit_point->id);
 }
 
-
 void codegen_register_entry_point(int entry_point_id)
 {
-    struct code_generator* gen = current_process->generator;
-    struct codegen_entry_point* entry_point = calloc(sizeof(struct codegen_entry_point), 1);
+    struct code_generator *gen = current_process->generator;
+    struct codegen_entry_point *entry_point = calloc(sizeof(struct codegen_entry_point), 1);
     entry_point->id = entry_point_id;
     vector_push(gen->entry_points, &entry_point);
 }
 
-struct codegen_entry_point* codegen_current_entry_point()
+struct codegen_entry_point *codegen_current_entry_point()
 {
-    struct code_generator* gen = current_process->generator;
+    struct code_generator *gen = current_process->generator;
     return vector_back_ptr_or_null(gen->entry_points);
 }
 
@@ -557,18 +555,18 @@ void codegen_begin_entry_point()
 
 void codegen_end_entry_point()
 {
-    struct code_generator* gen = current_process->generator;
-    struct codegen_entry_point* entry_point = codegen_current_entry_point();
+    struct code_generator *gen = current_process->generator;
+    struct codegen_entry_point *entry_point = codegen_current_entry_point();
     assert(entry_point);
     free(entry_point);
     vector_pop(gen->entry_points);
 }
 
-void codegen_goto_entry_point(struct node* current_node)
+void codegen_goto_entry_point(struct node *current_node)
 {
-    struct code_generator* gen = current_process->generator;
-    struct codegen_entry_point* entry_point = codegen_current_entry_point();
-    codegen_stack_add(C_ALIGN(node_sum_scope_size(current_node)));
+    struct code_generator *gen = current_process->generator;
+    struct codegen_entry_point *entry_point = codegen_current_entry_point();
+    codegen_stack_add(C_ALIGN(current_node->owner->body.size));
     asm_push("jmp .entry_point_%i", entry_point->id);
 }
 
@@ -582,6 +580,49 @@ void codegen_end_entry_exit_point()
 {
     codegen_end_entry_point();
     codegen_end_exit_point();
+}
+
+void codegen_begin_switch_statement()
+{
+    struct code_generator *generator = current_process->generator;
+    struct generator_switch_stmt *switch_stmt_data = &generator->_switch;
+
+    // Let's push the current switch statement to our stack so we can restore it later
+    vector_push(switch_stmt_data->switches, &switch_stmt_data->current);
+    // Now we can overwrite the current switch with our own.
+    memset(&switch_stmt_data->current, 0, sizeof(struct generator_switch_stmt_entity));
+    int switch_stmt_id = codegen_label_count();
+    asm_push(".switch_stmt_%i:", switch_stmt_id);
+    switch_stmt_data->current.id = switch_stmt_id;
+}
+
+void codegen_end_switch_statement()
+{
+    struct code_generator *generator = current_process->generator;
+    struct generator_switch_stmt *switch_stmt_data = &generator->_switch;
+    asm_push(".switch_stmt_%i_end:", switch_stmt_data->current.id);
+    // Let's restore the old switch statement
+    memcpy(&switch_stmt_data->current, vector_back(switch_stmt_data->switches), sizeof(struct generator_switch_stmt_entity));
+    vector_pop(switch_stmt_data->switches);
+}
+
+int codegen_switch_id()
+{
+    struct code_generator *generator = current_process->generator;
+    struct generator_switch_stmt *switch_stmt_data = &generator->_switch;
+    return switch_stmt_data->current.id;
+}
+
+void codegen_begin_case_statement(int index)
+{
+    struct code_generator *generator = current_process->generator;
+    struct generator_switch_stmt *switch_stmt_data = &generator->_switch;
+    asm_push(".switch_stmt_%i_case_%i:", switch_stmt_data->current.id, index);
+}
+
+void codegen_end_case_statement()
+{
+    // Do nothing.
 }
 
 void codegen_gen_cmp(const char *value, const char *set_ins)
@@ -692,7 +733,7 @@ static void codegen_gen_mem_access_get_address(struct node *value_node, int flag
 
 static void codegen_gen_mem_access_first_for_expression(struct node *value_node, int flags, struct resolver_entity *entity)
 {
-    const char* reg_to_use = "eax";
+    const char *reg_to_use = "eax";
     // This is the first node therefore, as we are accessing a variable
     // it is very important that we get a subregister to prevent us loading in
     // other bytes that might not be required as part of this expression
@@ -1346,8 +1387,8 @@ void codegen_generate_expressionable(struct node *node, struct history *history)
     }
 }
 
-void codegen_generate_brand_new_expression(struct node* node, struct history* history)
-{  
+void codegen_generate_brand_new_expression(struct node *node, struct history *history)
+{
     register_unset_flag(REGISTER_EAX_IS_USED);
     codegen_generate_expressionable(node, history);
     register_unset_flag(REGISTER_EAX_IS_USED);
@@ -1576,7 +1617,7 @@ void codegen_generate_if_stmt(struct node *node)
     asm_push(".if_end_%i:", end_label_id);
 }
 
-void codegen_generate_while_stmt(struct node* node)
+void codegen_generate_while_stmt(struct node *node)
 {
     struct history history;
     codegen_begin_entry_exit_point();
@@ -1595,7 +1636,7 @@ void codegen_generate_while_stmt(struct node* node)
     codegen_end_entry_exit_point();
 }
 
-void codegen_generate_do_while_stmt(struct node* node)
+void codegen_generate_do_while_stmt(struct node *node)
 {
     struct history history;
     codegen_begin_entry_exit_point();
@@ -1608,9 +1649,9 @@ void codegen_generate_do_while_stmt(struct node* node)
     codegen_end_entry_exit_point();
 }
 
-void codegen_generate_for_stmt(struct node* node)
+void codegen_generate_for_stmt(struct node *node)
 {
-    struct for_stmt* for_stmt = &node->stmt._for;
+    struct for_stmt *for_stmt = &node->stmt._for;
     struct history history;
     codegen_begin_entry_exit_point();
     int for_loop_start_id = codegen_label_count();
@@ -1642,16 +1683,59 @@ void codegen_generate_for_stmt(struct node* node)
     asm_push("jmp .for_loop%i", for_loop_start_id);
     asm_push(".for_loop_end%i:", for_loop_end_id);
     codegen_end_entry_exit_point();
-
 }
 
-void codegen_generate_break_stmt(struct node* node)
+void codegen_generate_switch_case_stmt(struct node* node)
+{
+    // We don't yet support numeric expressions for cases. I.e 50+20 in a case is 100% valid.
+    // We do not support that yet, static numbers only, no expressions supported in a case.
+
+    struct node* case_stmt_exp = node->stmt._case.exp;
+    assert(case_stmt_exp->type == NODE_TYPE_NUMBER);
+    struct history history;
+    codegen_begin_case_statement(case_stmt_exp->llnum);
+    asm_push("; CASE %i", case_stmt_exp->llnum);
+    codegen_end_case_statement();
+}
+
+void codegen_generate_switch_stmt_case_jumps(struct node* node)
+{
+    vector_set_peek_pointer(node->stmt._switch.cases, 0);
+    struct parsed_switch_case* switch_case = vector_peek(node->stmt._switch.cases);
+    while(switch_case)
+    {
+        asm_push("cmp eax, %i", switch_case->index);
+        asm_push("je .switch_stmt_%i_case_%i", codegen_switch_id(), switch_case->index);
+        switch_case = vector_peek(node->stmt._switch.cases);
+    }
+
+    // Not equal to any case? Then go to the exit point
+    codegen_goto_exit_point(node);
+}
+void codegen_generate_switch_stmt(struct node *node)
+{
+    // Generate the expression for the switch statement
+    struct history history;
+    codegen_begin_entry_exit_point();
+    codegen_begin_switch_statement();
+    
+    codegen_generate_brand_new_expression(node->stmt._switch.exp, history_begin(&history, 0));
+    codegen_generate_switch_stmt_case_jumps(node);
+
+    // Let's generate the body
+    codegen_generate_body(node->stmt._switch.body);
+
+    codegen_end_switch_statement();
+    codegen_end_entry_exit_point();
+}
+
+void codegen_generate_break_stmt(struct node *node)
 {
     // Okay we have a break, we must jump to the last registered exit point.
     codegen_goto_exit_point(node);
 }
 
-void codegen_generate_continue_stmt(struct node* node)
+void codegen_generate_continue_stmt(struct node *node)
 {
     codegen_goto_entry_point(node);
 }
@@ -1692,8 +1776,15 @@ void codegen_generate_statement(struct node *node)
 
     case NODE_TYPE_STATEMENT_FOR:
         codegen_generate_for_stmt(node);
-    break;
+        break;
 
+    case NODE_TYPE_STATEMENT_SWITCH:
+        codegen_generate_switch_stmt(node);
+        break;
+
+    case NODE_TYPE_STATEMENT_CASE:
+        codegen_generate_switch_case_stmt(node);
+        break;
     case NODE_TYPE_STATEMENT_BREAK:
         codegen_generate_break_stmt(node);
         break;
@@ -1835,7 +1926,8 @@ struct code_generator *codegenerator_new(struct compile_process *process)
     struct code_generator *generator = calloc(sizeof(struct code_generator), 1);
     generator->states.expr = vector_create(sizeof(struct expression_state *));
     generator->string_table = vector_create(sizeof(struct string_table_element *));
-    generator->exit_points = vector_create(sizeof(struct exit_point*));
-    generator->entry_points = vector_create(sizeof(struct entry_point*));
+    generator->exit_points = vector_create(sizeof(struct exit_point *));
+    generator->entry_points = vector_create(sizeof(struct entry_point *));
+    generator->_switch.switches = vector_create(sizeof(struct generator_switch_stmt_entity));
     return generator;
 }

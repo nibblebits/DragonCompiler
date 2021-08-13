@@ -299,6 +299,12 @@ struct string_table_element
     const char label[50];
 };
 
+struct parsed_switch_case
+{
+    // The index of the case
+    int index;
+};
+
 struct code_generator
 {
     struct states
@@ -310,6 +316,22 @@ struct code_generator
         // See enum expression_state for more information
         struct vector *expr;
     } states;
+
+    /**
+     * We must keep track of the current code generator switch statement,
+     * so that we know how to jump to the correct case that
+     * was evaluated by a given expression
+     */
+    struct generator_switch_stmt
+    {
+        struct generator_switch_stmt_entity
+        {
+            int id;
+        } current;
+
+        // A stack/vector of struct generator_switch_stmt_entity representing the switch statements
+        struct vector* switches;
+    } _switch;
 
     // This is a bitmask of flags for registers that are in use
     // if the bit is set the register is currently being used
@@ -794,6 +816,8 @@ enum
     NODE_TYPE_STATEMENT_FOR,
     NODE_TYPE_STATEMENT_BREAK,
     NODE_TYPE_STATEMENT_CONTINUE,
+    NODE_TYPE_STATEMENT_SWITCH,
+    NODE_TYPE_STATEMENT_CASE,
     NODE_TYPE_UNARY,
     NODE_TYPE_STRUCT,
     NODE_TYPE_BRACKET // Array brackets i.e [50][20] Two node brackets.
@@ -997,6 +1021,19 @@ struct node
                 struct node* body;
             } _for;
 
+            struct _switch_stmt
+            {
+                struct node* exp;
+                struct node* body;
+                struct vector* cases;
+            } _switch;
+
+            struct _case_stmt
+            {
+                struct node* exp;
+            } _case;
+
+            
         } stmt;
     };
 

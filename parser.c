@@ -9,6 +9,24 @@
 #include <string.h>
 #include <ctype.h>
 
+/**
+ * Specifies that this part of the history is a non coneable entity,
+ * the memory will be created on the heap to prevent it being cloned
+ */
+#define NON_CLONEABLE_HISTORY_VARIABLE(type, name) type* name;
+
+/**
+ * Accesses this non cloneable history variable value
+ */
+#define NON_CLONEABLE_HISTORY_VARIABLE_ACCESS(name) *name
+
+/**
+ * Initializes the non cloneable history variable by creating new memory on the heap
+ * This can safetly be passed down the stack without being cloned as the pointer
+ * will remain in tact on the heap
+ */
+#define NON_CLONEABLE_HISTORY_VARIABLE_INITIALIZE(name) name = calloc(sizeof(*name), 1)
+
 // The current body that the parser is in
 // Note: The set body may be uninitialized and should be used as reference only
 // don't use functionality
@@ -76,11 +94,10 @@ static struct op_precedence_group op_precedence[TOTAL_OPERATOR_GROUPS] = {
     {.operators = {",", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
 };
 
-
 struct history_cases
 {
     // A vector of struct parsed_switch_case
-    struct vector* cases;
+    struct vector *cases;
     // Do we have a default case in the switch statement
     bool has_default_case;
 };
@@ -89,14 +106,12 @@ struct history
 {
     // Flags for this history.
     int flags;
-    
+
     struct parser_history_switch
     {
-        // Must be a pointer because history is cloned as we go down the stack
-        // we cant pass values up only down.
-        // With a pointer the history_cases can maintain its value throughout a parse
-        // and wont be cloned.
-        struct history_cases* case_data;
+        // We don't want our history cases to be cloned down stream
+        // THis way we can change the memory where ever we are in the parse process.
+        NON_CLONEABLE_HISTORY_VARIABLE(struct history_cases, case_data);
     } _switch;
 };
 
@@ -106,7 +121,7 @@ void parse_statement(struct history *history);
 
 static struct history *history_down(struct history *history, int flags)
 {
-    struct history* new_history = calloc(sizeof(struct history), 1);
+    struct history *new_history = calloc(sizeof(struct history), 1);
     history->flags = flags;
     memcpy(new_history, history, sizeof(struct history));
     return new_history;
@@ -114,7 +129,7 @@ static struct history *history_down(struct history *history, int flags)
 
 static struct history *history_begin(struct history *history_out, int flags)
 {
-    struct history* new_history = calloc(sizeof(struct history), 1);
+    struct history *new_history = calloc(sizeof(struct history), 1);
     new_history->flags = flags;
     return new_history;
 }
@@ -140,22 +155,21 @@ static struct history *history_begin(struct history *history_out, int flags)
 #define parser_scope_current() \
     scope_current(current_process)
 
-
-struct parser_history_switch parser_new_switch_statement(struct history* history)
+struct parser_history_switch parser_new_switch_statement(struct history *history)
 {
     memset(&history->_switch, 0x00, sizeof(history->_switch));
-    history->_switch.case_data = calloc(sizeof(struct history_cases), 1);
+    NON_CLONEABLE_HISTORY_VARIABLE_INITIALIZE(history->_switch.case_data);
     history->_switch.case_data->cases = vector_create(sizeof(struct parsed_switch_case));
     history->flags |= HISTORY_FLAG_IN_SWITCH_STATEMENT;
     return history->_switch;
 }
 
-void parser_end_switch_statement(struct parser_history_switch* switch_history)
+void parser_end_switch_statement(struct parser_history_switch *switch_history)
 {
     // Do nothing.
 }
 
-void parser_register_case(struct history* history, struct node* case_node)
+void parser_register_case(struct history *history, struct node *case_node)
 {
     assert(history->flags & HISTORY_FLAG_IN_SWITCH_STATEMENT);
     struct parsed_switch_case scase;
@@ -527,9 +541,9 @@ void make_for_node(struct node *init_node, struct node *cond_node, struct node *
     node_create(&(struct node){NODE_TYPE_STATEMENT_FOR, .stmt._for.init = init_node, .stmt._for.cond = cond_node, .stmt._for.loop = loop_node, .stmt._for.body = body_node});
 }
 
-void make_case_node(struct node* exp_node)
+void make_case_node(struct node *exp_node)
 {
-    node_create(&(struct node){NODE_TYPE_STATEMENT_CASE, .stmt._case.exp=exp_node});
+    node_create(&(struct node){NODE_TYPE_STATEMENT_CASE, .stmt._case.exp = exp_node});
 }
 
 void make_default_node()
@@ -537,9 +551,9 @@ void make_default_node()
     node_create(&(struct node){NODE_TYPE_STATEMENT_DEFAULT});
 }
 
-void make_switch_node(struct node* exp_node, struct node* body_node, struct vector* cases, bool has_default_case)
+void make_switch_node(struct node *exp_node, struct node *body_node, struct vector *cases, bool has_default_case)
 {
-    node_create(&(struct node){NODE_TYPE_STATEMENT_SWITCH, .stmt._switch.exp=exp_node, .stmt._switch.body=body_node, .stmt._switch.cases=cases, .stmt._switch.has_default_case=has_default_case});
+    node_create(&(struct node){NODE_TYPE_STATEMENT_SWITCH, .stmt._switch.exp = exp_node, .stmt._switch.body = body_node, .stmt._switch.cases = cases, .stmt._switch.has_default_case = has_default_case});
 }
 
 void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
@@ -1084,11 +1098,11 @@ void parse_for(struct history *history)
     make_for_node(init_node, cond_node, loop_node, body_node);
 }
 
-void parse_case(struct history* history)
+void parse_case(struct history *history)
 {
     expect_keyword("case");
     parse_expressionable(history);
-    struct node* case_exp_node = node_pop();
+    struct node *case_exp_node = node_pop();
     expect_sym(':');
     make_case_node(case_exp_node);
 
@@ -1097,11 +1111,11 @@ void parse_case(struct history* history)
         parse_err("We do not support non numeric cases at this time, constant numerical values without expressions are required for cases");
     }
 
-    struct node* case_node = node_peek();
+    struct node *case_node = node_peek();
     parser_register_case(history, case_node);
 }
 
-void parse_default(struct history* history)
+void parse_default(struct history *history)
 {
     expect_keyword("default");
     expect_sym(':');
@@ -1110,15 +1124,15 @@ void parse_default(struct history* history)
     history->_switch.case_data->has_default_case = true;
 }
 
-void parse_switch(struct history* history)
+void parse_switch(struct history *history)
 {
     struct parser_history_switch switch_history = parser_new_switch_statement(history);
 
     parse_keyword_parentheses_expression("switch");
-    struct node* switch_exp_node = node_pop();
+    struct node *switch_exp_node = node_pop();
     size_t variable_size = 0;
     parse_body(&variable_size, history_down(history, history->flags));
-    struct node* body_node = node_pop();
+    struct node *body_node = node_pop();
     make_switch_node(switch_exp_node, body_node, switch_history.case_data->cases, switch_history.case_data->has_default_case);
     parser_end_switch_statement(&switch_history);
 }
@@ -1231,17 +1245,17 @@ void parse_keyword(struct history *history)
         parse_continue(history);
         return;
     }
-    else if(S_EQ(token->sval, "switch"))
+    else if (S_EQ(token->sval, "switch"))
     {
         parse_switch(history);
         return;
     }
-    else if(S_EQ(token->sval, "case"))
+    else if (S_EQ(token->sval, "case"))
     {
         parse_case(history);
         return;
     }
-    else if(S_EQ(token->sval, "default"))
+    else if (S_EQ(token->sval, "default"))
     {
         parse_default(history);
         return;

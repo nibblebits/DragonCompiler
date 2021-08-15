@@ -535,7 +535,6 @@ void codegen_goto_exit_point(struct node *current_node)
 {
     struct code_generator *gen = current_process->generator;
     struct codegen_exit_point *exit_point = codegen_current_exit_point();
-    codegen_stack_add(C_ALIGN(current_node->owner->body.size));
     asm_push("jmp .exit_point_%i", exit_point->id);
 }
 
@@ -573,7 +572,6 @@ void codegen_goto_entry_point(struct node *current_node)
 {
     struct code_generator *gen = current_process->generator;
     struct codegen_entry_point *entry_point = codegen_current_entry_point();
-    codegen_stack_add(C_ALIGN(current_node->owner->body.size));
     asm_push("jmp .entry_point_%i", entry_point->id);
 }
 
@@ -1517,11 +1515,7 @@ void codegen_generate_stack_scope(struct vector *statements, size_t scope_size)
 
     // Resolver scope needs to exist too it will be this normal scopes replacement
     codegen_new_scope(RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK);
-
-    // We got to compute the stack size we need for our statements
-    codegen_stack_sub(C_ALIGN(scope_size));
     codegen_generate_scope_no_new_scope(statements);
-    codegen_stack_add(C_ALIGN(scope_size));
     codegen_finish_scope();
 }
 
@@ -1563,10 +1557,10 @@ void codegen_generate_statement_return(struct node *node)
 
     // Let's just check we have an owner for this statement, we should have
     // Bug if we dont.
-    assert(node->owner);
+    assert(node->binded.owner);
 
     // Generate the stack subtraction.
-    codegen_stack_add(C_ALIGN(node_sum_scope_size(node)));
+    codegen_stack_add(C_ALIGN(function_node_stack_size(node->binded.function)));
 
     // Now we must leave the function
     asm_push("pop ebp");
@@ -1874,7 +1868,7 @@ void codegen_generate_function(struct node *node)
     // We have to create a stack frame ;)
     asm_push("push ebp");
     asm_push("mov ebp, esp");
-
+    codegen_stack_sub(C_ALIGN(function_node_stack_size(node)));
     // Generate scope for function arguments
     codegen_new_scope(RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK);
 
@@ -1885,6 +1879,9 @@ void codegen_generate_function(struct node *node)
 
     // End function argument scope
     codegen_finish_scope();
+    
+    codegen_stack_add(C_ALIGN(function_node_stack_size(node)));
+
 
     asm_push("pop ebp");
     asm_push("ret");

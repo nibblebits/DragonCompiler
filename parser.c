@@ -32,6 +32,9 @@
 // don't use functionality
 struct node *parser_current_body = NULL;
 
+// The current function we are in.
+struct node* parser_current_function = NULL;
+
 // First in the array = higher priority
 // This array is special, its essentially a group of arrays
 
@@ -53,7 +56,8 @@ enum
     // This flag is set if the stack is growing upwards, i.e function arguments
     HISTORY_FLAG_IS_UPWARD_STACK = 0b00001000,
     HISTORY_FLAG_IS_EXPRESSION = 0b00010000,
-    HISTORY_FLAG_IN_SWITCH_STATEMENT = 0b00100000
+    HISTORY_FLAG_IN_SWITCH_STATEMENT = 0b00100000,
+    HISTORY_FLAG_INSIDE_FUNCTION_BODY = 0b01000000
 };
 
 // Expression flags
@@ -110,7 +114,7 @@ struct history
     struct parser_history_switch
     {
         // We don't want our history cases to be cloned down stream
-        // THis way we can change the memory where ever we are in the parse process.
+        // This way we can change the memory where ever we are in the parse process.
         NON_CLONEABLE_HISTORY_VARIABLE(struct history_cases, case_data);
     } _switch;
 };
@@ -501,7 +505,8 @@ static struct node *node_create(struct node *_node)
 {
     struct node *node = malloc(sizeof(struct node));
     memcpy(node, _node, sizeof(struct node));
-    node->owner = parser_current_body;
+    node->binded.owner = parser_current_body;
+    node->binded.function = parser_current_function;
     node_push(node);
     return node;
 }
@@ -674,12 +679,11 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
     // We will create a blank body node here as we need it as a reference
     make_body_node(NULL, 0, NULL, NULL);
     struct node *body_node = node_pop();
-    body_node->owner = parser_current_body;
+    body_node->binded.owner = parser_current_body;
     parser_current_body = body_node;
 
     struct node *stmt_node = NULL;
-    struct history new_history = *history;
-    parse_statement(&new_history);
+    parse_statement(history_down(history, history->flags));
     stmt_node = node_pop();
     vector_push(body_vec, &stmt_node);
 
@@ -700,7 +704,7 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
     body_node->body.statements = body_vec;
 
     // Set the parser body node back to the previous one now that we are done.
-    parser_current_body = body_node->owner;
+    parser_current_body = body_node->binded.owner;
 
     // Push the body node back to the stack
     node_push(body_node);
@@ -716,7 +720,7 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
     // We will create a blank body node here as we need it as a reference
     make_body_node(NULL, 0, NULL, NULL);
     struct node *body_node = node_pop();
-    body_node->owner = parser_current_body;
+    body_node->binded.owner = parser_current_body;
     parser_current_body = body_node;
 
     struct node *stmt_node = NULL;
@@ -725,8 +729,7 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
     expect_sym('{');
     while (!token_next_is_symbol('}'))
     {
-        struct history new_history = *history;
-        parse_statement(&new_history);
+        parse_statement(history_down(history, history->flags));
         stmt_node = node_pop();
 
         if (stmt_node->type == NODE_TYPE_VARIABLE && variable_node_is_primative(stmt_node))
@@ -746,7 +749,7 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
 
     // bodies must end with a right curley bracket!
     expect_sym('}');
-
+    
     // Variable size should be adjusted to + the padding of all the body variables padding
     int padding = compute_sum_padding(body_vec);
     *variable_size += padding;
@@ -764,7 +767,7 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
     body_node->body.statements = body_vec;
 
     // Let's not forget to set the old body back now that we are done with this body
-    parser_current_body = body_node->owner;
+    parser_current_body = body_node->binded.owner;
 
     // Push the body node back to the stack
     node_push(body_node);
@@ -803,6 +806,16 @@ void parse_body(size_t *variable_size, struct history *history)
 
     resolver_default_finish_scope(current_process->resolver);
     parser_scope_finish();
+
+    // If this scope is inside a function lets add the variable size to the stack size
+    // of the given function
+    if (variable_size)
+    {
+        if (history->flags & HISTORY_FLAG_INSIDE_FUNCTION_BODY)
+        {
+            parser_current_function->func.stack_size += *variable_size;
+        }
+    }
 }
 
 /**
@@ -1173,7 +1186,7 @@ void parse_goto(struct history * history)
     parse_identifier(history_begin(history, 0));
     // Goto expects a semicolon
     expect_sym(';');
-    
+
     struct node* label_node = node_pop();
     make_goto_node(label_node);
 }
@@ -1731,7 +1744,7 @@ struct vector *parse_function_arguments(struct history *history)
 
 void parse_function_body(struct history *history)
 {
-    parse_body(0, history);
+    parse_body(0, history_down(history, history->flags | HISTORY_FLAG_INSIDE_FUNCTION_BODY));
 }
 
 void parse_function(struct datatype *dtype, struct token *name_token, struct history *history)
@@ -1749,15 +1762,18 @@ void parse_function(struct datatype *dtype, struct token *name_token, struct his
     arguments_vector = parse_function_arguments(history_begin(&new_history, 0));
     expect_sym(')');
 
+    // Create the function node
+    make_function_node(dtype, name_token->sval, arguments_vector, NULL);
+    struct node* function_node = node_peek();
+    parser_current_function = function_node;
+
     // Do we have a function body or is this a declaration?
     if (token_next_is_symbol('{'))
     {
         // Parse the function body
         parse_function_body(history_begin(&new_history, 0));
         struct node *body_node = node_pop();
-        // Create the function node
-        make_function_node(dtype, name_token->sval, arguments_vector, body_node);
-
+        function_node->func.body_n = body_node;
         // We are done with function arguments scope (body will create its own)
         resolver_finish_scope(current_process->resolver);
         return;
@@ -1770,7 +1786,6 @@ void parse_function(struct datatype *dtype, struct token *name_token, struct his
     // We are done with function arguments scope
     resolver_finish_scope(current_process->resolver);
 
-    make_function_node(dtype, name_token->sval, arguments_vector, NULL);
 }
 
 static bool is_datatype_struct_or_union(struct datatype *dtype)

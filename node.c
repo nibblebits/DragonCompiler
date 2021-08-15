@@ -175,11 +175,17 @@ struct node *node_from_symbol(struct compile_process *current_process, const cha
 
 size_t node_sum_scope_size(struct node* node)
 {
-    if (!node->owner)
+    if (!node->binded.owner)
     {
         return 0;
     }
 
-    size_t result = node_sum_scope_size(node->owner) + node->owner->body.size;
+    size_t result = node_sum_scope_size(node->binded.owner) + node->binded.owner->body.size;
     return result;
+}
+
+size_t function_node_stack_size(struct node* node)
+{
+    assert(node->type == NODE_TYPE_FUNCTION);
+    return node->func.stack_size;
 }

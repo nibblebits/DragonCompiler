@@ -330,7 +330,7 @@ struct code_generator
         } current;
 
         // A stack/vector of struct generator_switch_stmt_entity representing the switch statements
-        struct vector* switches;
+        struct vector *switches;
     } _switch;
 
     // This is a bitmask of flags for registers that are in use
@@ -344,12 +344,12 @@ struct code_generator
     // A vector/stack of struct codegen_exit_point
     // In the event of a "break" we must go to the current exit point.
     // i.e .exit_point_%i where %i is stored in this exit_points vector;
-    struct vector* exit_points;
+    struct vector *exit_points;
 
     // A vector/stack of the struct codegen_entry_point
     // In the even of a "continue" we must go to the current entry point.
     // This will allow a loop to restart.
-    struct vector* entry_points;
+    struct vector *entry_points;
 };
 
 enum
@@ -809,8 +809,8 @@ enum
     NODE_TYPE_FUNCTION,
     NODE_TYPE_BODY,
     NODE_TYPE_STATEMENT_RETURN,
-    NODE_TYPE_STATEMENT_IF,   // Used for both IF and ELSE IF statements
-    NODE_TYPE_STATEMENT_ELSE, // This is an ELSE statement of an IF
+    NODE_TYPE_STATEMENT_IF,    // Used for both IF and ELSE IF statements
+    NODE_TYPE_STATEMENT_ELSE,  // This is an ELSE statement of an IF
     NODE_TYPE_STATEMENT_WHILE, // While statements i.e while(1) { }
     NODE_TYPE_STATEMENT_DO_WHILE,
     NODE_TYPE_STATEMENT_FOR,
@@ -849,9 +849,17 @@ struct node
     // Generic flags for the given node
     int flags;
 
-    // The body node this node is apart of. If theirs no body then its NULL.
-    // NULL means no scope is surrounding this node, it must be in the global space
-    struct node *owner;
+    // What is this node binded too?
+    struct node_binded
+    {
+        // The body node this node is apart of. If theirs no body then its NULL.
+        // NULL means no scope is surrounding this node, it must be in the global space
+        struct node *owner;
+
+        // The function that this node is apart of
+        struct node* function;
+    } binded;
+
     union
     {
         struct exp
@@ -914,6 +922,11 @@ struct node
             // This is NULL if this function is just a definition and its a pointer
             // to the body node if this function is declared. and has a full body
             struct node *body_n;
+
+            // The size of the function stack size (unaligned)
+            // Essentally this is the sum of the size of all variables inside the body of the given function
+            // regardless if the variables are deep in a scope they are included.
+            size_t stack_size;
         } func;
 
         struct body
@@ -1004,54 +1017,52 @@ struct node
                 struct node *body_node;
             } _else;
 
-
             // While statements. i.e while(1) {}
             struct while_stmt
             {
-                struct node* cond;
-                struct node* body;
+                struct node *cond;
+                struct node *body;
             } _while;
-            
+
             struct do_while_stmt
             {
-                struct node* body;
-                struct node* cond;
+                struct node *body;
+                struct node *cond;
             } _do_while;
 
             struct for_stmt
             {
-                struct node* init;
-                struct node* cond;
-                struct node* loop;
-                struct node* body;
+                struct node *init;
+                struct node *cond;
+                struct node *loop;
+                struct node *body;
             } _for;
 
             struct _switch_stmt
             {
-                struct node* exp;
-                struct node* body;
-                struct vector* cases;
+                struct node *exp;
+                struct node *body;
+                struct vector *cases;
                 bool has_default_case;
             } _switch;
 
             struct _case_stmt
             {
-                struct node* exp;
+                struct node *exp;
             } _case;
-
 
             struct _goto_stmt
             {
                 // The label node for the goto statement
                 // i.e goto myspeciallabel
-                struct node* label;
+                struct node *label;
             } _goto;
-            
+
         } stmt;
 
         struct label
         {
-            struct node* name;
+            struct node *name;
         } label;
     };
 
@@ -1271,6 +1282,11 @@ struct node *first_node_of_type_from_left(struct node *node, int type, int depth
 bool node_in_expression(struct node *node);
 
 bool node_is_root_expression(struct node *node);
+
+/**
+ * Returns the entire stack size for the given function, including all sub scopes
+ */
+size_t function_node_stack_size(struct node* node);
 
 /**
  * Returns true if the given operator is an access operator.

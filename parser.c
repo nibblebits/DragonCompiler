@@ -556,6 +556,15 @@ void make_switch_node(struct node *exp_node, struct node *body_node, struct vect
     node_create(&(struct node){NODE_TYPE_STATEMENT_SWITCH, .stmt._switch.exp = exp_node, .stmt._switch.body = body_node, .stmt._switch.cases = cases, .stmt._switch.has_default_case = has_default_case});
 }
 
+void make_label_node(struct node* label_name_node)
+{
+    node_create(&(struct node){NODE_TYPE_LABEL, .label.name=label_name_node});
+}
+void make_goto_node(struct node* label_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_GOTO, .stmt._goto.label=label_node});
+}
+
 void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
 {
     node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
@@ -977,6 +986,11 @@ void parse_variable_function_or_struct_union(struct history *history);
 void parse_keyword_return(struct history *history);
 void parse_datatype_type(struct datatype *datatype);
 
+void parse_identifier(struct history *history)
+{
+    parse_single_token_to_node();
+}
+
 void parse_sizeof(struct history *history)
 {
     // Get rid of the sizeof
@@ -1137,6 +1151,33 @@ void parse_switch(struct history *history)
     parser_end_switch_statement(&switch_history);
 }
 
+void parse_label(struct history* history)
+{
+    // Parse the colon
+    expect_sym(':');
+
+    // Pop off the previous node
+    struct node* label_name_node = node_pop();
+    // Let's ensure that its an identifier
+    if (label_name_node->type != NODE_TYPE_IDENTIFIER)
+    {
+        parse_err("Labels must have a left operand of type identifier, but something else was provided. Alphanumeric names only");
+    }
+
+    make_label_node(label_name_node);
+}
+
+void parse_goto(struct history * history)
+{
+    expect_keyword("goto");
+    parse_identifier(history_begin(history, 0));
+    // Goto expects a semicolon
+    expect_sym(';');
+    
+    struct node* label_node = node_pop();
+    make_goto_node(label_node);
+}
+
 void parse_break(struct history *history)
 {
     expect_keyword("break");
@@ -1260,6 +1301,11 @@ void parse_keyword(struct history *history)
         parse_default(history);
         return;
     }
+    else if(S_EQ(token->sval, "goto"))
+    {
+        parse_goto(history);
+        return;
+    }
 
     parse_err("Unexpected keyword %s\n", token->sval);
 }
@@ -1370,11 +1416,18 @@ void parse_exp(struct history *history)
     parse_exp_normal(history);
 }
 
-void parse_identifier(struct history *history)
-{
-    parse_single_token_to_node();
-}
 
+void parse_symbol()
+{
+    struct history history;
+
+    struct token *token = token_peek_next();
+    if (token->cval == ':')
+    {
+        // We have a label here, lets deal with it
+        parse_label(history_begin(&history, 0));
+    }
+}
 int parse_expressionable_single(struct history *history)
 {
     struct token *token = token_peek_next();
@@ -1448,12 +1501,6 @@ void parse_for_parentheses()
 
     // We got anything else?
     parser_deal_with_additional_expression();
-}
-
-void parse_for_symbol()
-{
-
-    parse_err("not supported yet");
 }
 
 /**
@@ -1826,6 +1873,14 @@ void parse_statement(struct history *history)
     // I.e a = 50;
     parse_expressionable(history);
 
+    // Do we have a symbol here that is not a semicolon then it may be treated differently if we do
+    if(token_peek_next()->type == TOKEN_TYPE_SYMBOL 
+        && !token_is_symbol(token_peek_next(), ';'))
+    {
+        parse_symbol();
+        return;
+    }
+
     // Expression statements must end with a semicolon
     expect_sym(';');
 }
@@ -1850,7 +1905,7 @@ int parse_next()
         break;
 
     case TOKEN_TYPE_SYMBOL:
-        parse_for_symbol();
+        parse_symbol();
         break;
 
     case TOKEN_TYPE_KEYWORD:

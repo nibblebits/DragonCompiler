@@ -175,6 +175,18 @@ else
     echo -e "switch statement test passed"
 fi
 
+echo -e "Running goto statement test"
+./build/goto_test
+if [ $? -ne 10 ]; then
+    echo -e "goto statement failed"
+    res_code=1
+else
+    echo -e "goto statement test passed"
+fi
+
+
+
+
 
 
 

@@ -75,6 +75,7 @@ bool is_keyword(const char *str)
            S_EQ(str, "switch") ||
            S_EQ(str, "case") ||
            S_EQ(str, "default") ||
+           S_EQ(str, "goto") ||
            S_EQ(str, "typedef");
 }
 

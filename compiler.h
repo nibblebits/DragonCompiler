@@ -819,6 +819,10 @@ enum
     NODE_TYPE_STATEMENT_SWITCH,
     NODE_TYPE_STATEMENT_CASE,
     NODE_TYPE_STATEMENT_DEFAULT,
+    NODE_TYPE_STATEMENT_GOTO,
+
+    // A label node i.e "testing:"
+    NODE_TYPE_LABEL,
     NODE_TYPE_UNARY,
     NODE_TYPE_STRUCT,
     NODE_TYPE_BRACKET // Array brackets i.e [50][20] Two node brackets.
@@ -1035,8 +1039,20 @@ struct node
                 struct node* exp;
             } _case;
 
+
+            struct _goto_stmt
+            {
+                // The label node for the goto statement
+                // i.e goto myspeciallabel
+                struct node* label;
+            } _goto;
             
         } stmt;
+
+        struct label
+        {
+            struct node* name;
+        } label;
     };
 
     // Literal values for nodes of generic types. I.e numbers and identifiers

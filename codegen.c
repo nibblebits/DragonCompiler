@@ -431,7 +431,7 @@ static const char *asm_keyword_for_size(size_t size, char *tmp_buf)
 
     default:
         // We have a structure or unknown type? Then lets just reserve enough bytes.
-        sprintf(tmp_buf, "times %lld db 0", (unsigned long long)size);
+        sprintf(tmp_buf, "times %lld db ", (unsigned long long)size);
         return tmp_buf;
     }
 
@@ -1408,7 +1408,7 @@ static void codegen_generate_variable_for_array(struct node *node)
     }
 
     char tmp_buf[256];
-    asm_push("%s: %s ", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf));
+    asm_push("%s: %s 0", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf));
 }
 static void codegen_generate_global_variable_for_primitive(struct node *node)
 {
@@ -1440,7 +1440,7 @@ static void codegen_generate_global_variable_for_struct(struct node *node)
     }
 
     char tmp_buf[256];
-    asm_push("%s: %s", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf));
+    asm_push("%s: %s 0", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf));
 }
 
 void codegen_generate_global_variable(struct node *node)

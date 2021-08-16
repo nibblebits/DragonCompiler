@@ -1,7 +1,9 @@
+struct dog
+{
+    int a;
+};
 
-int printf(const char* msg, ...);
-
+struct dog d;
 int main()
 {
-  printf("Hello world %i %i %i", 50, 60, 87);
 }

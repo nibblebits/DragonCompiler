@@ -411,6 +411,7 @@ static struct token *token_next_expected(int type)
     return token;
 }
 
+
 int parser_get_pointer_depth()
 {
     int depth = 0;
@@ -446,6 +447,14 @@ static void expect_keyword(const char *keyword)
 
     if (next_token == NULL || next_token->type != TOKEN_TYPE_KEYWORD || !S_EQ(next_token->sval, keyword))
         parse_err("Expecting keyword %s however something else was provided", keyword);
+}
+
+void token_read_dots(size_t total)
+{
+    for (int i = 0; i < total; i++)
+    {
+        expect_op(".");
+    }
 }
 
 static struct node *node_peek_or_null()
@@ -1726,6 +1735,16 @@ struct vector *parse_function_arguments(struct history *history)
     // If we see a right bracket we are at the end of the function arguments i.e (int a, int b)
     while (!token_next_is_symbol(')'))
     {
+        // Do we have a "..." if so then we have infinite arguments.
+        if (token_next_is_operator("."))
+        {
+            // Read the 3 dots.
+            token_read_dots(3);
+            // Okay since we have infinite arguments we can't have any more arguments
+            // after this, so just return
+            return arguments_vec;
+        }
+
         // Function arguments grow upwards on the stack
         parse_variable_full(history_down(history, history->flags | HISTORY_FLAG_IS_UPWARD_STACK));
         // Push the parsed argument variable into the arguments vector

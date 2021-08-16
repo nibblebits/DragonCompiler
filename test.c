@@ -1,7 +1,7 @@
 
-int printf(const char* msg, int m);
+int printf(const char* msg, ...);
 
 int main()
 {
-  printf("Hello world %i", 50);
+  printf("Hello world %i %i %i", 50, 60, 87);
 }

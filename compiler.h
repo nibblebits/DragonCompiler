@@ -1289,6 +1289,14 @@ bool node_is_root_expression(struct node *node);
 size_t function_node_stack_size(struct node* node);
 
 /**
+ * Returns true if the provided node is just a prototype.
+ * 
+ * I.e "int abc();"
+ */
+bool function_node_is_prototype(struct node* node);
+
+
+/**
  * Returns true if the given operator is an access operator.
  * 
  * I.e a.b.c

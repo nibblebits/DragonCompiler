@@ -189,3 +189,8 @@ size_t function_node_stack_size(struct node* node)
     assert(node->type == NODE_TYPE_FUNCTION);
     return node->func.stack_size;
 }
+
+bool function_node_is_prototype(struct node* node)
+{
+    return node->func.body_n == NULL;
+}

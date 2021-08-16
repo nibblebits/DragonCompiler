@@ -13,7 +13,7 @@
  * Specifies that this part of the history is a non coneable entity,
  * the memory will be created on the heap to prevent it being cloned
  */
-#define NON_CLONEABLE_HISTORY_VARIABLE(type, name) type* name;
+#define NON_CLONEABLE_HISTORY_VARIABLE(type, name) type *name;
 
 /**
  * Accesses this non cloneable history variable value
@@ -33,7 +33,7 @@
 struct node *parser_current_body = NULL;
 
 // The current function we are in.
-struct node* parser_current_function = NULL;
+struct node *parser_current_function = NULL;
 
 // First in the array = higher priority
 // This array is special, its essentially a group of arrays
@@ -561,13 +561,13 @@ void make_switch_node(struct node *exp_node, struct node *body_node, struct vect
     node_create(&(struct node){NODE_TYPE_STATEMENT_SWITCH, .stmt._switch.exp = exp_node, .stmt._switch.body = body_node, .stmt._switch.cases = cases, .stmt._switch.has_default_case = has_default_case});
 }
 
-void make_label_node(struct node* label_name_node)
+void make_label_node(struct node *label_name_node)
 {
-    node_create(&(struct node){NODE_TYPE_LABEL, .label.name=label_name_node});
+    node_create(&(struct node){NODE_TYPE_LABEL, .label.name = label_name_node});
 }
-void make_goto_node(struct node* label_node)
+void make_goto_node(struct node *label_node)
 {
-    node_create(&(struct node){NODE_TYPE_STATEMENT_GOTO, .stmt._goto.label=label_node});
+    node_create(&(struct node){NODE_TYPE_STATEMENT_GOTO, .stmt._goto.label = label_node});
 }
 
 void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
@@ -749,7 +749,7 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
 
     // bodies must end with a right curley bracket!
     expect_sym('}');
-    
+
     // Variable size should be adjusted to + the padding of all the body variables padding
     int padding = compute_sum_padding(body_vec);
     *variable_size += padding;
@@ -1164,13 +1164,13 @@ void parse_switch(struct history *history)
     parser_end_switch_statement(&switch_history);
 }
 
-void parse_label(struct history* history)
+void parse_label(struct history *history)
 {
     // Parse the colon
     expect_sym(':');
 
     // Pop off the previous node
-    struct node* label_name_node = node_pop();
+    struct node *label_name_node = node_pop();
     // Let's ensure that its an identifier
     if (label_name_node->type != NODE_TYPE_IDENTIFIER)
     {
@@ -1180,14 +1180,14 @@ void parse_label(struct history* history)
     make_label_node(label_name_node);
 }
 
-void parse_goto(struct history * history)
+void parse_goto(struct history *history)
 {
     expect_keyword("goto");
     parse_identifier(history_begin(history, 0));
     // Goto expects a semicolon
     expect_sym(';');
 
-    struct node* label_node = node_pop();
+    struct node *label_node = node_pop();
     make_goto_node(label_node);
 }
 
@@ -1314,7 +1314,7 @@ void parse_keyword(struct history *history)
         parse_default(history);
         return;
     }
-    else if(S_EQ(token->sval, "goto"))
+    else if (S_EQ(token->sval, "goto"))
     {
         parse_goto(history);
         return;
@@ -1428,7 +1428,6 @@ void parse_exp(struct history *history)
 
     parse_exp_normal(history);
 }
-
 
 void parse_symbol()
 {
@@ -1764,7 +1763,7 @@ void parse_function(struct datatype *dtype, struct token *name_token, struct his
 
     // Create the function node
     make_function_node(dtype, name_token->sval, arguments_vector, NULL);
-    struct node* function_node = node_peek();
+    struct node *function_node = node_peek();
     parser_current_function = function_node;
 
     // Do we have a function body or is this a declaration?
@@ -1774,18 +1773,17 @@ void parse_function(struct datatype *dtype, struct token *name_token, struct his
         parse_function_body(history_begin(&new_history, 0));
         struct node *body_node = node_pop();
         function_node->func.body_n = body_node;
-        // We are done with function arguments scope (body will create its own)
-        resolver_finish_scope(current_process->resolver);
-        return;
+    }
+    else
+    {
+        // Ok then this is a function declaration wtihout a body, in which case
+        // we expect a semicolon
+        expect_sym(';');
     }
 
-    // Ok then this is a function declaration wtihout a body, in which case
-    // we expect a semicolon
-    expect_sym(';');
-
+    parser_current_function = NULL;
     // We are done with function arguments scope
     resolver_finish_scope(current_process->resolver);
-
 }
 
 static bool is_datatype_struct_or_union(struct datatype *dtype)
@@ -1889,8 +1887,7 @@ void parse_statement(struct history *history)
     parse_expressionable(history);
 
     // Do we have a symbol here that is not a semicolon then it may be treated differently if we do
-    if(token_peek_next()->type == TOKEN_TYPE_SYMBOL 
-        && !token_is_symbol(token_peek_next(), ';'))
+    if (token_peek_next()->type == TOKEN_TYPE_SYMBOL && !token_is_symbol(token_peek_next(), ';'))
     {
         parse_symbol();
         return;

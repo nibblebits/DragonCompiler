@@ -1857,7 +1857,17 @@ void codegen_generate_function_arguments(struct vector *argument_vector)
     }
 }
 
-void codegen_generate_function(struct node *node)
+void codegen_generate_function_prototype(struct node* node)
+{
+    // We must register this function prototype
+    codegen_register_function(node, 0);
+    asm_push("extern %s", node->func.name);
+
+    // Since its a prototype no code needs to be generated, just its presence must be registered
+    // and it marked as external
+}
+
+void codegen_generate_function_with_body(struct node* node)
 {
     // We must register this function
     codegen_register_function(node, 0);
@@ -1885,6 +1895,16 @@ void codegen_generate_function(struct node *node)
 
     asm_push("pop ebp");
     asm_push("ret");
+}
+void codegen_generate_function(struct node *node)
+{
+    if (function_node_is_prototype(node))
+    {
+        codegen_generate_function_prototype(node);
+        return;
+    }
+
+    codegen_generate_function_with_body(node);
 }
 
 void codegen_generate_root_node(struct node *node)

@@ -1,13 +1,19 @@
-int special(int data)
+struct FILE
 {
-    int k;
-    k = data;
-    return k+5;
-}
+
+};
+
+typedef struct FILE FILE;
+
+#define __wur
+#define __restrict
+
+
+extern FILE *fopen (const char *__restrict __filename,
+		    const char *__restrict __modes) __wur;
 
 int main()
 {
-    int x;
-    special(55);
-    return x;
+    fopen("./test.c", "r");
+    return 0;
 }

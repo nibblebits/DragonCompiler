@@ -530,7 +530,8 @@ static bool is_keyword_variable_modifier(const char *val)
     return S_EQ(val, "unsigned") ||
            S_EQ(val, "signed") ||
            S_EQ(val, "static") ||
-           S_EQ(val, "const");
+           S_EQ(val, "const") ||
+           S_EQ(val, "extern");
 }
 
 void parse_single_token_to_node()
@@ -1565,6 +1566,10 @@ void parse_datatype_modifiers(struct datatype *datatype)
         else if (S_EQ(token->sval, "const"))
         {
             datatype->flags |= DATATYPE_FLAG_IS_CONST;
+        }
+        else if(S_EQ(token->sval, "extern"))
+        {
+            datatype->flags |= DATATYPE_FLAG_IS_EXTERN;
         }
         // We dealt with this modifier token, move along.
         token_next();

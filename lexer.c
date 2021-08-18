@@ -76,7 +76,9 @@ bool is_keyword(const char *str)
            S_EQ(str, "case") ||
            S_EQ(str, "default") ||
            S_EQ(str, "goto") ||
-           S_EQ(str, "typedef");
+           S_EQ(str, "typedef") ||
+           S_EQ(str, "const") ||
+           S_EQ(str, "extern");
 }
 
 bool keyword_is_datatype(const char *str)

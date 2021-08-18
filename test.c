@@ -5,12 +5,9 @@ struct FILE
 
 typedef struct FILE FILE;
 
-#define __wur
-#define __restrict
 
-
-extern FILE *fopen (const char *__restrict __filename,
-		    const char *__restrict __modes) __wur;
+extern FILE *fopen (const char * __filename,
+		    const char * restrict __modes);
 
 int main()
 {

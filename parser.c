@@ -1571,6 +1571,7 @@ void parse_datatype_modifiers(struct datatype *datatype)
         {
             datatype->flags |= DATATYPE_FLAG_IS_EXTERN;
         }
+
         // We dealt with this modifier token, move along.
         token_next();
         token = token_peek_next();

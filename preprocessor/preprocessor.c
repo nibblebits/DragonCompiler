@@ -291,6 +291,7 @@ struct token *preprocessor_next_token(struct compile_process *compiler)
     return vector_peek(compiler->token_vec_original);
 }
 
+
 struct token *preprocessor_next_token_no_increment(struct compile_process *compiler)
 {
     return vector_peek_no_increment(compiler->token_vec_original);
@@ -589,14 +590,16 @@ bool preprocessor_is_next_macro_arguments(struct compile_process* compiler)
     int res = false;
     vector_save(compiler->token_vec_original);
 
+    struct token* last_token = preprocessor_previous_token(compiler);
     struct token* current_token = preprocessor_next_token(compiler);
-    if (!token_is_operator(current_token, "("))
+    // Only if we have a left bracket with no white space between is this a function
+    // argument
+    if (token_is_operator(current_token, "(") && (!last_token || !last_token->whitespace))
     {
         // No left bracket? Then this is not a macro argument.
+        res = true;
         goto end;
     }
-
-    res = true;
 
 end:
     vector_restore(compiler->token_vec_original);

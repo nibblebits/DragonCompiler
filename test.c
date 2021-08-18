@@ -1,5 +1,11 @@
+int special(int data)
+{
+    int k;
+    k = data;
+    return k+5;
+}
+
 int main()
 {
-    int x;
-    x = (50+20);
+    return special(55);
 }

@@ -7,5 +7,7 @@ int special(int data)
 
 int main()
 {
-    return special(55);
+    int x;
+    special(55);
+    return x;
 }

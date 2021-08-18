@@ -57,7 +57,8 @@ enum
     HISTORY_FLAG_IS_UPWARD_STACK = 0b00001000,
     HISTORY_FLAG_IS_EXPRESSION = 0b00010000,
     HISTORY_FLAG_IN_SWITCH_STATEMENT = 0b00100000,
-    HISTORY_FLAG_INSIDE_FUNCTION_BODY = 0b01000000
+    HISTORY_FLAG_INSIDE_FUNCTION_BODY = 0b01000000,
+    HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL = 0b10000000,
 };
 
 // Expression flags
@@ -1371,7 +1372,7 @@ void parse_exp_normal(struct history *history)
     {
         if (S_EQ(token_peek_next()->sval, "("))
         {
-            parse_for_parentheses(history_down(history, history->flags | NODE_FLAG_INSIDE_EXPRESSION));
+            parse_for_parentheses(history_down(history, history->flags | HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL));
         }
         else if (parser_is_unary_operator(token_peek_next()->sval))
         {
@@ -1504,7 +1505,7 @@ void parse_for_parentheses(struct history* history)
 
     // If we are part of an expression then how can we have a left node
     // We would have something like 50 + (20*40). 20*40 being us
-    if (!(history->flags & NODE_FLAG_INSIDE_EXPRESSION))
+    if (!(history->flags & HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL))
     {
         // We must check to see if we have a left node i.e "test(50+20)". Left node = test
         // If we have a left node we will have to create an expression

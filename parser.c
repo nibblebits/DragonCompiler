@@ -660,7 +660,7 @@ void make_bracket_node(struct node *inner_node)
 }
 
 void parse_expressionable(struct history *history);
-void parse_for_parentheses();
+void parse_for_parentheses(struct history* history);
 
 #warning "Bug, variable_struct_node points to uninitialized value"
 static void parser_append_size_for_node(size_t *_variable_size, struct node *node)
@@ -1371,7 +1371,7 @@ void parse_exp_normal(struct history *history)
     {
         if (S_EQ(token_peek_next()->sval, "("))
         {
-            parse_for_parentheses();
+            parse_for_parentheses(history_down(history, history->flags | NODE_FLAG_INSIDE_EXPRESSION));
         }
         else if (parser_is_unary_operator(token_peek_next()->sval))
         {
@@ -1426,11 +1426,12 @@ void parse_for_array(struct history *history)
         make_exp_node(left_node, bracket_node, "[]");
     }
 }
+
 void parse_exp(struct history *history)
 {
     if (S_EQ(token_peek_next()->sval, "("))
     {
-        parse_for_parentheses();
+        parse_for_parentheses(history);
         return;
     }
 
@@ -1497,28 +1498,36 @@ void parse_expressionable(struct history *history)
     }
 }
 
-void parse_for_parentheses()
+void parse_for_parentheses(struct history* history)
 {
-    // We must check to see if we have a left node i.e "test(50+20)". Left node = test
-    // If we have a left node we will have to create an expression
-    // otherwise we can just create a parentheses node
-    struct node *left_node = node_peek_or_null();
-    if (left_node)
-    {
-        node_pop();
-    }
+    struct node* left_node = NULL;
 
-    struct history history;
+    // If we are part of an expression then how can we have a left node
+    // We would have something like 50 + (20*40). 20*40 being us
+    if (!(history->flags & NODE_FLAG_INSIDE_EXPRESSION))
+    {
+        // We must check to see if we have a left node i.e "test(50+20)". Left node = test
+        // If we have a left node we will have to create an expression
+        // otherwise we can just create a parentheses node
+        left_node = node_peek_or_null();
+        if (left_node)
+        {
+            node_pop();
+        }
+    }
+    // We want a new history for parentheses
     expect_op("(");
-    parse_expressionable(history_begin(&history, 0));
+    parse_expressionable(history_begin(history, 0));
     expect_sym(')');
 
     struct node *exp_node = node_pop();
     make_exp_parentheses_node(exp_node);
-
+    
     // Do we have a left node from earlier before we parsed the parentheses?
     if (left_node)
     {
+        assert(left_node->type != NODE_TYPE_FUNCTION);
+
         // Ok we do so we must create an expression node, whose left node is the left node
         // and whose right node is the parentheses node
         struct node *parentheses_node = node_pop();

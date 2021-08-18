@@ -4,6 +4,7 @@
         "stdarg.h": "c",
         "limits": "c",
         "stdio.h": "c",
-        "type_traits": "c"
+        "type_traits": "c",
+        "string.h": "c"
     }
 }

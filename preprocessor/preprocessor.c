@@ -583,13 +583,30 @@ void preprocessor_multi_value_insert_to_vector(struct compile_process *compiler,
         value_token = preprocessor_next_token(compiler);
     }
 }
-void preprocessor_handle_definition_token(struct compile_process *compiler)
-{
-    struct token *name_token = preprocessor_next_token(compiler);
 
-    // Arguments vector in case this definition has function arguments
-    struct vector *arguments = vector_create(sizeof(const char *));
-    // Do we have a function definition
+bool preprocessor_is_next_macro_arguments(struct compile_process* compiler)
+{
+    int res = false;
+    vector_save(compiler->token_vec_original);
+
+    struct token* current_token = preprocessor_next_token(compiler);
+    if (!token_is_operator(current_token, "("))
+    {
+        // No left bracket? Then this is not a macro argument.
+        goto end;
+    }
+
+    res = true;
+
+end:
+    vector_restore(compiler->token_vec_original);
+
+    return res;
+}
+
+void preprocessor_parse_macro_argument_declaration(struct compile_process* compiler, struct vector* arguments)
+{
+      // Do we have a function definition
     if (token_is_operator(preprocessor_next_token_no_increment(compiler), "("))
     {
         preprocessor_next_token(compiler);
@@ -619,6 +636,19 @@ void preprocessor_handle_definition_token(struct compile_process *compiler)
             next_token = preprocessor_next_token(compiler);
         }
     }
+
+}
+void preprocessor_handle_definition_token(struct compile_process *compiler)
+{
+    struct token *name_token = preprocessor_next_token(compiler);
+
+    // Arguments vector in case this definition has function arguments
+    struct vector *arguments = vector_create(sizeof(const char *));
+    if (preprocessor_is_next_macro_arguments(compiler))
+    {
+        preprocessor_parse_macro_argument_declaration(compiler, arguments);
+    }
+
     // Value can be composed of many tokens
     struct vector *value_token_vec = vector_create(sizeof(struct token));
     preprocessor_multi_value_insert_to_vector(compiler, value_token_vec);

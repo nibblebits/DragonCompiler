@@ -194,6 +194,17 @@ else
     echo -e "Comments test passed"
 fi
 
+echo -e "Advanced expression parentheses"
+./build/advanced_exp_parentheses
+if [ $? -ne 144 ]; then
+    echo -e "Advanced expression parentheses test failed"
+    res_code=1
+else
+    echo -e "Advanced expression parentheses test passed"
+fi
+
+
+
 
 
 

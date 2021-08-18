@@ -1,6 +1,6 @@
 # Builds the tests
-OBJECTS=./build/variable_assignment.o ./build/advanced_exp.o ./build/advanced_exp_neg.o ./build/function_call_test_one_argument.o ./build/function_call_test_two_arguments.o ./build/if_statement_test.o ./build/preprocessor_macro_test.o ./build/structure_test.o ./build/bitwise_not_with_addition.o ./build/bitshift_and_test.o ./build/preprocessor_line_macro_test.o ./build/typedef_test.o ./build/while_test.o ./build/do_while_test.o ./build/break_test.o ./build/for_loop_test.o ./build/switch_statement_test.o ./build/goto_test.o
-EXECUTABLES=./build/variable_assignment ./build/advanced_exp ./build/advanced_exp_neg ./build/function_call_test_one_argument ./build/function_call_test_two_arguments ./build/if_statement_test ./build/preprocessor_macro_test ./build/structure_test ./build/bitwise_not_with_addition ./build/bitshift_and_test ./build/preprocessor_line_macro_test ./build/typedef_test ./build/while_test ./build/do_while_test ./build/break_test ./build/for_loop_test ./build/switch_statement_test ./build/goto_test
+OBJECTS=./build/variable_assignment.o ./build/advanced_exp.o ./build/advanced_exp_neg.o ./build/function_call_test_one_argument.o ./build/function_call_test_two_arguments.o ./build/if_statement_test.o ./build/preprocessor_macro_test.o ./build/structure_test.o ./build/bitwise_not_with_addition.o ./build/bitshift_and_test.o ./build/preprocessor_line_macro_test.o ./build/typedef_test.o ./build/while_test.o ./build/do_while_test.o ./build/break_test.o ./build/for_loop_test.o ./build/switch_statement_test.o ./build/goto_test.o ./build/comments_test.o
+EXECUTABLES=./build/variable_assignment ./build/advanced_exp ./build/advanced_exp_neg ./build/function_call_test_one_argument ./build/function_call_test_two_arguments ./build/if_statement_test ./build/preprocessor_macro_test ./build/structure_test ./build/bitwise_not_with_addition ./build/bitshift_and_test ./build/preprocessor_line_macro_test ./build/typedef_test ./build/while_test ./build/do_while_test ./build/break_test ./build/for_loop_test ./build/switch_statement_test ./build/goto_test ./build/comments_test
 all: ${OBJECTS}
 
 ./build/variable_assignment.o:./units/variable_assignment.c
@@ -58,6 +58,9 @@ all: ${OBJECTS}
 
 ./build/goto_test.o:./units/goto_test.c
 	../main ./units/goto_test.c ./build/goto_test
+
+./build/comments_test.o:./units/comments_test.c
+	../main ./units/comments_test.c ./build/comments_test
 clean:
 	rm -rf ${OBJECTS}
 	rm -rf ${EXECUTABLES}

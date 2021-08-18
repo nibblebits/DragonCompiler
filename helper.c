@@ -4,6 +4,7 @@
 
 #include "compiler.h"
 #include "helpers/vector.h"
+#include <stdio.h>
 #include <assert.h>
 
 /**

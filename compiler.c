@@ -1,4 +1,5 @@
 #include "compiler.h"
+#include "misc.h"
 #include "helpers/vector.h"
 void compiler_error(struct compile_process *compiler, const char *msg, ...)
 {
@@ -75,6 +76,13 @@ void test(struct node *node)
  */
 struct compile_process *compile_include(const char *filename, struct compile_process *parent_process)
 {
+    char tmp_filename[512];
+    sprintf(tmp_filename, "/usr/include/%s", filename);
+    if(file_exists(tmp_filename))
+    {
+        filename = tmp_filename;
+    }
+
     struct compile_process *process = compile_process_create(filename, NULL, parent_process->flags, parent_process);
     if (!process)
         return NULL;

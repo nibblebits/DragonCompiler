@@ -1450,17 +1450,6 @@ bool is_logical_operator(const char *op);
 bool is_logical_node(struct node *node);
 
 /**
- * Returns true if the address can be caclulated at compile time
- */
-bool is_compile_computable(struct node *node);
-
-/**
- * Returns true if the given character is one of the provided delims
- * \param c The character to check
- * \param delims A const char string of many delimieters. One byte per delimieter
- */
-bool char_is_delim(char c, const char *delims);
-/**
  * Computes the array offset for the given expression node or array bracket node.
  * 
  * \param node The node to perform the computation on
@@ -1701,4 +1690,18 @@ struct resolver_default_scope_data *resolver_default_scope_private(struct resolv
 
 // Code generator
 struct code_generator *codegenerator_new(struct compile_process *process);
+
+// Helper.c
+/**
+ * Returns true if the address can be caclulated at compile time
+ */
+bool is_compile_computable(struct node *node);
+
+/**
+ * Returns true if the given character is one of the provided delims
+ * \param c The character to check
+ * \param delims A const char string of many delimieters. One byte per delimieter
+ */
+bool char_is_delim(char c, const char *delims);
+
 #endif

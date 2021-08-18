@@ -633,7 +633,10 @@ void preprocessor_handle_include_token(struct compile_process *compiler)
 
     // We have the path here
     struct token *file_path_token = preprocessor_next_token(compiler);
-    if (!file_exists(file_path_token->sval))
+
+    char tmp_filename[512];
+    sprintf(tmp_filename, "/usr/include/%s", file_path_token->sval);
+    if (!file_exists(file_path_token->sval) && !file_exists(tmp_filename))
     {
         compiler_error(compiler, "The file does not exist %s unable to include", file_path_token->sval);
     }

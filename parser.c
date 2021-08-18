@@ -359,10 +359,15 @@ static bool parser_is_unary_operator(const char *op)
     return is_unary_operator(op);
 }
 
+static bool token_is_nl_or_comment(struct token* token)
+{
+    return token->type == TOKEN_TYPE_NEWLINE || token->type == TOKEN_TYPE_COMMENT;
+}
+
 static struct token *token_next()
 {
     struct token *next_token = vector_peek_no_increment(current_process->token_vec);
-    while (next_token && next_token->type == TOKEN_TYPE_NEWLINE)
+    while (next_token && token_is_nl_or_comment(next_token))
     {
         vector_peek(current_process->token_vec);
         // The parser does not care about new lines, only the preprocessor has to care about that
@@ -374,7 +379,7 @@ static struct token *token_next()
 static struct token *token_peek_next()
 {
     struct token *next_token = vector_peek_no_increment(current_process->token_vec);
-    while (next_token && next_token->type == TOKEN_TYPE_NEWLINE)
+    while (next_token && token_is_nl_or_comment(next_token))
     {
         vector_peek(current_process->token_vec);
         // The parser does not care about new lines, only the preprocessor has to care about that
@@ -410,7 +415,6 @@ static struct token *token_next_expected(int type)
 
     return token;
 }
-
 
 int parser_get_pointer_depth()
 {
@@ -1548,7 +1552,7 @@ void parse_datatype_modifiers(struct datatype *datatype)
         {
             datatype->flags |= DATATYPE_FLAG_IS_STATIC;
         }
-        else if(S_EQ(token->sval, "const"))
+        else if (S_EQ(token->sval, "const"))
         {
             datatype->flags |= DATATYPE_FLAG_IS_CONST;
         }

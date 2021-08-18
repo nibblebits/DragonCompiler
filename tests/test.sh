@@ -185,6 +185,18 @@ else
 fi
 
 
+echo -e "Running comments test"
+./build/comments_test
+if [ $? -ne 50 ]; then
+    echo -e "Comments test failed"
+    res_code=1
+else
+    echo -e "Comments test passed"
+fi
+
+
+
+
 
 
 

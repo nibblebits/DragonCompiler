@@ -1443,13 +1443,13 @@ void parse_for_tenary(struct history* history)
     expect_op("?");
 
     // Let's parse the TRUE result of this tenary
-    parse_expressionable(history_down(history, 0));
+    parse_expressionable(history_down(history, HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL));
     struct node* true_result_node = node_pop();
     // Now comes the colon
     expect_sym(':');
 
     // Finally the false result
-    parse_expressionable(history_down(history, 0));
+    parse_expressionable(history_down(history, HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL));
     struct node* false_result_node = node_pop();
 
     // Now to craft the tenary
@@ -1567,8 +1567,6 @@ void parse_for_parentheses(struct history* history)
     // Do we have a left node from earlier before we parsed the parentheses?
     if (left_node)
     {
-        assert(left_node->type != NODE_TYPE_FUNCTION);
-
         // Ok we do so we must create an expression node, whose left node is the left node
         // and whose right node is the parentheses node
         struct node *parentheses_node = node_pop();

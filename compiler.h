@@ -47,7 +47,8 @@
     case '(':                           \
     case '[':                           \
     case ',':                           \
-    case '.'
+    case '.':                           \
+    case '?'
 
 #define NUMERIC_CASE \
     case '0':        \
@@ -823,6 +824,7 @@ enum
     NODE_TYPE_STATEMENT_CASE,
     NODE_TYPE_STATEMENT_DEFAULT,
     NODE_TYPE_STATEMENT_GOTO,
+    NODE_TYPE_TENARY,
 
     // A label node i.e "testing:"
     NODE_TYPE_LABEL,
@@ -1063,10 +1065,18 @@ struct node
 
         } stmt;
 
-        struct label
+        struct node_label
         {
             struct node *name;
         } label;
+
+        struct node_tenary
+        {
+            // No need for a condition node in the tenary as this will be present
+            // in the expression node for the tenary i.e E(COND, TENARY[true_node,false_node])
+            struct node* true_node;
+            struct node* false_node;
+        } tenary;
     };
 
     // Literal values for nodes of generic types. I.e numbers and identifiers

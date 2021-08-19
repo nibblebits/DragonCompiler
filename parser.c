@@ -586,6 +586,11 @@ void make_goto_node(struct node *label_node)
     node_create(&(struct node){NODE_TYPE_STATEMENT_GOTO, .stmt._goto.label = label_node});
 }
 
+void make_tenary_node(struct node* true_result_node, struct node* false_result_node)
+{
+    node_create(&(struct node){NODE_TYPE_TENARY,.tenary.true_node=true_result_node,.tenary.false_node=false_result_node});
+}
+
 void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
 {
     node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
@@ -1429,6 +1434,34 @@ void parse_for_array(struct history *history)
     }
 }
 
+void parse_for_tenary(struct history* history)
+{
+    // At this point we have parsed the condition of the tenary
+    // i.e 50 ? 20 : 10  we are now at the ? 20 bit.
+
+    struct node* condition_operand = node_pop();
+    expect_op("?");
+
+    // Let's parse the TRUE result of this tenary
+    parse_expressionable(history_down(history, 0));
+    struct node* true_result_node = node_pop();
+    // Now comes the colon
+    expect_sym(':');
+
+    // Finally the false result
+    parse_expressionable(history_down(history, 0));
+    struct node* false_result_node = node_pop();
+
+    // Now to craft the tenary
+    make_tenary_node(true_result_node, false_result_node);
+
+    // We may need to make this into an expression node later on..
+    // Not sure how this is going to turn out.. lets try and make an expression
+    struct node* tenary_node = node_pop();
+    make_exp_node(condition_operand, tenary_node, "?");
+
+}
+
 void parse_exp(struct history *history)
 {
     if (S_EQ(token_peek_next()->sval, "("))
@@ -1440,6 +1473,12 @@ void parse_exp(struct history *history)
     if (S_EQ(token_peek_next()->sval, "["))
     {
         parse_for_array(history);
+        return;
+    }
+
+    if (S_EQ(token_peek_next()->sval, "?"))
+    {
+        parse_for_tenary(history);
         return;
     }
 

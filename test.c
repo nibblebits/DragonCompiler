@@ -1,9 +1,6 @@
-
-#define ABC
-#define CBA 5
-#if defined ABC && 21 > 20
-#endif
 int main()
 {
-    return CBA;
+    int x;
+    x = 20+30+40+50*10 ? 500*2 : 200*4;
+    return x;
 }

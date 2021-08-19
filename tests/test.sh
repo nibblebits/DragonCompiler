@@ -213,5 +213,13 @@ else
 fi
 
 
+echo -e "Tenary test"
+./build/tenary_test
+if [ $? -ne 100 ]; then
+    echo -e "Tenary test failed"
+    res_code=1
+else
+    echo -e "Tenary test passed"
+fi
 echo -e "All tests finished"
 exit $res_code

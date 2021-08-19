@@ -1358,6 +1358,30 @@ void codegen_generate_string(struct node *node, struct history *history)
     codegen_gen_mov_or_math_for_value("eax", label, history->flags);
 }
 
+void codegen_generate_tenary(struct node *node, struct history *history)
+{
+    int true_label_id = codegen_label_count();
+    int false_label_id = codegen_label_count();
+    int tenary_end_label_id = codegen_label_count();
+
+    // Condition node would have already been generated as tenaries are
+    // nested into an expression
+    asm_push("cmp eax, 0");
+    asm_push("je .tenary_false_%i", false_label_id);
+    asm_push(".tenary_true_%i:", true_label_id);
+
+    register_unset_flag(REGISTER_EAX_IS_USED);
+    // Now we generate the true condition
+    codegen_generate_new_expressionable(node->tenary.true_node, history_down(history, 0));
+    asm_push("jmp .tenary_end_%i", tenary_end_label_id);
+
+    asm_push(".tenary_false_%i:", false_label_id);
+    // Now the false condition
+    register_unset_flag(REGISTER_EAX_IS_USED);
+    codegen_generate_new_expressionable(node->tenary.false_node, history_down(history, 0));
+    asm_push(".tenary_end_%i:", tenary_end_label_id);
+}
+
 void codegen_generate_expressionable(struct node *node, struct history *history)
 {
     bool is_root = codegen_is_exp_root(history);
@@ -1388,6 +1412,10 @@ void codegen_generate_expressionable(struct node *node, struct history *history)
 
     case NODE_TYPE_UNARY:
         codegen_generate_unary(node, history);
+        break;
+
+    case NODE_TYPE_TENARY:
+        codegen_generate_tenary(node, history);
         break;
     }
 }
@@ -1757,12 +1785,12 @@ void codegen_generate_continue_stmt(struct node *node)
     codegen_goto_entry_point(node);
 }
 
-void codegen_generate_label(struct node* node)
+void codegen_generate_label(struct node *node)
 {
     asm_push("label_%s:", node->label.name->sval);
 }
 
-void codegen_generate_goto_stmt(struct node* node)
+void codegen_generate_goto_stmt(struct node *node)
 {
     asm_push("jmp label_%s", node->stmt._goto.label->sval);
 }
@@ -1857,7 +1885,7 @@ void codegen_generate_function_arguments(struct vector *argument_vector)
     }
 }
 
-void codegen_generate_function_prototype(struct node* node)
+void codegen_generate_function_prototype(struct node *node)
 {
     // We must register this function prototype
     codegen_register_function(node, 0);
@@ -1867,7 +1895,7 @@ void codegen_generate_function_prototype(struct node* node)
     // and it marked as external
 }
 
-void codegen_generate_function_with_body(struct node* node)
+void codegen_generate_function_with_body(struct node *node)
 {
     // We must register this function
     codegen_register_function(node, 0);
@@ -1889,9 +1917,8 @@ void codegen_generate_function_with_body(struct node* node)
 
     // End function argument scope
     codegen_finish_scope();
-    
-    codegen_stack_add(C_ALIGN(function_node_stack_size(node)));
 
+    codegen_stack_add(C_ALIGN(function_node_stack_size(node)));
 
     asm_push("pop ebp");
     asm_push("ret");

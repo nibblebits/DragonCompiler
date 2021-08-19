@@ -231,11 +231,11 @@ void read_op_flush_back_keep_first(struct buffer* buffer)
 {
     const char* data = buffer_ptr(buffer);
     int len = buffer->len;
-    for (int i = len; i >= 1; i--)
+    for (int i = len-1; i >= 1; i--)
     {
-        if (buffer->data[i] == 0x00)
+        if (data[i] == 0x00)
             continue;
-        pushc(buffer->data[i]);
+        pushc(data[i]);
     }   
 }
 

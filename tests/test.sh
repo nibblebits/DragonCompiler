@@ -203,18 +203,14 @@ else
     echo -e "Advanced expression parentheses test passed"
 fi
 
-
-
-
-
-
-
-
-
-
-
-
-
+echo -e "Preprocessor macro defined test"
+./build/preprocessor_macro_defined_test
+if [ $? -ne 10 ]; then
+    echo -e "Preprocessor macro defined test failed"
+    res_code=1
+else
+    echo -e "Preprocessor macro defined test passed"
+fi
 
 
 echo -e "All tests finished"

@@ -26,9 +26,11 @@ enum
 {
     PREPROCESSOR_NUMBER_NODE,
     PREPROCESSOR_IDENTIFIER_NODE,
+    PREPROCESSOR_KEYWORD_NODE,
     PREPROCESSOR_UNARY_NODE,
     PREPROCESSOR_EXPRESSION_NODE,
-    PREPROCESSOR_PARENTHESES_NODE
+    PREPROCESSOR_PARENTHESES_NODE,
+    PREPROCESSOR_JOINED_NODE
 };
 
 struct preprocessor_node
@@ -70,11 +72,21 @@ struct preprocessor_node
             // The expression between the brackets ()
             struct preprocessor_node *exp;
         } parenthesis;
+
+        struct preprocessor_joined_node
+        {
+            struct preprocessor_node* left;
+            struct preprocessor_node* right;
+        } joined;  
     };
 
     const char *sval;
 };
 
+bool preprocessor_is_keyword(const char* type)
+{
+    return S_EQ(type, "defined");
+}
 struct vector *preprocessor_build_value_vector_for_integer(int value)
 {
     struct vector *token_vec = vector_create(sizeof(struct token));
@@ -113,7 +125,14 @@ void *preprocessor_handle_number_token(struct expressionable *expressionable)
 void *preprocessor_handle_identifier_token(struct expressionable *expressionable)
 {
     struct token *token = expressionable_token_next(expressionable);
-    return preprocessor_node_create(&(struct preprocessor_node){.type = PREPROCESSOR_IDENTIFIER_NODE, .sval = token->sval});
+    bool is_preprocessor_keyword = preprocessor_is_keyword(token->sval);
+    int type = PREPROCESSOR_IDENTIFIER_NODE;
+    if (is_preprocessor_keyword)
+    {
+        type = PREPROCESSOR_KEYWORD_NODE;
+    }
+
+    return preprocessor_node_create(&(struct preprocessor_node){.type = type, .sval = token->sval});
 }
 
 void preprocessor_make_expression_node(struct expressionable *expressionable, void *left_node_ptr, void *right_node_ptr, const char *op)
@@ -159,6 +178,7 @@ int preprocessor_get_node_type(struct expressionable *expressionable, void *node
         break;
 
     case PREPROCESSOR_IDENTIFIER_NODE:
+    case PREPROCESSOR_KEYWORD_NODE:
         generic_type = EXPRESSIONABLE_GENERIC_TYPE_IDENTIFIER;
         break;
 
@@ -206,6 +226,20 @@ void *preprocessor_make_unary_node(struct expressionable *expressionable, const 
     return preprocessor_node_create(&(struct preprocessor_node){.type = PREPROCESSOR_UNARY_NODE, .unary_node.op = op, .unary_node.operand_node = right_operand_node_ptr});
 }
 
+bool preprocessor_should_join_nodes(struct expressionable* expressionable, void* previous_node_ptr, void* node_ptr)
+{
+    struct preprocessor_node* previous_node = previous_node_ptr;
+    return previous_node->type == PREPROCESSOR_KEYWORD_NODE;
+}
+
+void* preprocessor_join_nodes(struct expressionable* expressionable, void* previous_node_ptr, void* node_ptr)
+{
+    struct preprocessor_node* previous_node = previous_node_ptr;
+    struct preprocessor_node* node = node_ptr;
+
+    return preprocessor_node_create(&(struct preprocessor_node){.type=PREPROCESSOR_JOINED_NODE, .joined.left=previous_node,.joined.right=node});
+}
+
 struct expressionable_config preprocessor_expressionable_config =
     {
         .callbacks.handle_number_callback = preprocessor_handle_number_token,
@@ -219,7 +253,10 @@ struct expressionable_config preprocessor_expressionable_config =
         .callbacks.get_node_operator = preprocessor_get_node_operator,
         .callbacks.get_left_node_address = preprocessor_get_left_node_address,
         .callbacks.get_right_node_address = preprocessor_get_right_node_address,
-        .callbacks.set_exp_node = preprocessor_set_expression_node};
+        .callbacks.set_exp_node = preprocessor_set_expression_node,
+        .callbacks.should_join_nodes = preprocessor_should_join_nodes,
+        .callbacks.join_nodes = preprocessor_join_nodes
+    };
 
 struct preprocessor_function_argument
 {
@@ -543,8 +580,26 @@ struct preprocessor_definition *preprocessor_definition_create_typedef(const cha
     return definition;
 }
 
+void preprocessor_definition_remove(struct preprocessor* preprocessor, const char* name)
+{
+    vector_set_peek_pointer(preprocessor->definitions, 0);
+    struct preprocessor_definition* current_definition = vector_peek_ptr(preprocessor->definitions);
+    while(current_definition)
+    {
+        if (S_EQ(current_definition->name, name))
+        {
+            // We found the definition to remove, pop it.
+            vector_pop_last_peek(preprocessor->definitions);
+        }
+        current_definition = vector_peek_ptr(preprocessor->definitions);
+    }
+}
+
 struct preprocessor_definition *preprocessor_definition_create(const char *name, struct vector *value_vec, struct vector *arguments, struct preprocessor *preprocessor)
 {
+    // Unset the definition if it already exists
+    preprocessor_definition_remove(preprocessor, name);
+
     struct preprocessor_definition *definition = calloc(sizeof(struct preprocessor_definition), 1);
     definition->type = PREPROCESSOR_DEFINITION_STANDARD;
     definition->name = name;
@@ -897,6 +952,10 @@ int preprocessor_arithmetic(struct compile_process *compiler, long left_operand,
     {
         result = left_operand >> right_operand;
     }
+    else if(S_EQ(op, "&&"))
+    {
+        result = left_operand && right_operand;
+    }
     else
     {
         compiler_error(compiler, "We do not support the operator %s for preprocessor arithmetic", op);
@@ -941,6 +1000,33 @@ int preprocessor_evaluate_parentheses(struct compile_process *compiler, struct p
     return preprocessor_evaluate(compiler, node->parenthesis.exp);
 }
 
+int preprocessor_evaluate_joined_node_defined(struct compile_process* compiler, struct preprocessor_node* node)
+{
+    struct preprocessor_node* right_node = node->joined.right;
+    if (right_node->type != PREPROCESSOR_IDENTIFIER_NODE)
+    {
+        compiler_error(compiler, "Expecting an identifier node for defined keyword right operand");
+    }
+
+    return preprocessor_get_definition(compiler_preprocessor(compiler), right_node->sval) != NULL;
+}
+
+int preprocessor_evaluate_joined_node(struct compile_process* compiler, struct preprocessor_node* node)
+{
+    if (node->joined.left->type != PREPROCESSOR_KEYWORD_NODE)
+    {
+        return 0;
+    }
+
+    int res = 0;
+    if (S_EQ(node->joined.left->sval, "defined"))
+    {
+        res = preprocessor_evaluate_joined_node_defined(compiler, node);
+    }
+
+    return res;
+}
+
 int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_node *root_node)
 {
     struct preprocessor_node *current = root_node;
@@ -966,6 +1052,10 @@ int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_
     case PREPROCESSOR_PARENTHESES_NODE:
         result = preprocessor_evaluate_parentheses(compiler, current);
         break;
+
+    case PREPROCESSOR_JOINED_NODE:
+        result = preprocessor_evaluate_joined_node(compiler, current);
+    break;
     }
     return result;
 }
@@ -973,7 +1063,7 @@ void preprocessor_handle_if_token(struct compile_process *compiler)
 {
     struct vector *node_vector = vector_create(sizeof(struct preprocessor_node *));
     // We will have an expression after the if token that needs to be preprocessed
-    struct expressionable *expressionable = expressionable_create(&preprocessor_expressionable_config, compiler->token_vec_original, node_vector);
+    struct expressionable *expressionable = expressionable_create(&preprocessor_expressionable_config, compiler->token_vec_original, node_vector, EXPRESSIONABLE_FLAG_IS_PREPROCESSOR_EXPRESSION);
     expressionable_parse(expressionable);
 
     struct preprocessor_node *node = expressionable_node_pop(expressionable);
@@ -1231,7 +1321,7 @@ void preprocessor_handle_token(struct compile_process *compiler, struct token *t
 void preprocessor_initialize(struct vector *token_vec, struct preprocessor *preprocessor)
 {
     memset(preprocessor, 0, sizeof(struct preprocessor));
-    preprocessor->definitions = vector_create(sizeof(struct preprocessor_definition));
+    preprocessor->definitions = vector_create(sizeof(struct preprocessor_definition*));
     preprocessor_create_definitions(preprocessor);
 }
 

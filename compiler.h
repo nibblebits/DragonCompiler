@@ -1585,6 +1585,10 @@ typedef void *(*EXPRESSIONABLE_GET_RIGHT_NODE)(struct expressionable *expression
 typedef const char *(*EXPRESSIONABLE_GET_NODE_OPERATOR)(struct expressionable *expressionable, void *target_node);
 typedef void **(*EXPRESSIONABLE_GET_NODE_ADDRESS)(struct expressionable *expressionable, void *target_node);
 typedef void (*EXPPRESIONABLE_SET_EXPRESSION_NODE)(struct expressionable *expressionable, void *node, void *left_node, void *right_node, const char *op);
+
+typedef bool (*EXPRESSIONABLE_SHOULD_JOIN_NODES)(struct expressionable* expressionable, void* previous_node, void* node);
+typedef void* (*EXPRESSIONABLE_JOIN_NODES)(struct expressionable* expressionable, void* previous_node, void* node);
+
 struct expressionable_config
 {
     struct expressionable_callbacks
@@ -1613,17 +1617,32 @@ struct expressionable_config
         EXPRESSIONABLE_GET_NODE_ADDRESS get_right_node_address;
         EXPPRESIONABLE_SET_EXPRESSION_NODE set_exp_node;
 
+        /**
+         * Returns true if the two nodes should be joined
+         */
+        EXPRESSIONABLE_SHOULD_JOIN_NODES should_join_nodes;
+        /**
+         * Should join the two nodes and return a new node
+         */
+        EXPRESSIONABLE_JOIN_NODES join_nodes;
+
     } callbacks;
+};
+
+enum
+{
+    EXPRESSIONABLE_FLAG_IS_PREPROCESSOR_EXPRESSION = 0b00000001
 };
 
 struct expressionable
 {
+    int flags;
     struct expressionable_config config;
     struct vector *token_vec;
     struct vector *node_vec_out;
 };
 
-struct expressionable *expressionable_create(struct expressionable_config *config, struct vector *token_vector, struct vector *node_vector);
+struct expressionable *expressionable_create(struct expressionable_config *config, struct vector *token_vector, struct vector *node_vector, int flags);
 void expressionable_parse(struct expressionable *expressionable);
 struct token *expressionable_token_next(struct expressionable *expressionable);
 void *expressionable_node_pop(struct expressionable *expressionable);

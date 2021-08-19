@@ -5,6 +5,7 @@
         "limits": "c",
         "stdio.h": "c",
         "type_traits": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "features.h": "c"
     }
 }

@@ -68,7 +68,7 @@ struct token *expressionable_token_next(struct expressionable *expressionable)
     return vector_peek(expressionable->token_vec);
 }
 
-static struct node *expressionable_node_peek_or_null(struct expressionable *expressionable)
+static void *expressionable_node_peek_or_null(struct expressionable *expressionable)
 {
     return vector_back_ptr_or_null(expressionable->node_vec_out);
 }
@@ -109,7 +109,7 @@ void *expressionable_node_pop(struct expressionable *expressionable)
     return last_node;
 }
 
-void expressionable_init(struct expressionable *expressionable, struct vector *token_vector, struct vector *node_vector, struct expressionable_config *config)
+void expressionable_init(struct expressionable *expressionable, struct vector *token_vector, struct vector *node_vector, struct expressionable_config *config, int flags)
 {
     memset(expressionable, 0, sizeof(struct expressionable));
     memcpy(&expressionable->config, config, sizeof(struct expressionable_config));
@@ -117,13 +117,14 @@ void expressionable_init(struct expressionable *expressionable, struct vector *t
     // We have the size that is enough.
     expressionable->token_vec = token_vector;
     expressionable->node_vec_out = node_vector;
+    expressionable->flags = flags;
 }
 
-struct expressionable *expressionable_create(struct expressionable_config *config, struct vector *token_vector, struct vector *node_vector)
+struct expressionable *expressionable_create(struct expressionable_config *config, struct vector *token_vector, struct vector *node_vector, int flags)
 {
     assert(vector_element_size(token_vector) == sizeof(struct token));
     struct expressionable *expressionable = calloc(sizeof(struct expressionable), 1);
-    expressionable_init(expressionable, token_vector, node_vector, config);
+    expressionable_init(expressionable, token_vector, node_vector, config, flags);
     return expressionable;
 }
 
@@ -149,14 +150,16 @@ int expressionable_parse_identifier(struct expressionable *expressionable)
 
 void expressionable_parse_parentheses(struct expressionable *expressionable)
 {
+    
     // We must check to see if we have a left node i.e "test(50+20)". Left node = test
     // If we have a left node we will have to create an expression
     // otherwise we can just create a parentheses node
-    struct node *left_node = expressionable_node_peek_or_null(expressionable);
+    void *left_node = expressionable_node_peek_or_null(expressionable);
     if (left_node)
     {
         expressionable_node_pop(expressionable);
     }
+    
 
     expressionable_expect_op(expressionable, "(");
     expressionable_parse(expressionable);
@@ -212,6 +215,7 @@ int expressionable_parse_single(struct expressionable *expressionable)
     if (!token)
         return -1;
 
+    void* previous_node = expressionable_node_peek_or_null(expressionable);
     int res = -1;
     switch (token->type)
     {
@@ -226,6 +230,26 @@ int expressionable_parse_single(struct expressionable *expressionable)
     case TOKEN_TYPE_OPERATOR:
         expressionable_parse_exp(expressionable, token);
         break;
+    }
+
+    // We have situations where we can combine nodes.
+    // for example "defined ABC" in the preprocessor would checck if ABC was defined.
+    // Therefore if we are in the preprocessor we should check if we should join the previous
+    // node with the one we just parsed.
+    if (previous_node && expressionable->flags & EXPRESSIONABLE_FLAG_IS_PREPROCESSOR_EXPRESSION)
+    {
+        void* current_node = expressionable_node_peek_or_null(expressionable);
+        if(expressionable_callbacks(expressionable)->should_join_nodes(expressionable, previous_node, current_node))
+        {
+            void* new_node = expressionable_callbacks(expressionable)->join_nodes(expressionable, previous_node, current_node);
+            
+            // Pop off the current node and previous node as we now have them joined in the "new_node"
+            expressionable_node_pop(expressionable);
+            expressionable_node_pop(expressionable);
+
+            // Push the new node to the stack
+            expressionable_node_push(expressionable, new_node);
+        }
     }
     return res;
 }

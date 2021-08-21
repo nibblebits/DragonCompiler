@@ -1,6 +1,11 @@
+#define BCA 10
+#define ABC BCA+BCA/1
+#if ABC == 20
+#define ABC 1
+#endif
+
 int main()
 {
     int x;
-    x = 50+40+20+40+50+(500*2);
-    return x;
+    x = ABC;
 }

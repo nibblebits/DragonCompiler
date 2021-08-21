@@ -190,6 +190,33 @@ int expressionable_parse_unary(struct expressionable *expressionable)
 
 void expressionable_parse_for_operator(struct expressionable *expressionable);
 
+void expressionable_parse_tenary(struct expressionable* expressionable)
+{
+     // At this point we have parsed the condition of the tenary
+    // i.e 50 ? 20 : 10  we are now at the ? 20 bit.
+
+    void* condition_operand = expressionable_node_pop(expressionable);
+    expressionable_expect_op(expressionable, "?");
+
+    // Let's parse the TRUE result of this tenary
+    expressionable_parse(expressionable);
+    void* true_result_node = expressionable_node_pop(expressionable);
+    // Now comes the colon
+    expressionable_expect_sym(expressionable, ':');
+
+    // Finally the false result
+    expressionable_parse(expressionable);
+    void* false_result_node = expressionable_node_pop(expressionable);
+
+    // Now to craft the tenary
+    expressionable_callbacks(expressionable)->make_tenary_node(expressionable, true_result_node, false_result_node);
+
+    // We may need to make this into an expression node later on..
+    // Not sure how this is going to turn out.. lets try and make an expression
+    void* tenary_node = expressionable_node_pop(expressionable);
+    expressionable_callbacks(expressionable)->make_expression_node(expressionable, condition_operand, tenary_node, "?");
+}
+
 int expressionable_parse_exp(struct expressionable *expressionable, struct token* token)
 {
     if (is_unary_operator(token->sval))
@@ -199,6 +226,10 @@ int expressionable_parse_exp(struct expressionable *expressionable, struct token
     else if (S_EQ(expressionable_peek_next(expressionable)->sval, "("))
     {
         expressionable_parse_parentheses(expressionable);
+    }
+    else if(S_EQ(expressionable_peek_next(expressionable)->sval, "?"))
+    {
+        expressionable_parse_tenary(expressionable);
     }
     else
     {

@@ -1,7 +1,5 @@
-#define BCA 10
-#define ABC BCA+BCA/1
-#if ABC == 20
-#define ABC 1
+#define ABC 5 ? 1 : 0
+#if ABC
 #endif
 
 int main()

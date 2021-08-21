@@ -993,6 +993,26 @@ int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_
 int preprocessor_evaluate_exp(struct compile_process *compiler, struct preprocessor_node *node)
 {
     long left_operand = preprocessor_evaluate(compiler, node->exp.left);
+    if (node->exp.right->type == PREPROCESSOR_TENARY_NODE)
+    {
+        // Okay we have a tenary this must be processed a little differently.
+        // In memory we have this: CONDITION ? TRUE_RESULT : FALSE RESULT
+        // THe condition value is stored in the left_operand we just calculated
+        // now we must calculate the true result or the false result, depending on the evaluation
+        // of the left operand
+        if (left_operand)
+        {
+            // A true result?
+            return preprocessor_evaluate(compiler, node->exp.right->tenary.true_node);
+        }
+        else
+        {
+            // False result.
+            return preprocessor_evaluate(compiler, node->exp.right->tenary.false_node);
+        }
+    }
+
+
     long right_operand = preprocessor_evaluate(compiler, node->exp.right);
     return preprocessor_arithmetic(compiler, left_operand, right_operand, node->exp.op);
 }

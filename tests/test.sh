@@ -242,5 +242,14 @@ else
     echo -e "Preprocessor new line test passed"
 fi
 
+echo -e "New line test"
+./build/new_line_seperator
+if [ $? -ne 70 ]; then
+    echo -e "New line test failed"
+    res_code=1
+else
+    echo -e "New line test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

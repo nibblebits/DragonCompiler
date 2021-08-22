@@ -360,32 +360,34 @@ static bool parser_is_unary_operator(const char *op)
     return is_unary_operator(op);
 }
 
-static bool token_is_nl_or_comment(struct token* token)
+static bool token_is_nl_or_comment_or_newline_seperator(struct token *token)
 {
-    return token->type == TOKEN_TYPE_NEWLINE || token->type == TOKEN_TYPE_COMMENT;
+    return token->type == TOKEN_TYPE_NEWLINE || 
+            token->type == TOKEN_TYPE_COMMENT || 
+            token_is_symbol(token, '\\');
 }
 
-static struct token *token_next()
+static void parser_ignore_nl_or_comment(struct token *next_token)
 {
-    struct token *next_token = vector_peek_no_increment(current_process->token_vec);
-    while (next_token && token_is_nl_or_comment(next_token))
+    while (next_token && token_is_nl_or_comment_or_newline_seperator(next_token))
     {
+        // Skip the token
         vector_peek(current_process->token_vec);
         // The parser does not care about new lines, only the preprocessor has to care about that
         next_token = vector_peek_no_increment(current_process->token_vec);
     }
+}
+static struct token *token_next()
+{
+    struct token *next_token = vector_peek_no_increment(current_process->token_vec);
+    parser_ignore_nl_or_comment(next_token);
     return vector_peek(current_process->token_vec);
 }
 
 static struct token *token_peek_next()
 {
     struct token *next_token = vector_peek_no_increment(current_process->token_vec);
-    while (next_token && token_is_nl_or_comment(next_token))
-    {
-        vector_peek(current_process->token_vec);
-        // The parser does not care about new lines, only the preprocessor has to care about that
-        next_token = vector_peek_no_increment(current_process->token_vec);
-    }
+    parser_ignore_nl_or_comment(next_token);
     return vector_peek_no_increment(current_process->token_vec);
 }
 
@@ -586,9 +588,9 @@ void make_goto_node(struct node *label_node)
     node_create(&(struct node){NODE_TYPE_STATEMENT_GOTO, .stmt._goto.label = label_node});
 }
 
-void make_tenary_node(struct node* true_result_node, struct node* false_result_node)
+void make_tenary_node(struct node *true_result_node, struct node *false_result_node)
 {
-    node_create(&(struct node){NODE_TYPE_TENARY,.tenary.true_node=true_result_node,.tenary.false_node=false_result_node});
+    node_create(&(struct node){NODE_TYPE_TENARY, .tenary.true_node = true_result_node, .tenary.false_node = false_result_node});
 }
 
 void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
@@ -667,7 +669,7 @@ void make_bracket_node(struct node *inner_node)
 }
 
 void parse_expressionable(struct history *history);
-void parse_for_parentheses(struct history* history);
+void parse_for_parentheses(struct history *history);
 
 #warning "Bug, variable_struct_node points to uninitialized value"
 static void parser_append_size_for_node(size_t *_variable_size, struct node *node)
@@ -1434,32 +1436,31 @@ void parse_for_array(struct history *history)
     }
 }
 
-void parse_for_tenary(struct history* history)
+void parse_for_tenary(struct history *history)
 {
     // At this point we have parsed the condition of the tenary
     // i.e 50 ? 20 : 10  we are now at the ? 20 bit.
 
-    struct node* condition_operand = node_pop();
+    struct node *condition_operand = node_pop();
     expect_op("?");
 
     // Let's parse the TRUE result of this tenary
     parse_expressionable(history_down(history, HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL));
-    struct node* true_result_node = node_pop();
+    struct node *true_result_node = node_pop();
     // Now comes the colon
     expect_sym(':');
 
     // Finally the false result
     parse_expressionable(history_down(history, HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL));
-    struct node* false_result_node = node_pop();
+    struct node *false_result_node = node_pop();
 
     // Now to craft the tenary
     make_tenary_node(true_result_node, false_result_node);
 
     // We may need to make this into an expression node later on..
     // Not sure how this is going to turn out.. lets try and make an expression
-    struct node* tenary_node = node_pop();
+    struct node *tenary_node = node_pop();
     make_exp_node(condition_operand, tenary_node, "?");
-
 }
 
 void parse_exp(struct history *history)
@@ -1539,9 +1540,9 @@ void parse_expressionable(struct history *history)
     }
 }
 
-void parse_for_parentheses(struct history* history)
+void parse_for_parentheses(struct history *history)
 {
-    struct node* left_node = NULL;
+    struct node *left_node = NULL;
 
     // If we are part of an expression then how can we have a left node
     // We would have something like 50 + (20*40). 20*40 being us
@@ -1563,7 +1564,7 @@ void parse_for_parentheses(struct history* history)
 
     struct node *exp_node = node_pop();
     make_exp_parentheses_node(exp_node);
-    
+
     // Do we have a left node from earlier before we parsed the parentheses?
     if (left_node)
     {
@@ -1604,7 +1605,7 @@ void parse_datatype_modifiers(struct datatype *datatype)
         {
             datatype->flags |= DATATYPE_FLAG_IS_CONST;
         }
-        else if(S_EQ(token->sval, "extern"))
+        else if (S_EQ(token->sval, "extern"))
         {
             datatype->flags |= DATATYPE_FLAG_IS_EXTERN;
         }

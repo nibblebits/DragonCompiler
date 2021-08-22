@@ -977,6 +977,10 @@ int preprocessor_arithmetic(struct compile_process *compiler, long left_operand,
     {
         result = left_operand && right_operand;
     }
+    else if(S_EQ(op, "||"))
+    {
+        result = left_operand || right_operand;
+    }
     else
     {
         compiler_error(compiler, "We do not support the operator %s for preprocessor arithmetic", op);

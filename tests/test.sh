@@ -221,5 +221,16 @@ if [ $? -ne 100 ]; then
 else
     echo -e "Tenary test passed"
 fi
+
+
+echo -e "Preprocessor logical OR test"
+./build/preprocessor_logical_or_test
+if [ $? -ne 1 ]; then
+    echo -e "Preprocessor logical OR test failed"
+    res_code=1
+else
+    echo -e "Preprocessor logical OR test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

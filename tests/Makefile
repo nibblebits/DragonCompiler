@@ -1,6 +1,6 @@
 # Builds the tests
-OBJECTS=./build/variable_assignment.o ./build/advanced_exp.o ./build/advanced_exp_neg.o ./build/function_call_test_one_argument.o ./build/function_call_test_two_arguments.o ./build/if_statement_test.o ./build/preprocessor_macro_test.o ./build/structure_test.o ./build/bitwise_not_with_addition.o ./build/bitshift_and_test.o ./build/preprocessor_line_macro_test.o ./build/typedef_test.o ./build/while_test.o ./build/do_while_test.o ./build/break_test.o ./build/for_loop_test.o ./build/switch_statement_test.o ./build/goto_test.o ./build/comments_test.o ./build/advanced_exp_parentheses.o ./build/preprocessor_macro_defined_test.o ./build/tenary_test.o
-EXECUTABLES=./build/variable_assignment ./build/advanced_exp ./build/advanced_exp_neg ./build/function_call_test_one_argument ./build/function_call_test_two_arguments ./build/if_statement_test ./build/preprocessor_macro_test ./build/structure_test ./build/bitwise_not_with_addition ./build/bitshift_and_test ./build/preprocessor_line_macro_test ./build/typedef_test ./build/while_test ./build/do_while_test ./build/break_test ./build/for_loop_test ./build/switch_statement_test ./build/goto_test ./build/comments_test ./build/advanced_exp_parentheses ./build/preprocessor_macro_defined_test ./build/tenary_test
+OBJECTS=./build/variable_assignment.o ./build/advanced_exp.o ./build/advanced_exp_neg.o ./build/function_call_test_one_argument.o ./build/function_call_test_two_arguments.o ./build/if_statement_test.o ./build/preprocessor_macro_test.o ./build/structure_test.o ./build/bitwise_not_with_addition.o ./build/bitshift_and_test.o ./build/preprocessor_line_macro_test.o ./build/typedef_test.o ./build/while_test.o ./build/do_while_test.o ./build/break_test.o ./build/for_loop_test.o ./build/switch_statement_test.o ./build/goto_test.o ./build/comments_test.o ./build/advanced_exp_parentheses.o ./build/preprocessor_macro_defined_test.o ./build/tenary_test.o ./build/preprocessor_logical_or_test.o
+EXECUTABLES=./build/variable_assignment ./build/advanced_exp ./build/advanced_exp_neg ./build/function_call_test_one_argument ./build/function_call_test_two_arguments ./build/if_statement_test ./build/preprocessor_macro_test ./build/structure_test ./build/bitwise_not_with_addition ./build/bitshift_and_test ./build/preprocessor_line_macro_test ./build/typedef_test ./build/while_test ./build/do_while_test ./build/break_test ./build/for_loop_test ./build/switch_statement_test ./build/goto_test ./build/comments_test ./build/advanced_exp_parentheses ./build/preprocessor_macro_defined_test ./build/tenary_test ./build/preprocessor_logical_or_test
 all: ${OBJECTS}
 
 ./build/variable_assignment.o:./units/variable_assignment.c
@@ -71,6 +71,9 @@ all: ${OBJECTS}
 
 ./build/tenary_test.o:./units/tenary_test.c
 	../main ./units/tenary_test.c ./build/tenary_test
+
+./build/preprocessor_logical_or_test.o:./units/preprocessor_logical_or_test.c
+	../main ./units/preprocessor_logical_or_test.c ./build/preprocessor_logical_or_test
 
 
 

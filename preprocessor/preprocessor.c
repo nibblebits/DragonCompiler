@@ -1107,6 +1107,7 @@ int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_
 void preprocessor_handle_if_token(struct compile_process *compiler)
 {
     struct vector *node_vector = vector_create(sizeof(struct preprocessor_node *));
+
     // We will have an expression after the if token that needs to be preprocessed
     struct expressionable *expressionable = expressionable_create(&preprocessor_expressionable_config, compiler->token_vec_original, node_vector, EXPRESSIONABLE_FLAG_IS_PREPROCESSOR_EXPRESSION);
     expressionable_parse(expressionable);

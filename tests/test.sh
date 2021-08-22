@@ -232,5 +232,15 @@ else
     echo -e "Preprocessor logical OR test passed"
 fi
 
+
+echo -e "Preprocessor new line test"
+./build/preprocessor_logical_or_test
+if [ $? -ne 1 ]; then
+    echo -e "Preprocessor new line test failed"
+    res_code=1
+else
+    echo -e "Preprocessor new line test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

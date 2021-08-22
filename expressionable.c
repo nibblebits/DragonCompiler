@@ -56,15 +56,25 @@ void expressionable_node_push(struct expressionable *expressionable, void *node_
     vector_push(expressionable->node_vec_out, &node_ptr);
 }
 
-struct token *expressionable_token_next(struct expressionable *expressionable)
+void expressionable_ignore_nl(struct expressionable* expressionable, struct token* next_token)
 {
-    struct token *next_token = vector_peek_no_increment(expressionable->token_vec);
-    while (next_token && next_token->type == TOKEN_TYPE_NEWLINE)
+    while (next_token && token_is_symbol(next_token, '\\'))
     {
+        // Skip the "\\"
         vector_peek(expressionable->token_vec);
+        // Skip the NEWLINE token
+        struct token* nl_token = vector_peek(expressionable->token_vec);
+        assert(nl_token->type == TOKEN_TYPE_NEWLINE);
+
         // The parser does not care about new lines, only the preprocessor has to care about that
         next_token = vector_peek_no_increment(expressionable->token_vec);
     }
+}
+
+struct token *expressionable_token_next(struct expressionable *expressionable)
+{
+    struct token *next_token = vector_peek_no_increment(expressionable->token_vec);
+    expressionable_ignore_nl(expressionable, next_token);
     return vector_peek(expressionable->token_vec);
 }
 
@@ -76,12 +86,7 @@ static void *expressionable_node_peek_or_null(struct expressionable *expressiona
 struct token *expressionable_peek_next(struct expressionable *expressionable)
 {
     struct token *next_token = vector_peek_no_increment(expressionable->token_vec);
-    while (next_token && next_token->type == TOKEN_TYPE_NEWLINE)
-    {
-        vector_peek(expressionable->token_vec);
-        // The parser does not care about new lines, only the preprocessor has to care about that
-        next_token = vector_peek_no_increment(expressionable->token_vec);
-    }
+    expressionable_ignore_nl(expressionable, next_token);
     return vector_peek_no_increment(expressionable->token_vec);
 }
 
@@ -147,6 +152,7 @@ int expressionable_parse_identifier(struct expressionable *expressionable)
     expressionable_node_push(expressionable, node_ptr);
     return 0;
 }
+
 
 void expressionable_parse_parentheses(struct expressionable *expressionable)
 {

@@ -426,6 +426,18 @@ bool preprocessor_token_is_ifdef(struct token *token)
     return (S_EQ(token->sval, "ifdef"));
 }
 
+
+bool preprocessor_token_is_ifndef(struct token *token)
+{
+    if (!preprocessor_token_is_preprocessor_keyword(token))
+    {
+        return false;
+    }
+
+    return (S_EQ(token->sval, "ifndef"));
+}
+
+
 bool preprocessor_token_is_if(struct token *token)
 {
     if (!preprocessor_token_is_preprocessor_keyword(token))
@@ -525,7 +537,10 @@ struct token *preprocessor_hashtag_and_identifier(struct compile_process *compil
     preprocessor_next_token(compiler);
 
     struct token *target_token = preprocessor_next_token_no_increment(compiler);
-    if (token_is_identifier(target_token, str))
+    // Preprocessor always has priority even if we define what is
+    // a C keyword.
+    if (token_is_identifier(target_token, str) || 
+        token_is_keyword(target_token, str))
     {
         // Pop off the target token
         preprocessor_next_token(compiler);
@@ -884,6 +899,19 @@ void preprocessor_handle_ifdef_token(struct compile_process *compiler)
     // Ok if the definition exists then we will include the body.
     preprocessor_read_to_end_if(compiler, definition != NULL);
 }
+
+void preprocessor_handle_ifndef_token(struct compile_process* compiler)
+{
+    struct token* condition_token = preprocessor_next_token(compiler);
+    if (!condition_token)
+    {
+        compiler_error(compiler, "You must provide a condition for #ifndef macro");
+    }
+
+    struct preprocessor_definition* definition = preprocessor_get_definition(compiler_preprocessor(compiler), condition_token->sval);
+    preprocessor_read_to_end_if(compiler, definition == NULL);
+}
+
 
 int preprocessor_evaluate_number(struct preprocessor_node *node)
 {
@@ -1294,6 +1322,11 @@ int preprocessor_handle_hashtag_token(struct compile_process *compiler, struct t
     else if (preprocessor_token_is_ifdef(next_token))
     {
         preprocessor_handle_ifdef_token(compiler);
+        is_preprocessed = true;
+    }
+    else if(preprocessor_token_is_ifndef(next_token))
+    {
+        preprocessor_handle_ifndef_token(compiler);
         is_preprocessed = true;
     }
     else if (preprocessor_token_is_if(next_token))

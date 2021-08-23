@@ -6,6 +6,7 @@
         "stdio.h": "c",
         "type_traits": "c",
         "string.h": "c",
-        "features.h": "c"
+        "features.h": "c",
+        "stdc-predef.h": "c"
     }
 }

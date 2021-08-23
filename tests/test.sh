@@ -251,5 +251,14 @@ else
     echo -e "New line test passed"
 fi
 
+echo -e "Preprocessor ifndef test"
+./build/preprocessor_ifndef_macro
+if [ $? -ne 17 ]; then
+    echo -e "Preprocessor ifndef failed"
+    res_code=1
+else
+    echo -e "Preprocessor ifndef passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

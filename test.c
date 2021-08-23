@@ -1,7 +1,10 @@
+#ifdef CAT
+#else
+#define ABC 11
+#endif
+
+
 int main()
 {
-    int x;
-    x = 50 + \
-    20;
-    return x;
+    return ABC;
 }

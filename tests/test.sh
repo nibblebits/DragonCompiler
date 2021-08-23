@@ -260,5 +260,16 @@ else
     echo -e "Preprocessor ifndef passed"
 fi
 
+
+echo -e "Preprocessor nested if test"
+./build/preprocessor_ifndef_macro
+if [ $? -ne 17 ]; then
+    echo -e "Preprocessor nested if failed"
+    res_code=1
+else
+    echo -e "Preprocessor nested if  passed"
+fi
+
+
 echo -e "All tests finished"
 exit $res_code

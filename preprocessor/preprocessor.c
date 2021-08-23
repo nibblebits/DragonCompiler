@@ -426,7 +426,6 @@ bool preprocessor_token_is_ifdef(struct token *token)
     return (S_EQ(token->sval, "ifdef"));
 }
 
-
 bool preprocessor_token_is_ifndef(struct token *token)
 {
     if (!preprocessor_token_is_preprocessor_keyword(token))
@@ -436,7 +435,6 @@ bool preprocessor_token_is_ifndef(struct token *token)
 
     return (S_EQ(token->sval, "ifndef"));
 }
-
 
 bool preprocessor_token_is_if(struct token *token)
 {
@@ -539,7 +537,7 @@ struct token *preprocessor_hashtag_and_identifier(struct compile_process *compil
     struct token *target_token = preprocessor_next_token_no_increment(compiler);
     // Preprocessor always has priority even if we define what is
     // a C keyword.
-    if (token_is_identifier(target_token, str) || 
+    if (token_is_identifier(target_token, str) ||
         token_is_keyword(target_token, str))
     {
         // Pop off the target token
@@ -863,6 +861,47 @@ void preprocessor_handle_typedef_token(struct compile_process *compiler)
     preprocessor_definition_create_typedef(td.definition_name, token_vec, preprocessor);
 }
 
+/**
+ * Returns true if their is a hashtag and any type of preprocessor if statement
+ * Returns true if we have #if, #ifdef or #ifndef
+ */
+bool preprocessor_is_hashtag_and_any_if(struct compile_process *compiler)
+{
+    return preprocessor_hashtag_and_identifier(compiler, "if") ||
+           preprocessor_hashtag_and_identifier(compiler, "ifdef") ||
+           preprocessor_hashtag_and_identifier(compiler, "ifndef");
+}
+
+/**
+ * Skips a nested if until an endif is found
+ */
+void preprocessor_skip_sub_to_endif(struct compile_process *compiler)
+{
+    while (!preprocessor_hashtag_and_identifier(compiler, "endif"))
+    {
+        preprocessor_next_token(compiler);
+    }
+}
+
+/**
+ * Skips the IF statement until endif is found, also skipping
+ * all if sub if statements
+ */
+void preprocessor_skip_to_endif(struct compile_process *compiler)
+{
+    while (!preprocessor_hashtag_and_identifier(compiler, "endif"))
+    {
+        if (preprocessor_is_hashtag_and_any_if(compiler))
+        {
+            preprocessor_next_token(compiler);
+            // We have a sub if statement, lets skip it
+            preprocessor_skip_to_endif(compiler);
+        }
+
+        preprocessor_next_token(compiler);
+    }
+}
+
 void preprocessor_read_to_end_if(struct compile_process *compiler, bool true_clause)
 {
     // We have this definition we can proceed with the rest of the body, until
@@ -884,6 +923,16 @@ void preprocessor_read_to_end_if(struct compile_process *compiler, bool true_cla
 
         // Skip the unexpected token
         preprocessor_next_token(compiler);
+
+        // We just skipped something as it wasent true, if we have
+        // an if or ifdef statement we should now skip the entire thing
+        // as the first clause failed.
+        if (preprocessor_hashtag_and_identifier(compiler, "ifdef"))
+        {
+            // We have another IFDEF. Then we need to do something here
+            // to avoid a rouge endif
+            preprocessor_skip_to_endif(compiler);
+        }
     }
 }
 void preprocessor_handle_ifdef_token(struct compile_process *compiler)
@@ -900,18 +949,17 @@ void preprocessor_handle_ifdef_token(struct compile_process *compiler)
     preprocessor_read_to_end_if(compiler, definition != NULL);
 }
 
-void preprocessor_handle_ifndef_token(struct compile_process* compiler)
+void preprocessor_handle_ifndef_token(struct compile_process *compiler)
 {
-    struct token* condition_token = preprocessor_next_token(compiler);
+    struct token *condition_token = preprocessor_next_token(compiler);
     if (!condition_token)
     {
         compiler_error(compiler, "You must provide a condition for #ifndef macro");
     }
 
-    struct preprocessor_definition* definition = preprocessor_get_definition(compiler_preprocessor(compiler), condition_token->sval);
+    struct preprocessor_definition *definition = preprocessor_get_definition(compiler_preprocessor(compiler), condition_token->sval);
     preprocessor_read_to_end_if(compiler, definition == NULL);
 }
-
 
 int preprocessor_evaluate_number(struct preprocessor_node *node)
 {
@@ -1005,7 +1053,7 @@ int preprocessor_arithmetic(struct compile_process *compiler, long left_operand,
     {
         result = left_operand && right_operand;
     }
-    else if(S_EQ(op, "||"))
+    else if (S_EQ(op, "||"))
     {
         result = left_operand || right_operand;
     }
@@ -1043,7 +1091,6 @@ int preprocessor_evaluate_exp(struct compile_process *compiler, struct preproces
             return preprocessor_evaluate(compiler, node->exp.right->tenary.false_node);
         }
     }
-
 
     long right_operand = preprocessor_evaluate(compiler, node->exp.right);
     return preprocessor_arithmetic(compiler, left_operand, right_operand, node->exp.op);
@@ -1324,7 +1371,7 @@ int preprocessor_handle_hashtag_token(struct compile_process *compiler, struct t
         preprocessor_handle_ifdef_token(compiler);
         is_preprocessed = true;
     }
-    else if(preprocessor_token_is_ifndef(next_token))
+    else if (preprocessor_token_is_ifndef(next_token))
     {
         preprocessor_handle_ifndef_token(compiler);
         is_preprocessed = true;

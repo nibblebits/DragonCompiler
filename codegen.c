@@ -1124,7 +1124,10 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     struct node *left_node = node->exp.left;
     struct node *right_node = node->exp.right;
     bool must_save_restore = codegen_must_save_restore(node);
-    bool right_node_priority = node->exp.right->type == NODE_TYPE_EXPRESSION;
+
+    // For now right node priority is false due to bugs.
+    bool right_node_priority = node_is_expression_or_parentheses(node->exp.right);
+
     // When the right node is an expression is takes full priority
     if (right_node_priority)
     {
@@ -1349,7 +1352,7 @@ void codegen_generate_unary(struct node *node, struct history *history)
 
 void codegen_generate_exp_parenthesis_node(struct node *node, struct history *history)
 {
-    codegen_generate_expressionable(node->parenthesis.exp, history);
+    codegen_generate_expressionable(node->parenthesis.exp, history_down(history, codegen_remove_uninheritable_flags(history->flags)));
 }
 
 void codegen_generate_string(struct node *node, struct history *history)

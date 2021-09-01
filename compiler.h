@@ -1737,4 +1737,6 @@ bool is_compile_computable(struct node *node);
  */
 bool char_is_delim(char c, const char *delims);
 
+
+bool node_is_expression_or_parentheses(struct node* node);
 #endif

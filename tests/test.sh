@@ -270,6 +270,16 @@ else
     echo -e "Preprocessor nested if  passed"
 fi
 
+echo -e "Advanced expression test with parentheses 2 test"
+./build/advanced_exp_parentheses2
+if [ $? -ne 40 ]; then
+    echo -e "Advanced expression test with parentheses 2 failed"
+    res_code=1
+else
+    echo -e "Advanced expression test with parentheses 2 passed"
+fi
+
+
 
 echo -e "All tests finished"
 exit $res_code

@@ -1,6 +1,7 @@
+
 int main()
 {
     int x;
-    x = x - 1;
+    x = 30 + (5*2);
     return x;
 }

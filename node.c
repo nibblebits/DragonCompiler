@@ -3,6 +3,11 @@
 #include "helpers/vector.h"
 
 
+bool node_is_expression_or_parentheses(struct node* node)
+{
+    return node->type == NODE_TYPE_EXPRESSION_PARENTHESIS || node->type == NODE_TYPE_EXPRESSION;
+}
+
 const char* node_var_type_str(struct node* var_node)
 {
     return var_node->var.type.type_str;

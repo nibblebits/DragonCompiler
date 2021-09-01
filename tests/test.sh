@@ -279,6 +279,15 @@ else
     echo -e "Advanced expression test with parentheses 2 passed"
 fi
 
+echo -e "Advanced expression test with parentheses 3 test"
+./build/advanced_exp_parentheses3
+if [ $? -ne 66 ]; then
+    echo -e "Advanced expression test with parentheses 3 failed"
+    res_code=1
+else
+    echo -e "Advanced expression test with parentheses 3 passed"
+fi
+
 
 
 echo -e "All tests finished"

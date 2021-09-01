@@ -671,7 +671,6 @@ void make_bracket_node(struct node *inner_node)
 void parse_expressionable(struct history *history);
 void parse_for_parentheses(struct history *history);
 
-#warning "Bug, variable_struct_node points to uninitialized value"
 static void parser_append_size_for_node(size_t *_variable_size, struct node *node)
 {
     if (node->type == NODE_TYPE_VARIABLE)
@@ -1559,7 +1558,7 @@ void parse_for_parentheses(struct history *history)
     }
     // We want a new history for parentheses
     expect_op("(");
-    parse_expressionable(history_begin(history, 0));
+    parse_expressionable(history_begin(history, HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL));
     expect_sym(')');
 
     struct node *exp_node = node_pop();

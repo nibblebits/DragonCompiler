@@ -1588,7 +1588,8 @@ typedef void *(*EXPRESSIONABLE_HANDLE_IDENTIFIER)(struct expressionable *express
 typedef void (*EXPRESSIONABLE_MAKE_EXPRESSION_NODE)(struct expressionable *expressionable, void *left_node_ptr, void *right_node_ptr, const char *op);
 typedef void (*EXPRESSIONABLE_MAKE_TENARY_NODE)(struct expressionable* expressionable, void* true_result_node, void* false_result_node);
 typedef void (*EXPRESSIONABLE_MAKE_PARENTHESES_NODE)(struct expressionable *expressionable, void *node_ptr);
-typedef void *(*EXPRESSIONABLE_MAKE_UNARY_NODE)(struct expressionable *expressionable, const char *op, void *right_operand_node_ptr);
+typedef void (*EXPRESSIONABLE_MAKE_UNARY_NODE)(struct expressionable *expressionable, const char *op, void *right_operand_node_ptr);
+typedef void (*EXPRESSIONABLE_MAKE_UNARY_INDIRECTION_NODE)(struct expressionable *expressionable, int ptr_depth, void *right_operand_node_ptr);
 typedef int (*EXPRESSIONABLE_GET_NODE_TYPE)(struct expressionable *expressionable, void *node);
 typedef void *(*EXPRESSIONABLE_GET_LEFT_NODE)(struct expressionable *expressionable, void *target_node);
 typedef void *(*EXPRESSIONABLE_GET_RIGHT_NODE)(struct expressionable *expressionable, void *target_node);
@@ -1613,6 +1614,8 @@ struct expressionable_config
         EXPRESSIONABLE_MAKE_EXPRESSION_NODE make_expression_node;
         EXPRESSIONABLE_MAKE_PARENTHESES_NODE make_parentheses_node;
         EXPRESSIONABLE_MAKE_UNARY_NODE make_unary_node;
+        EXPRESSIONABLE_MAKE_UNARY_INDIRECTION_NODE make_unary_indirection_node;
+
         EXPRESSIONABLE_MAKE_TENARY_NODE make_tenary_node;
 
         /**

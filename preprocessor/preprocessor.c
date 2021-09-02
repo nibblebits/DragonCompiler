@@ -63,6 +63,10 @@ struct preprocessor_node
         {
             struct preprocessor_node *operand_node;
             const char *op;
+            struct preprocessor_unary_indirection
+            {
+                int depth;
+            } indirection;
         } unary_node;
 
         /**
@@ -227,10 +231,18 @@ void preprocessor_set_expression_node(struct expressionable *expressionable, voi
     preprocessor_node->exp.op = op;
 }
 
-void *preprocessor_make_unary_node(struct expressionable *expressionable, const char *op, void *right_operand_node_ptr)
+void preprocessor_make_unary_node(struct expressionable *expressionable, const char *op, void *right_operand_node_ptr)
 {
     struct preprocessor_node *right_operand_node = right_operand_node_ptr;
-    return preprocessor_node_create(&(struct preprocessor_node){.type = PREPROCESSOR_UNARY_NODE, .unary_node.op = op, .unary_node.operand_node = right_operand_node_ptr});
+    void* unary_node = preprocessor_node_create(&(struct preprocessor_node){.type = PREPROCESSOR_UNARY_NODE, .unary_node.op = op, .unary_node.operand_node = right_operand_node_ptr});
+    expressionable_node_push(expressionable, unary_node);
+}
+
+void preprocessor_make_unary_indirection_node(struct expressionable *expressionable, int depth, void *right_operand_node_ptr)
+{
+    struct preprocessor_node *right_operand_node = right_operand_node_ptr;
+    void* unary_node = preprocessor_node_create(&(struct preprocessor_node){.type = PREPROCESSOR_UNARY_NODE, .unary_node.op = "*", .unary_node.operand_node = right_operand_node_ptr, .unary_node.indirection.depth=depth});
+    expressionable_node_push(expressionable, unary_node);
 }
 
 bool preprocessor_should_join_nodes(struct expressionable *expressionable, void *previous_node_ptr, void *node_ptr)

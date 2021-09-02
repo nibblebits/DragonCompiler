@@ -45,6 +45,7 @@ static struct expressionable_op_precedence_group op_precedence[TOTAL_OPERATOR_GR
 };
 
 void expressionable_parse(struct expressionable *expressionable);
+int expressionable_parse_single(struct expressionable *expressionable);
 
 struct expressionable_callbacks *expressionable_callbacks(struct expressionable *expressionable)
 {
@@ -90,12 +91,20 @@ struct token *expressionable_peek_next(struct expressionable *expressionable)
     return vector_peek_no_increment(expressionable->token_vec);
 }
 
+static bool expressionable_token_next_is_operator(struct expressionable* expressionable, const char *op)
+{
+    struct token *token = expressionable_peek_next(expressionable);
+    return token_is_operator(token, op);
+}
+
 static void expressionable_expect_sym(struct expressionable *expressionable, char c)
 {
     struct token *next_token = expressionable_token_next(expressionable);
     if (next_token == NULL || !token_is_symbol(next_token, c))
         expressionable_parse_err("Expecting the symbol %c but something else was provided", c);
 }
+
+
 
 static void expressionable_expect_op(struct expressionable *expressionable, const char *op)
 {
@@ -209,15 +218,63 @@ void expressionable_parse_parentheses(struct expressionable *expressionable)
     expressionable_deal_with_additional_expression(expressionable);
 }
 
-int expressionable_parse_unary(struct expressionable *expressionable)
+int expressionable_get_pointer_depth(struct expressionable* expressionable)
 {
-    struct token *unary_token = expressionable_token_next(expressionable);
-    expressionable_parse(expressionable);
-    void *right_operand_node = expressionable_node_pop(expressionable);
-    void *unary_node = expressionable_callbacks(expressionable)->make_unary_node(expressionable, unary_token->sval, right_operand_node);
-    expressionable_node_push(expressionable, unary_node);
-    return 0;
+    int depth = 0;
+    while (expressionable_token_next_is_operator(expressionable, "*"))
+    {
+        depth += 1;
+        expressionable_token_next(expressionable);
+    }
+
+    return depth;
 }
+
+/**
+ * Used for pointer access unary i.e ***abc = 50;
+ */
+void expressionable_parse_for_indirection_unary(struct expressionable* expressionable)
+{
+    // We have an indirection operator.
+    // Let's calculate the pointer depth
+    int depth = expressionable_get_pointer_depth(expressionable);
+
+    // Now lets parse the expression after this unary operator
+    expressionable_parse(expressionable);
+
+    void* unary_operand_node = expressionable_node_pop(expressionable);
+    expressionable_callbacks(expressionable)->make_unary_indirection_node(expressionable, depth, unary_operand_node);
+}
+
+
+void expressionable_parse_for_normal_unary(struct expressionable* expressionable)
+{
+    const char *unary_op = expressionable_token_next(expressionable)->sval;
+    // Now lets parse the expression after this unary operator
+    expressionable_parse_single(expressionable);
+    void* unary_operand_node = expressionable_node_pop(expressionable);
+    expressionable_callbacks(expressionable)->make_unary_node(expressionable, unary_op, unary_operand_node);
+}
+
+void expressionable_parse_unary(struct expressionable* expressionable)
+{
+    // Let's get the unary operator
+    const char *unary_op = expressionable_peek_next(expressionable)->sval;
+
+    if (op_is_indirection(unary_op))
+    {
+        expressionable_parse_for_indirection_unary(expressionable);
+        return;
+    }
+
+    // Read the normal unary
+    expressionable_parse_for_normal_unary(expressionable);
+
+    // We should deal with any additional expression if there is one.
+    expressionable_deal_with_additional_expression(expressionable);
+}
+
+
 
 void expressionable_parse_for_operator(struct expressionable *expressionable);
 
@@ -250,11 +307,7 @@ void expressionable_parse_tenary(struct expressionable* expressionable)
 
 int expressionable_parse_exp(struct expressionable *expressionable, struct token* token)
 {
-    if (is_unary_operator(token->sval))
-    {
-        expressionable_parse_unary(expressionable);
-    }
-    else if (S_EQ(expressionable_peek_next(expressionable)->sval, "("))
+    if (S_EQ(expressionable_peek_next(expressionable)->sval, "("))
     {
         expressionable_parse_parentheses(expressionable);
     }

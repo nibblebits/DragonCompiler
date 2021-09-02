@@ -298,6 +298,15 @@ else
 fi
 
 
+echo -e "Preprocessor advanced expression definition test"
+./build/preprocessor_advanced_def_exp
+if [ $? -ne 60 ]; then
+    echo -e "Preprocessor advanced expression definition test failed"
+    res_code=1
+else
+    echo -e "Preprocessor advanced expression definition test passed"
+fi
+
 
 echo -e "All tests finished"
 exit $res_code

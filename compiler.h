@@ -1739,4 +1739,9 @@ bool char_is_delim(char c, const char *delims);
 
 
 bool node_is_expression_or_parentheses(struct node* node);
+
+/**
+ * Returns true if the given node can be apart of an expression
+ */
+bool node_is_value_type(struct node* node);
 #endif

@@ -154,15 +154,38 @@ int expressionable_parse_identifier(struct expressionable *expressionable)
 }
 
 
+/**
+ * Returns true if the given type can be used in an expression
+ */
+bool expressionable_generic_type_is_value_expressionable(int type)
+{
+    return type == EXPRESSIONABLE_GENERIC_TYPE_NUMBER ||
+           type == EXPRESSIONABLE_GENERIC_TYPE_IDENTIFIER ||
+           type == EXPRESSIONABLE_GENERIC_TYPE_UNARY ||
+           type == EXPRESSIONABLE_GENERIC_TYPE_PARENTHESES ||
+           type == EXPRESSIONABLE_GENERIC_TYPE_EXPRESSION;
+}
+
+
+void expressionable_deal_with_additional_expression(struct expressionable* expressionable)
+{
+    // We got an operator? If so theirs an expression after this
+    if (is_operator_token(expressionable_peek_next(expressionable)))
+    {
+        expressionable_parse(expressionable);
+    }
+}
 void expressionable_parse_parentheses(struct expressionable *expressionable)
 {
-    
+    void* left_node = NULL;
     // We must check to see if we have a left node i.e "test(50+20)". Left node = test
     // If we have a left node we will have to create an expression
     // otherwise we can just create a parentheses node
-    void *left_node = expressionable_node_peek_or_null(expressionable);
-    if (left_node)
+    void *tmp_node = expressionable_node_peek_or_null(expressionable);
+    int tmp_type = tmp_node ? expressionable_callbacks(expressionable)->get_node_type(expressionable, tmp_node) : -1;
+    if (tmp_node && expressionable_generic_type_is_value_expressionable(tmp_type))
     {
+        left_node = tmp_node;
         expressionable_node_pop(expressionable);
     }
     
@@ -171,7 +194,7 @@ void expressionable_parse_parentheses(struct expressionable *expressionable)
     expressionable_parse(expressionable);
     expressionable_expect_sym(expressionable, ')');
 
-    struct node *exp_node = expressionable_node_pop(expressionable);
+    void* exp_node = expressionable_node_pop(expressionable);
     expressionable_callbacks(expressionable)->make_parentheses_node(expressionable, exp_node);
 
     // Do we have a left node from earlier before we parsed the parentheses?
@@ -179,9 +202,11 @@ void expressionable_parse_parentheses(struct expressionable *expressionable)
     {
         // Ok we do so we must create an expression node, whose left node is the left node
         // and whose right node is the parentheses node
-        struct node *parentheses_node = expressionable_node_pop(expressionable);
+        void* parentheses_node = expressionable_node_pop(expressionable);
         expressionable_callbacks(expressionable)->make_parentheses_node(expressionable, parentheses_node);
     }
+
+    expressionable_deal_with_additional_expression(expressionable);
 }
 
 int expressionable_parse_unary(struct expressionable *expressionable)

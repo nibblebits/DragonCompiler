@@ -362,9 +362,9 @@ static bool parser_is_unary_operator(const char *op)
 
 static bool token_is_nl_or_comment_or_newline_seperator(struct token *token)
 {
-    return token->type == TOKEN_TYPE_NEWLINE || 
-            token->type == TOKEN_TYPE_COMMENT || 
-            token_is_symbol(token, '\\');
+    return token->type == TOKEN_TYPE_NEWLINE ||
+           token->type == TOKEN_TYPE_COMMENT ||
+           token_is_symbol(token, '\\');
 }
 
 static void parser_ignore_nl_or_comment(struct token *next_token)
@@ -1543,22 +1543,19 @@ void parse_for_parentheses(struct history *history)
 {
     struct node *left_node = NULL;
 
-    // If we are part of an expression then how can we have a left node
-    // We would have something like 50 + (20*40). 20*40 being us
-    if (!(history->flags & HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL))
+    // We must check to see if we have a left node i.e "test(50+20)". Left node = test
+    // If we have a left node we will have to create an expression
+    // otherwise we can just create a parentheses node
+    struct node* tmp_node = node_peek_or_null();
+    if (tmp_node && node_is_value_type(tmp_node))
     {
-        // We must check to see if we have a left node i.e "test(50+20)". Left node = test
-        // If we have a left node we will have to create an expression
-        // otherwise we can just create a parentheses node
-        left_node = node_peek_or_null();
-        if (left_node)
-        {
-            node_pop();
-        }
+        left_node = tmp_node;
+        node_pop();
     }
+
     // We want a new history for parentheses
     expect_op("(");
-    parse_expressionable(history_begin(history, HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL));
+    parse_expressionable(history_begin(history, 0));
     expect_sym(')');
 
     struct node *exp_node = node_pop();

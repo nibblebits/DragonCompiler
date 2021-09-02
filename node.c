@@ -8,6 +8,11 @@ bool node_is_expression_or_parentheses(struct node* node)
     return node->type == NODE_TYPE_EXPRESSION_PARENTHESIS || node->type == NODE_TYPE_EXPRESSION;
 }
 
+bool node_is_value_type(struct node* node)
+{
+    return node_is_expression_or_parentheses(node) || node->type == NODE_TYPE_IDENTIFIER || node->type == NODE_TYPE_NUMBER || node->type == NODE_TYPE_UNARY || node->type == NODE_TYPE_TENARY || node->type == NODE_TYPE_STRING;
+}
+
 const char* node_var_type_str(struct node* var_node)
 {
     return var_node->var.type.type_str;

@@ -288,6 +288,15 @@ else
     echo -e "Advanced expression test with parentheses 3 passed"
 fi
 
+echo -e "Preprocessor advanced expression nested parntheses test"
+./build/preprocessor_parentheses_test
+if [ $? -ne 55 ]; then
+    echo -e "Preprocessor advanced expression nested parntheses failed"
+    res_code=1
+else
+    echo -e "Preprocessor advanced expression nested parntheses passed"
+fi
+
 
 
 echo -e "All tests finished"

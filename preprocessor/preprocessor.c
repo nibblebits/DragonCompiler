@@ -1109,6 +1109,10 @@ int preprocessor_evaluate_unary(struct compile_process *compiler, struct preproc
     {
         res = ~preprocessor_evaluate(compiler, right_operand);
     }
+    else if(S_EQ(op, "-"))
+    {
+        res -preprocessor_evaluate(compiler, right_operand);
+    }
     else
     {
         compiler_error(compiler, "The given operator %s is not supported for unary evaluation in the preprocessor", op);

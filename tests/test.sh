@@ -334,5 +334,13 @@ else
     echo -e "Preprocessor undef passed"
 fi
 
+echo -e "Preprocessor warning test"
+./build/preprocessor_warning_test
+if [ $? -ne 22 ]; then
+    echo -e "Preprocessor warning test failed"
+    res_code=1
+else
+    echo -e "Preprocessor warning test passed"
+fi
 echo -e "All tests finished"
 exit $res_code

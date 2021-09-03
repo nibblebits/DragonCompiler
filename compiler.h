@@ -1100,6 +1100,12 @@ enum
  * Called to issue a compiler error and terminate the compiler
  */
 void compiler_error(struct compile_process *compiler, const char *msg, ...);
+
+/**
+ * Called to issue a compiler warning but continue execution
+ */
+void compiler_warning(struct compile_process *compiler, const char *msg, ...);
+
 /**
  * Compiles the file
  */

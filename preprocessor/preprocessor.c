@@ -97,6 +97,11 @@ struct preprocessor_node
 int preprocessor_handle_identifier(struct compile_process *compiler, struct token *token);
 int preprocessor_handle_identifier_for_token_vector(struct compile_process *compiler, struct vector *src_vec, struct token *token);
 
+void preprocessor_execute_warning(struct compile_process* compiler, const char* msg)
+{
+    compiler_warning(compiler, "#warning %s", msg);
+}
+
 bool preprocessor_is_keyword(const char *type)
 {
     return S_EQ(type, "defined");
@@ -423,6 +428,8 @@ bool preprocessor_is_preprocessor_keyword(const char *value)
 {
     return S_EQ(value, "define") ||
            S_EQ(value, "undef") ||
+           S_EQ(value, "warning") ||
+           S_EQ(value, "error") ||
            S_EQ(value, "if") ||
            S_EQ(value, "ifdef") ||
            S_EQ(value, "ifndef") ||
@@ -472,6 +479,15 @@ bool preprocessor_token_is_undef(struct token *token)
     }
 
     return (S_EQ(token->sval, "undef"));
+}
+bool preprocessor_token_is_warning(struct token *token)
+{
+    if (!preprocessor_token_is_preprocessor_keyword(token))
+    {
+        return false;
+    }
+
+    return (S_EQ(token->sval, "warning"));
 }
 
 bool preprocessor_token_is_ifdef(struct token *token)
@@ -710,6 +726,32 @@ struct preprocessor_definition *preprocessor_definition_create(const char *name,
     return definition;
 }
 
+struct buffer* preprocessor_multi_value_string(struct compile_process* compiler)
+{
+    struct buffer* buffer = buffer_create();
+    struct token *value_token = preprocessor_next_token(compiler);
+    while (value_token)
+    {
+        if (value_token->type == TOKEN_TYPE_NEWLINE)
+        {
+            break;
+        }
+
+        if (token_is_symbol(value_token, '\\'))
+        {
+            // This allows for another line
+            // Skip new line
+            preprocessor_next_token(compiler);
+            value_token = preprocessor_next_token(compiler);
+            continue;
+        }
+        buffer_printf(buffer, "%s", value_token->sval);
+        value_token = preprocessor_next_token(compiler);
+    }
+
+    return buffer;
+}
+
 void preprocessor_multi_value_insert_to_vector(struct compile_process *compiler, struct vector *value_token_vec)
 {
     struct token *value_token = preprocessor_next_token(compiler);
@@ -845,6 +887,13 @@ void preprocessor_handle_undef_token(struct compile_process* compiler)
 {
     struct token* name_token = preprocessor_next_token(compiler);
     preprocessor_remove_definition(compiler->preprocessor, name_token->sval);
+}
+
+
+void preprocessor_handle_warning_token(struct compile_process* compiler)
+{
+    struct buffer* str_buf = preprocessor_multi_value_string(compiler);
+    preprocessor_execute_warning(compiler, buffer_ptr(str_buf));
 }
 
 void preprocessor_handle_include_token(struct compile_process *compiler)
@@ -1481,6 +1530,11 @@ int preprocessor_handle_hashtag_token(struct compile_process *compiler, struct t
     else if(preprocessor_token_is_undef(next_token))
     {
         preprocessor_handle_undef_token(compiler);
+        is_preprocessed = true;
+    }
+    else if(preprocessor_token_is_warning(next_token))
+    {
+        preprocessor_handle_warning_token(compiler);
         is_preprocessed = true;
     }
     else if (preprocessor_token_is_ifdef(next_token))

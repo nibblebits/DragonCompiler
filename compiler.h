@@ -1599,6 +1599,7 @@ typedef void (*EXPPRESIONABLE_SET_EXPRESSION_NODE)(struct expressionable *expres
 
 typedef bool (*EXPRESSIONABLE_SHOULD_JOIN_NODES)(struct expressionable* expressionable, void* previous_node, void* node);
 typedef void* (*EXPRESSIONABLE_JOIN_NODES)(struct expressionable* expressionable, void* previous_node, void* node);
+typedef bool (*EXPRESSIONABLE_EXPECTING_ADDITIONAL_NODE)(struct expressionable* expressionable, void* node);
 
 struct expressionable_config
 {
@@ -1639,6 +1640,12 @@ struct expressionable_config
          * Should join the two nodes and return a new node
          */
         EXPRESSIONABLE_JOIN_NODES join_nodes;
+
+        /**
+         * Should return true if the given node must be combined with an additional
+         * node
+         */
+        EXPRESSIONABLE_EXPECTING_ADDITIONAL_NODE expecting_additional_node;
 
     } callbacks;
 };

@@ -316,6 +316,15 @@ else
     echo -e "Preprocessor logical not test passed"
 fi
 
+echo -e "Preprocessor logical not on keyword test"
+./build/preprocessor_logical_not_on_keyword
+if [ $? -ne 50 ]; then
+    echo -e "Preprocessor logical not on keyword failed"
+    res_code=1
+else
+    echo -e "Preprocessor logical not on keyword passed"
+fi
+
 
 echo -e "All tests finished"
 exit $res_code

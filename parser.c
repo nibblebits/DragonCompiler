@@ -942,7 +942,6 @@ void parse_for_normal_unary()
     // Now lets parse the expression after this unary operator
     struct history history;
     parse_expressionable_single(history_begin(&history, 0));
-
     struct node *unary_operand_node = node_pop();
     make_unary_node(unary_op, unary_operand_node);
 }
@@ -1549,7 +1548,7 @@ void parse_for_parentheses(struct history *history)
     // We must check to see if we have a left node i.e "test(50+20)". Left node = test
     // If we have a left node we will have to create an expression
     // otherwise we can just create a parentheses node
-    struct node* tmp_node = node_peek_or_null();
+    struct node *tmp_node = node_peek_or_null();
     if (tmp_node && node_is_value_type(tmp_node))
     {
         left_node = tmp_node;

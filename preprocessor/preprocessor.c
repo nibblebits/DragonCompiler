@@ -248,10 +248,15 @@ void preprocessor_make_unary_indirection_node(struct expressionable *expressiona
     expressionable_node_push(expressionable, unary_node);
 }
 
+bool preprocessor_expecting_additional_node(struct expressionable* expressionable, void* node_ptr)
+{
+    struct preprocessor_node* node = node_ptr;
+    return node->type == PREPROCESSOR_KEYWORD_NODE && S_EQ(node->sval, "defined");
+}
+
 bool preprocessor_should_join_nodes(struct expressionable *expressionable, void *previous_node_ptr, void *node_ptr)
 {
-    struct preprocessor_node *previous_node = previous_node_ptr;
-    return previous_node->type == PREPROCESSOR_KEYWORD_NODE;
+    return true;
 }
 
 void *preprocessor_join_nodes(struct expressionable *expressionable, void *previous_node_ptr, void *node_ptr)
@@ -285,7 +290,8 @@ struct expressionable_config preprocessor_expressionable_config =
         .callbacks.get_right_node_address = preprocessor_get_right_node_address,
         .callbacks.set_exp_node = preprocessor_set_expression_node,
         .callbacks.should_join_nodes = preprocessor_should_join_nodes,
-        .callbacks.join_nodes = preprocessor_join_nodes};
+        .callbacks.join_nodes = preprocessor_join_nodes,
+        .callbacks.expecting_additional_node = preprocessor_expecting_additional_node};
 
 struct preprocessor_function_argument
 {

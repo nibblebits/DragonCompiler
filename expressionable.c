@@ -47,7 +47,7 @@ static struct expressionable_op_precedence_group op_precedence[TOTAL_OPERATOR_GR
 void expressionable_parse(struct expressionable *expressionable);
 int expressionable_parse_single(struct expressionable *expressionable);
 
-void expressionable_error(struct expressionable* expressionable, const char* str, ...)
+void expressionable_error(struct expressionable *expressionable, const char *str, ...)
 {
     FAIL_ERR(str);
 }
@@ -62,14 +62,14 @@ void expressionable_node_push(struct expressionable *expressionable, void *node_
     vector_push(expressionable->node_vec_out, &node_ptr);
 }
 
-void expressionable_ignore_nl(struct expressionable* expressionable, struct token* next_token)
+void expressionable_ignore_nl(struct expressionable *expressionable, struct token *next_token)
 {
     while (next_token && token_is_symbol(next_token, '\\'))
     {
         // Skip the "\\"
         vector_peek(expressionable->token_vec);
         // Skip the NEWLINE token
-        struct token* nl_token = vector_peek(expressionable->token_vec);
+        struct token *nl_token = vector_peek(expressionable->token_vec);
         assert(nl_token->type == TOKEN_TYPE_NEWLINE);
 
         // The parser does not care about new lines, only the preprocessor has to care about that
@@ -96,7 +96,7 @@ struct token *expressionable_peek_next(struct expressionable *expressionable)
     return vector_peek_no_increment(expressionable->token_vec);
 }
 
-static bool expressionable_token_next_is_operator(struct expressionable* expressionable, const char *op)
+static bool expressionable_token_next_is_operator(struct expressionable *expressionable, const char *op)
 {
     struct token *token = expressionable_peek_next(expressionable);
     return token_is_operator(token, op);
@@ -108,8 +108,6 @@ static void expressionable_expect_sym(struct expressionable *expressionable, cha
     if (next_token == NULL || !token_is_symbol(next_token, c))
         expressionable_parse_err("Expecting the symbol %c but something else was provided", c);
 }
-
-
 
 static void expressionable_expect_op(struct expressionable *expressionable, const char *op)
 {
@@ -167,7 +165,6 @@ int expressionable_parse_identifier(struct expressionable *expressionable)
     return 0;
 }
 
-
 /**
  * Returns true if the given type can be used in an expression
  */
@@ -180,8 +177,7 @@ bool expressionable_generic_type_is_value_expressionable(int type)
            type == EXPRESSIONABLE_GENERIC_TYPE_EXPRESSION;
 }
 
-
-void expressionable_deal_with_additional_expression(struct expressionable* expressionable)
+void expressionable_deal_with_additional_expression(struct expressionable *expressionable)
 {
     // We got an operator? If so theirs an expression after this
     if (is_operator_token(expressionable_peek_next(expressionable)))
@@ -191,7 +187,7 @@ void expressionable_deal_with_additional_expression(struct expressionable* expre
 }
 void expressionable_parse_parentheses(struct expressionable *expressionable)
 {
-    void* left_node = NULL;
+    void *left_node = NULL;
     // We must check to see if we have a left node i.e "test(50+20)". Left node = test
     // If we have a left node we will have to create an expression
     // otherwise we can just create a parentheses node
@@ -202,13 +198,12 @@ void expressionable_parse_parentheses(struct expressionable *expressionable)
         left_node = tmp_node;
         expressionable_node_pop(expressionable);
     }
-    
 
     expressionable_expect_op(expressionable, "(");
     expressionable_parse(expressionable);
     expressionable_expect_sym(expressionable, ')');
 
-    void* exp_node = expressionable_node_pop(expressionable);
+    void *exp_node = expressionable_node_pop(expressionable);
     expressionable_callbacks(expressionable)->make_parentheses_node(expressionable, exp_node);
 
     // Do we have a left node from earlier before we parsed the parentheses?
@@ -216,14 +211,14 @@ void expressionable_parse_parentheses(struct expressionable *expressionable)
     {
         // Ok we do so we must create an expression node, whose left node is the left node
         // and whose right node is the parentheses node
-        void* parentheses_node = expressionable_node_pop(expressionable);
+        void *parentheses_node = expressionable_node_pop(expressionable);
         expressionable_callbacks(expressionable)->make_parentheses_node(expressionable, parentheses_node);
     }
 
     expressionable_deal_with_additional_expression(expressionable);
 }
 
-int expressionable_get_pointer_depth(struct expressionable* expressionable)
+int expressionable_get_pointer_depth(struct expressionable *expressionable)
 {
     int depth = 0;
     while (expressionable_token_next_is_operator(expressionable, "*"))
@@ -238,7 +233,7 @@ int expressionable_get_pointer_depth(struct expressionable* expressionable)
 /**
  * Used for pointer access unary i.e ***abc = 50;
  */
-void expressionable_parse_for_indirection_unary(struct expressionable* expressionable)
+void expressionable_parse_for_indirection_unary(struct expressionable *expressionable)
 {
     // We have an indirection operator.
     // Let's calculate the pointer depth
@@ -247,21 +242,20 @@ void expressionable_parse_for_indirection_unary(struct expressionable* expressio
     // Now lets parse the expression after this unary operator
     expressionable_parse(expressionable);
 
-    void* unary_operand_node = expressionable_node_pop(expressionable);
+    void *unary_operand_node = expressionable_node_pop(expressionable);
     expressionable_callbacks(expressionable)->make_unary_indirection_node(expressionable, depth, unary_operand_node);
 }
 
-
-void expressionable_parse_for_normal_unary(struct expressionable* expressionable)
+void expressionable_parse_for_normal_unary(struct expressionable *expressionable)
 {
     const char *unary_op = expressionable_token_next(expressionable)->sval;
-    // Now lets parse the expression after this unary operator
     expressionable_parse_single(expressionable);
-    void* unary_operand_node = expressionable_node_pop(expressionable);
+
+    void *unary_operand_node = expressionable_node_pop(expressionable);
     expressionable_callbacks(expressionable)->make_unary_node(expressionable, unary_op, unary_operand_node);
 }
 
-void expressionable_parse_unary(struct expressionable* expressionable)
+void expressionable_parse_unary(struct expressionable *expressionable)
 {
     // Let's get the unary operator
     const char *unary_op = expressionable_peek_next(expressionable)->sval;
@@ -279,44 +273,42 @@ void expressionable_parse_unary(struct expressionable* expressionable)
     expressionable_deal_with_additional_expression(expressionable);
 }
 
-
-
 void expressionable_parse_for_operator(struct expressionable *expressionable);
 
-void expressionable_parse_tenary(struct expressionable* expressionable)
+void expressionable_parse_tenary(struct expressionable *expressionable)
 {
-     // At this point we have parsed the condition of the tenary
+    // At this point we have parsed the condition of the tenary
     // i.e 50 ? 20 : 10  we are now at the ? 20 bit.
 
-    void* condition_operand = expressionable_node_pop(expressionable);
+    void *condition_operand = expressionable_node_pop(expressionable);
     expressionable_expect_op(expressionable, "?");
 
     // Let's parse the TRUE result of this tenary
     expressionable_parse(expressionable);
-    void* true_result_node = expressionable_node_pop(expressionable);
+    void *true_result_node = expressionable_node_pop(expressionable);
     // Now comes the colon
     expressionable_expect_sym(expressionable, ':');
 
     // Finally the false result
     expressionable_parse(expressionable);
-    void* false_result_node = expressionable_node_pop(expressionable);
+    void *false_result_node = expressionable_node_pop(expressionable);
 
     // Now to craft the tenary
     expressionable_callbacks(expressionable)->make_tenary_node(expressionable, true_result_node, false_result_node);
 
     // We may need to make this into an expression node later on..
     // Not sure how this is going to turn out.. lets try and make an expression
-    void* tenary_node = expressionable_node_pop(expressionable);
+    void *tenary_node = expressionable_node_pop(expressionable);
     expressionable_callbacks(expressionable)->make_expression_node(expressionable, condition_operand, tenary_node, "?");
 }
 
-int expressionable_parse_exp(struct expressionable *expressionable, struct token* token)
+int expressionable_parse_exp(struct expressionable *expressionable, struct token *token)
 {
     if (S_EQ(expressionable_peek_next(expressionable)->sval, "("))
     {
         expressionable_parse_parentheses(expressionable);
     }
-    else if(S_EQ(expressionable_peek_next(expressionable)->sval, "?"))
+    else if (S_EQ(expressionable_peek_next(expressionable)->sval, "?"))
     {
         expressionable_parse_tenary(expressionable);
     }
@@ -335,7 +327,7 @@ int expressionable_parse_single(struct expressionable *expressionable)
     if (!token)
         return -1;
 
-    void* previous_node = expressionable_node_peek_or_null(expressionable);
+    void *previous_node = expressionable_node_peek_or_null(expressionable);
     int res = -1;
     switch (token->type)
     {
@@ -352,17 +344,24 @@ int expressionable_parse_single(struct expressionable *expressionable)
         break;
     }
 
-    // We have situations where we can combine nodes.
-    // for example "defined ABC" in the preprocessor would checck if ABC was defined.
-    // Therefore if we are in the preprocessor we should check if we should join the previous
-    // node with the one we just parsed.
-    if (previous_node && expressionable->flags & EXPRESSIONABLE_FLAG_IS_PREPROCESSOR_EXPRESSION)
+    previous_node = expressionable_node_peek_or_null(expressionable);
+    if (expressionable_callbacks(expressionable)->expecting_additional_node(expressionable, previous_node))
     {
-        void* current_node = expressionable_node_peek_or_null(expressionable);
-        if(expressionable_callbacks(expressionable)->should_join_nodes(expressionable, previous_node, current_node))
+        // Okay we are expecting an extra single node here according to the implementor
+        // For example in the case of "defined ABC" in a preprocessor, both the defined
+        // token and ABC are important, if we have a defined keyword than we are
+        // expecting an extra node to complete that equation, hense
+        // why expecting_additional_node would return true in this particular case.
+        // We would have dealt with "defined" at this point in time, now comes the next
+        // single.
+        expressionable_parse_single(expressionable);
+
+        // Okay now we have also parsed the additional node, lets see if they require joining
+        void *additional_node = expressionable_node_peek_or_null(expressionable);
+        if (expressionable_callbacks(expressionable)->should_join_nodes(expressionable, previous_node, additional_node))
         {
-            void* new_node = expressionable_callbacks(expressionable)->join_nodes(expressionable, previous_node, current_node);
-            
+            void *new_node = expressionable_callbacks(expressionable)->join_nodes(expressionable, previous_node, additional_node);
+
             // Pop off the current node and previous node as we now have them joined in the "new_node"
             expressionable_node_pop(expressionable);
             expressionable_node_pop(expressionable);
@@ -371,6 +370,7 @@ int expressionable_parse_single(struct expressionable *expressionable)
             expressionable_node_push(expressionable, new_node);
         }
     }
+
     return res;
 }
 
@@ -393,7 +393,6 @@ void expressionable_parser_node_shift_children_left(struct expressionable *expre
     void *new_exp_left_node = left_node;
     void *new_exp_right_node = expressionable_callbacks(expressionable)->get_left_node(expressionable, right_node);
 
-
     const char *node_op = expressionable_callbacks(expressionable)->get_node_operator(expressionable, node);
     // Make the new left operand
     expressionable_callbacks(expressionable)->make_expression_node(expressionable, new_exp_left_node, new_exp_right_node, node_op);
@@ -401,7 +400,6 @@ void expressionable_parser_node_shift_children_left(struct expressionable *expre
     void *new_left_operand = expressionable_node_pop(expressionable);
     void *new_right_operand = expressionable_callbacks(expressionable)->get_right_node(expressionable, right_node);
     expressionable_callbacks(expressionable)->set_exp_node(expressionable, node, new_left_operand, new_right_operand, right_op);
-
 }
 
 static int expressionable_parser_get_precedence_for_operator(const char *op, struct expressionable_op_precedence_group **group_out)
@@ -443,7 +441,6 @@ static bool expressionable_parser_left_op_has_priority(const char *op_left, cons
 
     return precedence_left <= precedence_right;
 }
-
 
 /**
  * Reorders the given expression and its children, based on operator priority. I.e 
@@ -498,7 +495,6 @@ void expressionable_parser_reorder_expression(struct expressionable *expressiona
             expressionable_parser_reorder_expression(expressionable, address_of_left);
             expressionable_parser_reorder_expression(expressionable, address_of_right);
         }
-        
     }
 }
 
@@ -521,7 +517,6 @@ void expressionable_parse_for_operator(struct expressionable *expressionable)
         expressionable_parse_unary(expressionable);
         return;
     }
-
 
     // Pop operator token
     expressionable_token_next(expressionable);

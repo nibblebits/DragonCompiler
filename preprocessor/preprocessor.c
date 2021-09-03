@@ -248,9 +248,9 @@ void preprocessor_make_unary_indirection_node(struct expressionable *expressiona
     expressionable_node_push(expressionable, unary_node);
 }
 
-bool preprocessor_expecting_additional_node(struct expressionable* expressionable, void* node_ptr)
+bool preprocessor_expecting_additional_node(struct expressionable *expressionable, void *node_ptr)
 {
-    struct preprocessor_node* node = node_ptr;
+    struct preprocessor_node *node = node_ptr;
     return node->type == PREPROCESSOR_KEYWORD_NODE && S_EQ(node->sval, "defined");
 }
 
@@ -422,6 +422,7 @@ void preprocessor_token_vec_push_src_resolve_definitions(struct compile_process 
 bool preprocessor_is_preprocessor_keyword(const char *value)
 {
     return S_EQ(value, "define") ||
+           S_EQ(value, "undef") ||
            S_EQ(value, "if") ||
            S_EQ(value, "ifdef") ||
            S_EQ(value, "ifndef") ||
@@ -461,6 +462,16 @@ bool preprocessor_token_is_define(struct token *token)
     }
 
     return (S_EQ(token->sval, "define"));
+}
+
+bool preprocessor_token_is_undef(struct token *token)
+{
+    if (!preprocessor_token_is_preprocessor_keyword(token))
+    {
+        return false;
+    }
+
+    return (S_EQ(token->sval, "undef"));
 }
 
 bool preprocessor_token_is_ifdef(struct token *token)
@@ -613,6 +624,16 @@ struct preprocessor_definition *preprocessor_get_definition(struct preprocessor 
     }
 
     return definition;
+}
+
+bool preprocessor_remove_definition(struct preprocessor* preprocessor, const char* name)
+{
+    struct preprocessor_definition* definition = preprocessor_get_definition(preprocessor, name);
+    if (!definition)
+        return false;
+
+    vector_pop_value(preprocessor->definitions, definition);
+    return true;
 }
 
 bool preprocessor_token_is_definition_identifier(struct compile_process *compiler, struct token *token)
@@ -820,6 +841,12 @@ void preprocessor_handle_definition_token(struct compile_process *compiler)
     preprocessor_definition_create(name_token->sval, value_token_vec, arguments, preprocessor);
 }
 
+void preprocessor_handle_undef_token(struct compile_process* compiler)
+{
+    struct token* name_token = preprocessor_next_token(compiler);
+    preprocessor_remove_definition(compiler->preprocessor, name_token->sval);
+}
+
 void preprocessor_handle_include_token(struct compile_process *compiler)
 {
     // We are expecting a file to include, lets check the next token
@@ -951,7 +978,6 @@ bool preprocessor_is_hashtag_and_any_if(struct compile_process *compiler)
            preprocessor_hashtag_and_identifier(compiler, "ifdef") ||
            preprocessor_hashtag_and_identifier(compiler, "ifndef");
 }
-
 
 /**
  * Skips the IF statement until endif is found, also skipping
@@ -1450,6 +1476,11 @@ int preprocessor_handle_hashtag_token(struct compile_process *compiler, struct t
     if (preprocessor_token_is_define(next_token))
     {
         preprocessor_handle_definition_token(compiler);
+        is_preprocessed = true;
+    }
+    else if(preprocessor_token_is_undef(next_token))
+    {
+        preprocessor_handle_undef_token(compiler);
         is_preprocessed = true;
     }
     else if (preprocessor_token_is_ifdef(next_token))

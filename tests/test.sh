@@ -325,6 +325,14 @@ else
     echo -e "Preprocessor logical not on keyword passed"
 fi
 
+echo -e "Preprocessor undef test"
+./build/preprocessor_undef_test
+if [ $? -ne 22 ]; then
+    echo -e "Preprocessor undef failed"
+    res_code=1
+else
+    echo -e "Preprocessor undef passed"
+fi
 
 echo -e "All tests finished"
 exit $res_code

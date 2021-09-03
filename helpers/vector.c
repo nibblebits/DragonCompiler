@@ -293,6 +293,26 @@ void vector_stretch(struct vector *vector, int index)
     vector->rindex = index;
 }
 
+int vector_pop_value(struct vector* vector, void* val)
+{
+    int old_pp = vector->pindex;
+    vector_set_peek_pointer(vector, 0);
+    void* ptr = vector_peek_ptr(vector);
+    int index = 0;
+    while(ptr)
+    {
+        if (ptr == val)
+        {
+            vector_pop_at(vector, index);
+            break;
+        }
+        ptr = vector_peek_ptr(vector);
+        index++;
+    }
+
+    vector_set_peek_pointer(vector, old_pp);
+}
+
 int vector_pop_at_data_address(struct vector *vector, void *address)
 {
     int index = (address - vector->data) / vector->esize;

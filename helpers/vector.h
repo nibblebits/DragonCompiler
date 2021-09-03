@@ -103,6 +103,11 @@ int vector_insert(struct vector *vector_dst, struct vector *vector_src, int dst_
  */
 int vector_pop_at_data_address(struct vector* vector, void* address);
 
+/**
+ * Pops the given value from the vector. Only the first value found is popped
+ */
+int vector_pop_value(struct vector* vector, void* val);
+
 void vector_pop_at(struct vector *vector, int index);
 
 /**

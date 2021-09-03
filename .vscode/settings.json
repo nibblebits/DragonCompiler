@@ -7,6 +7,7 @@
         "type_traits": "c",
         "string.h": "c",
         "features.h": "c",
-        "stdc-predef.h": "c"
+        "stdc-predef.h": "c",
+        "stubs-x32.h": "c"
     }
 }

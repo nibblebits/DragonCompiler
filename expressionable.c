@@ -47,6 +47,11 @@ static struct expressionable_op_precedence_group op_precedence[TOTAL_OPERATOR_GR
 void expressionable_parse(struct expressionable *expressionable);
 int expressionable_parse_single(struct expressionable *expressionable);
 
+void expressionable_error(struct expressionable* expressionable, const char* str, ...)
+{
+    FAIL_ERR(str);
+}
+
 struct expressionable_callbacks *expressionable_callbacks(struct expressionable *expressionable)
 {
     return &expressionable->config.callbacks;
@@ -499,14 +504,52 @@ void expressionable_parser_reorder_expression(struct expressionable *expressiona
 
 void expressionable_parse_for_operator(struct expressionable *expressionable)
 {
-    struct token *op_token = expressionable_token_next(expressionable);
+    struct token *op_token = expressionable_peek_next(expressionable);
     const char *op = op_token->sval;
     // We must pop the last node as this will be the left operand
-    void *node_left = expressionable_node_pop(expressionable);
+    void *node_left = expressionable_node_peek_or_null(expressionable);
+    if (!node_left)
+    {
+        // If we have a NULL Left node then this expression has no left operand
+        // I.e it looks like this "-a" or "*b". These are unary operators of course
+        // Let's deal with it
+        if (!is_unary_operator(op))
+        {
+            expressionable_error(expressionable, "the given expression has no left operand");
+        }
 
-    // We must parse the right operand
-    expressionable_parse(expressionable);
+        expressionable_parse_unary(expressionable);
+        return;
+    }
 
+
+    // Pop operator token
+    expressionable_token_next(expressionable);
+    // Pop left node
+    expressionable_node_pop(expressionable);
+
+    // We have another operator? Then this one must be a unary or possibly parentheses
+    if (expressionable_peek_next(expressionable)->type == TOKEN_TYPE_OPERATOR)
+    {
+        if (S_EQ(expressionable_peek_next(expressionable)->sval, "("))
+        {
+            expressionable_parse_parentheses(expressionable);
+        }
+        else if (is_unary_operator(expressionable_peek_next(expressionable)->sval))
+        {
+            // Parse the unary
+            expressionable_parse_unary(expressionable);
+        }
+        else
+        {
+            expressionable_error(expressionable, "Two operators are not expected for a given expression for operator %s\n", expressionable_peek_next(expressionable)->sval);
+        }
+    }
+    else
+    {
+        // We must parse the right operand
+        expressionable_parse(expressionable);
+    }
     void *node_right = expressionable_node_pop(expressionable);
 
     expressionable_callbacks(expressionable)->make_expression_node(expressionable, node_left, node_right, op);

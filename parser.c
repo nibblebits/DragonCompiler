@@ -1494,7 +1494,10 @@ void parse_symbol()
     {
         // We have a label here, lets deal with it
         parse_label(history_begin(&history, 0));
+        return;
     }
+
+    parse_err("Not expecting the symbol %c", token->cval);
 }
 int parse_expressionable_single(struct history *history)
 {

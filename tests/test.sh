@@ -307,6 +307,15 @@ else
     echo -e "Preprocessor advanced expression definition test passed"
 fi
 
+echo -e "Preprocessor logical not test"
+./build/preprocessor_logical_not_test
+if [ $? -ne 50 ]; then
+    echo -e "Preprocessor logical not test failed"
+    res_code=1
+else
+    echo -e "Preprocessor logical not test passed"
+fi
+
 
 echo -e "All tests finished"
 exit $res_code

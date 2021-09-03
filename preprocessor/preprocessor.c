@@ -946,16 +946,6 @@ bool preprocessor_is_hashtag_and_any_if(struct compile_process *compiler)
            preprocessor_hashtag_and_identifier(compiler, "ifndef");
 }
 
-/**
- * Skips a nested if until an endif is found
- */
-void preprocessor_skip_sub_to_endif(struct compile_process *compiler)
-{
-    while (!preprocessor_hashtag_and_identifier(compiler, "endif"))
-    {
-        preprocessor_next_token(compiler);
-    }
-}
 
 /**
  * Skips the IF statement until endif is found, also skipping
@@ -967,9 +957,9 @@ void preprocessor_skip_to_endif(struct compile_process *compiler)
     {
         if (preprocessor_is_hashtag_and_any_if(compiler))
         {
-            preprocessor_next_token(compiler);
             // We have a sub if statement, lets skip it
             preprocessor_skip_to_endif(compiler);
+            continue;
         }
 
         preprocessor_next_token(compiler);
@@ -1001,7 +991,7 @@ void preprocessor_read_to_end_if(struct compile_process *compiler, bool true_cla
         // We just skipped something as it wasent true, if we have
         // an if or ifdef statement we should now skip the entire thing
         // as the first clause failed.
-        if (preprocessor_hashtag_and_identifier(compiler, "ifdef"))
+        if (preprocessor_is_hashtag_and_any_if(compiler))
         {
             // We have another IFDEF. Then we need to do something here
             // to avoid a rouge endif

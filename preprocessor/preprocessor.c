@@ -102,6 +102,11 @@ void preprocessor_execute_warning(struct compile_process* compiler, const char* 
     compiler_warning(compiler, "#warning %s", msg);
 }
 
+void preprocessor_execute_error(struct compile_process* compiler, const char* msg)
+{
+    compiler_error(compiler, "#error %s", msg);
+}
+
 bool preprocessor_is_keyword(const char *type)
 {
     return S_EQ(type, "defined");
@@ -488,6 +493,16 @@ bool preprocessor_token_is_warning(struct token *token)
     }
 
     return (S_EQ(token->sval, "warning"));
+}
+
+bool preprocessor_token_is_error(struct token *token)
+{
+    if (!preprocessor_token_is_preprocessor_keyword(token))
+    {
+        return false;
+    }
+
+    return (S_EQ(token->sval, "error"));
 }
 
 bool preprocessor_token_is_ifdef(struct token *token)
@@ -894,6 +909,12 @@ void preprocessor_handle_warning_token(struct compile_process* compiler)
 {
     struct buffer* str_buf = preprocessor_multi_value_string(compiler);
     preprocessor_execute_warning(compiler, buffer_ptr(str_buf));
+}
+
+void preprocessor_handle_error_token(struct compile_process* compiler)
+{
+     struct buffer* str_buf = preprocessor_multi_value_string(compiler);
+    preprocessor_execute_error(compiler, buffer_ptr(str_buf)); 
 }
 
 void preprocessor_handle_include_token(struct compile_process *compiler)
@@ -1535,6 +1556,11 @@ int preprocessor_handle_hashtag_token(struct compile_process *compiler, struct t
     else if(preprocessor_token_is_warning(next_token))
     {
         preprocessor_handle_warning_token(compiler);
+        is_preprocessed = true;
+    }
+    else if(preprocessor_token_is_error(next_token))
+    {
+        preprocessor_handle_error_token(compiler);
         is_preprocessed = true;
     }
     else if (preprocessor_token_is_ifdef(next_token))

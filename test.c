@@ -1,2 +1,0 @@
-#warning "DWWEIGJ wemigwie" \
-ABC

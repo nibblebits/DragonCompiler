@@ -1,2 +1,3 @@
-#define ABCD 500
-int x = 50;
+#ifdef ABC
+#define ABC 200
+#endif

@@ -238,27 +238,27 @@ bool is_array_operator(const char *op)
  * Special operators require instructions that could break the flow of registers
  * examples include multiplication and division.
  */
-bool is_special_operator(const char* op)
+bool is_special_operator(const char *op)
 {
     return S_EQ(op, "*") || S_EQ(op, "/") || is_bitwise_operator(op);
 }
 
-bool is_special_node(struct node* node)
+bool is_special_node(struct node *node)
 {
     return node->type == NODE_TYPE_EXPRESSION && is_special_operator(node->exp.op);
 }
 
-bool is_bitwise_operator(const char* op)
+bool is_bitwise_operator(const char *op)
 {
     return S_EQ(op, "^") || S_EQ(op, "<<") || S_EQ(op, ">>") || S_EQ(op, "&") || S_EQ(op, "|");
 }
 
-bool is_logical_operator(const char* op)
+bool is_logical_operator(const char *op)
 {
     return S_EQ(op, "&&") || S_EQ(op, "||");
 }
 
-bool is_logical_node(struct node* node)
+bool is_logical_node(struct node *node)
 {
     return node->type == NODE_TYPE_EXPRESSION && is_logical_operator(node->exp.op);
 }
@@ -288,7 +288,7 @@ bool is_parentheses_node(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_parentheses_operator(node->exp.op);
 }
 
-bool is_operator_token(struct token* token)
+bool is_operator_token(struct token *token)
 {
     return token->type == TOKEN_TYPE_OPERATOR;
 }
@@ -538,7 +538,7 @@ size_t datatype_size(struct datatype *datatype)
         return datatype->array.size;
     if (datatype->flags & DATATYPE_FLAG_IS_POINTER)
         return DATA_SIZE_DWORD;
-        
+
     return datatype->size;
 }
 

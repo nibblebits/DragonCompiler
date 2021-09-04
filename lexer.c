@@ -176,6 +176,12 @@ static struct token* lexer_last_token()
     return vector_back_or_null(current_process->token_vec_original);
 }
 
+
+void lexer_pop_token()
+{
+    vector_pop(current_process->token_vec_original);
+}
+
 static char assert_next_char(char expected_char)
 {
     char c = nextc();
@@ -221,6 +227,19 @@ static struct token* token_make_newline()
 {
     nextc();
     return token_create(&(struct token){TOKEN_TYPE_NEWLINE});
+}
+
+
+void lexer_validate_binary_string(const char* number_str)
+{
+    size_t len = strlen(number_str);
+    for (int i = 0; i < len; i++)
+    {
+        if (number_str[i] != '0' && number_str[i] != '1')
+        {
+            compiler_error(current_process, "Expecting a binary string but we found a character that is not a binary value %c\n", number_str[i]);
+        }
+    }
 }
 
 /**
@@ -322,10 +341,16 @@ unsigned long long read_number()
     return atoll(s);
 }
 
+static struct token* token_make_number_for_value(unsigned long val)
+{
+    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .llnum = val});
+}
+
 static struct token *token_make_number()
 {
-    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .llnum = read_number()});
+    return token_make_number_for_value(read_number());
 }
+
 
 static struct token *token_make_identifier_or_keyword()
 {
@@ -466,6 +491,58 @@ static struct token* handle_whitespace()
     nextc();
     return read_next_token();
 }
+
+static struct token* token_make_special_number_binary()
+{
+    // Skip the "b"
+    nextc();
+
+    // Now we should have a binary number we must convert it to a decimal
+    // and store it
+    unsigned long number = 0;
+    // Let's read the whole number
+    const char* number_str = read_number_str();
+    // Validate that it is a binary number
+    lexer_validate_binary_string(number_str);
+
+    // Okay we have a binary number, covnert it to an integer
+    number = strtol(number_str, NULL, 2);
+    return token_make_number_for_value(number);
+}
+
+static struct token* token_make_special_number_hexadecimal()
+{
+
+}
+static struct token* token_make_special_number()
+{
+    struct token* token = NULL;
+    struct token* last_token = lexer_last_token();
+    if (!last_token || !(last_token->type == TOKEN_TYPE_NUMBER && last_token->llnum == 0))
+    {
+        // This must be an identifier since we have no last token
+        // or that last number is not zero
+        return token_make_identifier_or_keyword();
+    }
+
+    // Let's pop off the last token as we dont' need it
+    // it was just used to describe that their will be a hex or binary value proceeding
+    lexer_pop_token();
+
+    // What do we have here?
+    char c = peekc();
+    if (c == 'x')
+    {
+        token = token_make_special_number_hexadecimal();
+    }
+    else if(c == 'b')
+    {
+        token = token_make_special_number_binary();
+    }
+
+    return token;
+}
+
 static struct token *read_next_token()
 {
     struct token *token = NULL;
@@ -484,14 +561,17 @@ static struct token *read_next_token()
     NUMERIC_CASE:
         token = token_make_number();
         break;
-
     OPERATOR_CASE_EXCLUDING_DIVISON:
         token = token_make_operator_or_string();
         break;
     SYMBOL_CASE:
         token = token_make_symbol();
         break;
-
+    // I.e 0x55837 or 0b0011100
+    case 'x':
+    case 'b':
+        token = token_make_special_number();    
+        break;
     case '\'':
         token = token_make_quote();
         break;

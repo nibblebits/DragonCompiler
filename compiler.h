@@ -690,6 +690,14 @@ enum
     TOKEN_TYPE_NEWLINE
 };
 
+enum
+{
+    NUMBER_TYPE_NORMAL,
+    NUMBER_TYPE_LONG,
+    NUMBER_TYPE_FLOAT,
+    NUMBER_TYPE_DOUBLE
+};
+
 struct token
 {
     int type;
@@ -702,6 +710,12 @@ struct token
         unsigned long lnum;
         unsigned long long llnum;
     };
+
+    // Information for the given number token, if this token is of type TOKEN_TYPE_NUMBER
+    struct token_number
+    {
+        int type;
+    } num;
 
     // True if their is a whitespace between the token and the next token
     // i.e * a for token * whitespace would be true as the token "a" has a space

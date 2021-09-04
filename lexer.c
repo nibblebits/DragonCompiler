@@ -226,18 +226,6 @@ static struct token *token_make_newline()
     return token_create(&(struct token){TOKEN_TYPE_NEWLINE});
 }
 
-void lexer_validate_hex_string(const char *number_str)
-{
-    size_t len = strlen(number_str);
-    for (int i = 0; i < len; i++)
-    {
-        if (!is_hex_char(number_str[i]))
-        {
-            compiler_error(current_process, "Expecting a hex string but we found a character that is not a binary value %c\n", number_str[i]);
-        }
-    }
-}
-
 void lexer_validate_binary_string(const char *number_str)
 {
     size_t len = strlen(number_str);
@@ -330,7 +318,6 @@ static struct token *token_make_operator_or_string()
     return token_create(&(struct token){TOKEN_TYPE_OPERATOR, .sval = read_op()});
 }
 
-
 const char *read_hex_number_str()
 {
     const char *num = NULL;
@@ -343,7 +330,6 @@ const char *read_hex_number_str()
 
     return buffer_ptr(buffer);
 }
-
 
 const char *read_number_str()
 {
@@ -364,9 +350,30 @@ unsigned long long read_number()
     return atoll(s);
 }
 
+static int lexer_number_type(char c)
+{
+    int number_type = NUMBER_TYPE_NORMAL;
+    if (c == 'L')
+    {
+        number_type = NUMBER_TYPE_LONG;
+    }
+    else if (c == 'f')
+    {
+        number_type = NUMBER_TYPE_FLOAT;
+    }
+    return number_type;
+}
+
 static struct token *token_make_number_for_value(unsigned long val)
 {
-    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .llnum = val});
+    int number_type = lexer_number_type(peekc());
+    if (number_type != NUMBER_TYPE_NORMAL)
+    {
+        // This is not a normal number type, therefore we have a character
+        // that we need to pop off
+        nextc();
+    }
+    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .llnum = val, .num.type=number_type});
 }
 
 static struct token *token_make_number()
@@ -542,8 +549,7 @@ static struct token *token_make_special_number_hexadecimal()
     unsigned long number = 0;
     // Let's read the whole number
     const char *number_str = read_hex_number_str();
-    // Validate that it is a binary number
-    lexer_validate_hex_string(number_str);
+    // No need to validate the HEX number its impossible for us to have anything else
 
     // Okay we have a binary number, covnert it to an integer
     number = strtol(number_str, NULL, 16);

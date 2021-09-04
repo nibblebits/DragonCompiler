@@ -362,5 +362,14 @@ else
 fi
 
 
+echo -e "Long directive test"
+./build/long_directive_test
+if [ $? -ne 10 ]; then
+    echo -e "Long directive test failed"
+    res_code=1
+else
+    echo -e "Long directive test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

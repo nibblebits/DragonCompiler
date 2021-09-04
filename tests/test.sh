@@ -352,5 +352,15 @@ else
     echo -e "Binary number test passed"
 fi
 
+echo -e "hex number test"
+./build/hex_test
+if [ $? -ne 21 ]; then
+    echo -e "hex number test failed"
+    res_code=1
+else
+    echo -e "hex number test passed"
+fi
+
+
 echo -e "All tests finished"
 exit $res_code

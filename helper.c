@@ -6,6 +6,13 @@
 #include "helpers/vector.h"
 #include <stdio.h>
 #include <assert.h>
+#include <ctype.h>
+
+bool is_hex_char(char c)
+{
+    c = tolower(c);
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+}
 
 /**
  * Returns the largest variable node for the given var_node.

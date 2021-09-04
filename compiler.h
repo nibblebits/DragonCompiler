@@ -1761,6 +1761,10 @@ bool node_is_expression_or_parentheses(struct node* node);
  */
 bool node_is_value_type(struct node* node);
 
+/**
+ * Returns true if the given character is a hexadecimal character
+ */
+bool is_hex_char(char c);
 
 
 #endif

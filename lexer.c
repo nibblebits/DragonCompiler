@@ -61,7 +61,7 @@ bool is_keyword(const char *str)
            S_EQ(str, "void") ||
            S_EQ(str, "struct") ||
            S_EQ(str, "union") ||
-           S_EQ(str, "static") || 
+           S_EQ(str, "static") ||
            S_EQ(str, "return") ||
            S_EQ(str, "include") ||
            S_EQ(str, "sizeof") ||
@@ -70,8 +70,8 @@ bool is_keyword(const char *str)
            S_EQ(str, "while") ||
            S_EQ(str, "for") ||
            S_EQ(str, "do") ||
-           S_EQ(str, "break") || 
-           S_EQ(str, "continue") || 
+           S_EQ(str, "break") ||
+           S_EQ(str, "continue") ||
            S_EQ(str, "switch") ||
            S_EQ(str, "case") ||
            S_EQ(str, "default") ||
@@ -109,7 +109,7 @@ static bool is_single_operator(char op)
            op == '!' ||
            op == '(' ||
            op == '[' ||
-           op == ',' || 
+           op == ',' ||
            op == '.' ||
            op == '~' ||
            op == '?';
@@ -152,7 +152,7 @@ static bool op_valid(const char *op)
            S_EQ(op, "!=") ||
            S_EQ(op, "->") ||
            S_EQ(op, "**") ||
-           S_EQ(op, "(")  ||
+           S_EQ(op, "(") ||
            S_EQ(op, "[") ||
            S_EQ(op, ",") ||
            S_EQ(op, ".") ||
@@ -171,11 +171,10 @@ static struct pos compiler_file_position()
     return current_process->pos;
 }
 
-static struct token* lexer_last_token()
+static struct token *lexer_last_token()
 {
     return vector_back_or_null(current_process->token_vec_original);
 }
-
 
 void lexer_pop_token()
 {
@@ -199,7 +198,6 @@ static struct token *token_create(struct token *_token)
     return &tmp_token;
 }
 
-
 static struct token *token_make_string(char start_delim, char end_delim)
 {
     struct buffer *buf = buffer_create();
@@ -222,22 +220,32 @@ static struct token *token_make_string(char start_delim, char end_delim)
     return token_create(&(struct token){TOKEN_TYPE_STRING, .sval = buffer_ptr(buf)});
 }
 
-
-static struct token* token_make_newline()
+static struct token *token_make_newline()
 {
     nextc();
     return token_create(&(struct token){TOKEN_TYPE_NEWLINE});
 }
 
+void lexer_validate_hex_string(const char *number_str)
+{
+    size_t len = strlen(number_str);
+    for (int i = 0; i < len; i++)
+    {
+        if (!is_hex_char(number_str[i]))
+        {
+            compiler_error(current_process, "Expecting a hex string but we found a character that is not a binary value %c\n", number_str[i]);
+        }
+    }
+}
 
-void lexer_validate_binary_string(const char* number_str)
+void lexer_validate_binary_string(const char *number_str)
 {
     size_t len = strlen(number_str);
     for (int i = 0; i < len; i++)
     {
         if (number_str[i] != '0' && number_str[i] != '1')
         {
-            compiler_error(current_process, "Expecting a binary string but we found a character that is not a binary value %c\n", number_str[i]);
+            compiler_error(current_process, "Expecting a binary string but we found a character that is not a hex value %c\n", number_str[i]);
         }
     }
 }
@@ -246,16 +254,16 @@ void lexer_validate_binary_string(const char* number_str)
  * Flushes the buffer back to the character stream, except the first operator.
  * Ignores the null terminator
  */
-void read_op_flush_back_keep_first(struct buffer* buffer)
+void read_op_flush_back_keep_first(struct buffer *buffer)
 {
-    const char* data = buffer_ptr(buffer);
+    const char *data = buffer_ptr(buffer);
     int len = buffer->len;
-    for (int i = len-1; i >= 1; i--)
+    for (int i = len - 1; i >= 1; i--)
     {
         if (data[i] == 0x00)
             continue;
         pushc(data[i]);
-    }   
+    }
 }
 
 static const char *read_op()
@@ -275,8 +283,8 @@ static const char *read_op()
             single_operator = false;
         }
     }
-    
-    char* ptr = buffer_ptr(buffer);
+
+    char *ptr = buffer_ptr(buffer);
     // Null terminator.
     buffer_write(buffer, 0x00);
     if (!single_operator)
@@ -292,7 +300,7 @@ static const char *read_op()
             ptr[1] = 0x00;
         }
     }
-    else if(!op_valid(ptr))
+    else if (!op_valid(ptr))
     {
         compiler_error(current_process, "The operator %s is invalid\n", ptr);
     }
@@ -310,7 +318,7 @@ static struct token *token_make_operator_or_string()
     if (op == '<')
     {
         // It's possible we have an include statement lets just check that if so we will have a string
-        struct token* last_token = lexer_last_token();
+        struct token *last_token = lexer_last_token();
         if (token_is_keyword(last_token, "include"))
         {
             // Aha so we have something like this "include <stdio.h>"
@@ -321,6 +329,21 @@ static struct token *token_make_operator_or_string()
 
     return token_create(&(struct token){TOKEN_TYPE_OPERATOR, .sval = read_op()});
 }
+
+
+const char *read_hex_number_str()
+{
+    const char *num = NULL;
+    struct buffer *buffer = buffer_create();
+    char c = peekc();
+    LEX_GETC_IF(buffer, c, is_hex_char(c));
+
+    // Null terminator.
+    buffer_write(buffer, 0x00);
+
+    return buffer_ptr(buffer);
+}
+
 
 const char *read_number_str()
 {
@@ -341,7 +364,7 @@ unsigned long long read_number()
     return atoll(s);
 }
 
-static struct token* token_make_number_for_value(unsigned long val)
+static struct token *token_make_number_for_value(unsigned long val)
 {
     return token_create(&(struct token){TOKEN_TYPE_NUMBER, .llnum = val});
 }
@@ -350,7 +373,6 @@ static struct token *token_make_number()
 {
     return token_make_number_for_value(read_number());
 }
-
 
 static struct token *token_make_identifier_or_keyword()
 {
@@ -479,20 +501,20 @@ static struct token *token_make_quote()
 }
 
 static struct token *read_next_token();
-static struct token* handle_whitespace()
+static struct token *handle_whitespace()
 {
     // Let's get the previous token and set the whitespace boolean#
-    struct token* last_token = lexer_last_token();
+    struct token *last_token = lexer_last_token();
     if (last_token)
     {
         last_token->whitespace = true;
     }
-    
+
     nextc();
     return read_next_token();
 }
 
-static struct token* token_make_special_number_binary()
+static struct token *token_make_special_number_binary()
 {
     // Skip the "b"
     nextc();
@@ -501,7 +523,7 @@ static struct token* token_make_special_number_binary()
     // and store it
     unsigned long number = 0;
     // Let's read the whole number
-    const char* number_str = read_number_str();
+    const char *number_str = read_number_str();
     // Validate that it is a binary number
     lexer_validate_binary_string(number_str);
 
@@ -510,14 +532,28 @@ static struct token* token_make_special_number_binary()
     return token_make_number_for_value(number);
 }
 
-static struct token* token_make_special_number_hexadecimal()
+static struct token *token_make_special_number_hexadecimal()
 {
+    // Skip the "x"
+    nextc();
 
+    // Now we should have a binary number we must convert it to a decimal
+    // and store it
+    unsigned long number = 0;
+    // Let's read the whole number
+    const char *number_str = read_hex_number_str();
+    // Validate that it is a binary number
+    lexer_validate_hex_string(number_str);
+
+    // Okay we have a binary number, covnert it to an integer
+    number = strtol(number_str, NULL, 16);
+    return token_make_number_for_value(number);
 }
-static struct token* token_make_special_number()
+
+static struct token *token_make_special_number()
 {
-    struct token* token = NULL;
-    struct token* last_token = lexer_last_token();
+    struct token *token = NULL;
+    struct token *last_token = lexer_last_token();
     if (!last_token || !(last_token->type == TOKEN_TYPE_NUMBER && last_token->llnum == 0))
     {
         // This must be an identifier since we have no last token
@@ -535,7 +571,7 @@ static struct token* token_make_special_number()
     {
         token = token_make_special_number_hexadecimal();
     }
-    else if(c == 'b')
+    else if (c == 'b')
     {
         token = token_make_special_number_binary();
     }
@@ -570,7 +606,7 @@ static struct token *read_next_token()
     // I.e 0x55837 or 0b0011100
     case 'x':
     case 'b':
-        token = token_make_special_number();    
+        token = token_make_special_number();
         break;
     case '\'':
         token = token_make_quote();

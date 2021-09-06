@@ -297,7 +297,7 @@ bool is_parentheses_node(struct node *node)
 
 bool is_operator_token(struct token *token)
 {
-    return token->type == TOKEN_TYPE_OPERATOR;
+    return token && token->type == TOKEN_TYPE_OPERATOR;
 }
 
 static bool is_exp_compile_computable(struct node *node)

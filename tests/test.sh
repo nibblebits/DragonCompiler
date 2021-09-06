@@ -371,5 +371,23 @@ else
     echo -e "Long directive test passed"
 fi
 
+echo -e "Preprocessor macro function in IF test"
+./build/preprocessor_macro_func_in_if
+if [ $? -ne 50 ]; then
+    echo -e "Preprocessor macro function in IF test failed"
+    res_code=1
+else
+    echo -e "Preprocessor macro function in IF test passed"
+fi
+
+echo -e "Preprocessor macro function in IF 2 test"
+./build/preprocessor_macro_func_in_if_2
+if [ $? -ne 50 ]; then
+    echo -e "Preprocessor macro function in IF 2 test failed"
+    res_code=1
+else
+    echo -e "Preprocessor macro function in IF 2 test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

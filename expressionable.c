@@ -212,7 +212,7 @@ void expressionable_parse_parentheses(struct expressionable *expressionable)
         // Ok we do so we must create an expression node, whose left node is the left node
         // and whose right node is the parentheses node
         void *parentheses_node = expressionable_node_pop(expressionable);
-        expressionable_callbacks(expressionable)->make_parentheses_node(expressionable, parentheses_node);
+        expressionable_callbacks(expressionable)->make_expression_node(expressionable, left_node, parentheses_node, "()");
     }
 
     expressionable_deal_with_additional_expression(expressionable);

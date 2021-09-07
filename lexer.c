@@ -27,6 +27,31 @@
 
 static struct token tmp_token;
 static struct lex_process *lex_process;
+
+
+char lexer_string_buffer_next_char(struct lex_process* process)
+{
+    struct buffer* buf = lex_process_private(process);
+    return buffer_read(buf);
+}
+char lexer_string_buffer_peek_char(struct lex_process* process)
+{
+    struct buffer* buf = lex_process_private(process);
+    return buffer_peek(buf);
+}
+
+void lexer_string_buffer_push_char(struct lex_process* process, char c)
+{
+    struct buffer* buf = lex_process_private(process);
+    buffer_write(buf, c);
+}
+
+struct lex_process_functions lexer_string_buffer_functions = {
+    .next_char = lexer_string_buffer_next_char,
+    .peek_char = lexer_string_buffer_peek_char,
+    .push_char = lexer_string_buffer_push_char
+};
+
 void error(const char *fmt, ...)
 {
     va_list args;
@@ -373,7 +398,7 @@ static struct token *token_make_number_for_value(unsigned long val)
         // that we need to pop off
         nextc();
     }
-    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .llnum = val, .num.type=number_type});
+    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .llnum = val, .num.type = number_type});
 }
 
 static struct token *token_make_number()
@@ -657,4 +682,22 @@ int lex(struct lex_process *process)
     }
 
     return LEXICAL_ANALYSIS_ALL_OK;
+}
+
+struct lex_process *tokens_build_for_string(struct compile_process *compiler, const char *str)
+{
+    struct buffer* buffer = buffer_create();
+    buffer_printf(buffer, str);
+    struct lex_process *process = lex_process_create(compiler, &lexer_string_buffer_functions, buffer);
+    if (!process)
+    {
+        return NULL;
+    }
+
+    if(lex(process) != LEXICAL_ANALYSIS_ALL_OK)
+    {
+        return NULL;
+    }
+
+    return process;
 }

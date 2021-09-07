@@ -103,7 +103,7 @@ struct compile_process *compile_include(const char *filename, struct compile_pro
     if (!process)
         return NULL;
 
-    struct lex_process *lex_process = lex_process_new(process, &compiler_lex_functions);
+    struct lex_process *lex_process = lex_process_create(process, &compiler_lex_functions, NULL);
     if (!lex_process)
     {
         return NULL;
@@ -128,7 +128,7 @@ int compile_file(const char *filename, const char *out_filename, int flags)
     if (!process)
         return COMPILER_FAILED_WITH_ERRORS;
 
-    struct lex_process *lex_process = lex_process_new(process, &compiler_lex_functions);
+    struct lex_process *lex_process = lex_process_create(process, &compiler_lex_functions, NULL);
     if (!lex_process)
     {
         return COMPILER_FAILED_WITH_ERRORS;

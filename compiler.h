@@ -399,6 +399,10 @@ struct lex_process
     struct compile_process *compiler;
 
     struct lex_process_functions* function;
+
+    // Private data that the creator of the lex process can use to store.
+    // data they understand
+    void* private;
 };
 /**
  * This file represents a compilation process
@@ -1183,8 +1187,18 @@ struct compile_process *compile_include(const char *filename, struct compile_pro
  * Lexical analysis
  */
 int lex(struct lex_process *process);
-struct lex_process* lex_process_new(struct compile_process* compiler, struct lex_process_functions* functions);
+/**
+ * Builds tokens for the given input string, returns a lexical analysis process.
+ */
+struct lex_process *tokens_build_for_string(struct compile_process *compiler, const char *str);
+struct lex_process* lex_process_create(struct compile_process* compiler, struct lex_process_functions* functions, void* private);
 void lex_process_free(struct lex_process* process);
+
+/**
+ * Returns the private data of this lexical process
+ */
+void* lex_process_private(struct lex_process* process);
+
 /**
  * Returns the generated tokens from lexical analysis for this lexical analysis process
  */

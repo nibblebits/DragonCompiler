@@ -111,8 +111,6 @@ struct preprocessor_function_arguments
     struct vector *arguments;
 };
 
-
-
 int preprocessor_handle_identifier(struct compile_process *compiler, struct token *token);
 int preprocessor_handle_identifier_for_token_vector(struct compile_process *compiler, struct vector *src_vec, struct token *token);
 int preprocessor_macro_function_execute(struct compile_process *compiler, const char *function_name, struct preprocessor_function_arguments *arguments, int flags);
@@ -126,6 +124,20 @@ void preprocessor_execute_warning(struct compile_process *compiler, const char *
 void preprocessor_execute_error(struct compile_process *compiler, const char *msg)
 {
     compiler_error(compiler, "#error %s", msg);
+}
+
+struct preprocessor_included_file *preprocessor_add_included_file(struct preprocessor *preprocessor, const char *filename)
+{
+    struct preprocessor_included_file *included_file = calloc(sizeof(struct preprocessor_included_file), 1);
+    memcpy(included_file->filename, filename, sizeof(included_file->filename));
+    vector_push(preprocessor->includes, &included_file);
+    return included_file;
+}
+
+void preprocessor_create_static_include(struct preprocessor *preprocessor, const char *filename, PREPROCESSOR_STATIC_INCLUDE_HANDLER_POST_CREATION creation_handler)
+{
+    struct preprocessor_included_file *included_file = preprocessor_add_included_file(preprocessor, filename);
+    creation_handler(preprocessor, included_file);
 }
 
 bool preprocessor_is_keyword(const char *type)
@@ -376,7 +388,6 @@ struct expressionable_config preprocessor_expressionable_config =
         .callbacks.should_join_nodes = preprocessor_should_join_nodes,
         .callbacks.join_nodes = preprocessor_join_nodes,
         .callbacks.expecting_additional_node = preprocessor_expecting_additional_node};
-
 
 void preprocessor_handle_token(struct compile_process *compiler, struct token *token);
 
@@ -795,7 +806,7 @@ struct preprocessor_definition *preprocessor_definition_create(const char *name,
     definition->standard.arguments = arguments;
     definition->preprocessor = preprocessor;
 
-    if (vector_count(definition->standard.arguments))
+    if (arguments && vector_count(definition->standard.arguments))
     {
         definition->type = PREPROCESSOR_DEFINITION_MACRO_FUNCTION;
     }
@@ -990,6 +1001,17 @@ void preprocessor_handle_include_token(struct compile_process *compiler)
     sprintf(tmp_filename, "/usr/include/%s", file_path_token->sval);
     if (!file_exists(file_path_token->sval) && !file_exists(tmp_filename))
     {
+        // File does not exist? Do we have a static handler for this
+
+        // No file could be included? Let's check the static handlers and see if its in there
+        PREPROCESSOR_STATIC_INCLUDE_HANDLER_POST_CREATION handler = preprocessor_static_include_handler_for(file_path_token->sval);
+        if (handler)
+        {
+            // Yep great, lets run the handler and then return
+            preprocessor_create_static_include(compiler->preprocessor, file_path_token->sval, handler);
+            return;
+        }
+
         compiler_error(compiler, "The file does not exist %s unable to include", file_path_token->sval);
     }
 
@@ -1194,12 +1216,12 @@ int preprocessor_evaluate_number(struct preprocessor_node *node)
     return node->const_val.llnum;
 }
 
-int preprocessor_parse_evaluate(struct compile_process* compiler, struct vector* token_vec)
+int preprocessor_parse_evaluate(struct compile_process *compiler, struct vector *token_vec)
 {
     struct vector *node_vector = vector_create(sizeof(struct preprocessor_node *));
-    struct expressionable* expressionable = expressionable_create(&preprocessor_expressionable_config, token_vec, node_vector, 0);
+    struct expressionable *expressionable = expressionable_create(&preprocessor_expressionable_config, token_vec, node_vector, 0);
     expressionable_parse(expressionable);
-    struct preprocessor_node* root_node = expressionable_node_pop(expressionable);
+    struct preprocessor_node *root_node = expressionable_node_pop(expressionable);
     return preprocessor_evaluate(compiler, root_node);
 }
 
@@ -1324,7 +1346,7 @@ void preprocessor_evaluate_function_call_argument(struct compile_process *compil
         preprocessor_evaluate_function_call_argument(compiler, node->exp.right, arguments);
         return;
     }
-    else if(node->type == PREPROCESSOR_EXPRESSION_NODE)
+    else if (node->type == PREPROCESSOR_EXPRESSION_NODE)
     {
         preprocessor_evaluate_function_call_argument(compiler, node->parenthesis.exp, arguments);
         return;
@@ -1332,10 +1354,9 @@ void preprocessor_evaluate_function_call_argument(struct compile_process *compil
 
     // Evaluate the node for this function argument and push it to the arguments vector
     preprocessor_number_push_to_function_arguments(arguments, preprocessor_evaluate(compiler, node));
-
 }
 
-void preprocessor_evaluate_function_call_arguments(struct compile_process *compiler, struct preprocessor_node *node, struct preprocessor_function_arguments* arguments)
+void preprocessor_evaluate_function_call_arguments(struct compile_process *compiler, struct preprocessor_node *node, struct preprocessor_function_arguments *arguments)
 {
     preprocessor_evaluate_function_call_argument(compiler, node, arguments);
 }
@@ -1512,7 +1533,6 @@ struct token *preprocessor_handle_identifier_macro_call_argument_parse(struct co
     token = preprocessor_next_token(compiler);
     return token;
 }
-
 
 int preprocessor_macro_function_execute(struct compile_process *compiler, const char *function_name, struct preprocessor_function_arguments *arguments, int flags)
 {
@@ -1740,6 +1760,7 @@ void preprocessor_initialize(struct vector *token_vec, struct preprocessor *prep
 {
     memset(preprocessor, 0, sizeof(struct preprocessor));
     preprocessor->definitions = vector_create(sizeof(struct preprocessor_definition *));
+    preprocessor->includes = vector_create(sizeof(struct preprocessor_included_file *));
     preprocessor_create_definitions(preprocessor);
 }
 
@@ -1754,6 +1775,8 @@ struct preprocessor *preprocessor_create(struct compile_process *compiler)
 
 int preprocessor_run(struct compile_process *compiler)
 {
+    preprocessor_add_included_file(compiler->preprocessor, compiler->cfile.abs_path);
+
     vector_set_peek_pointer(compiler->token_vec_original, 0);
     struct token *token = preprocessor_next_token(compiler);
     while (token)

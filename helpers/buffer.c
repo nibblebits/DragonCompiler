@@ -67,8 +67,31 @@ void* buffer_ptr(struct buffer* buffer)
     return buffer->data;
 }
 
+char buffer_read(struct buffer* buffer)
+{
+    if (buffer->rindex >= buffer->len)
+    {
+        return -1;
+    }
+    char c = buffer->data[buffer->rindex];
+    buffer->rindex++;
+    return c;
+}
+
+char buffer_peek(struct buffer* buffer)
+{
+    if (buffer->rindex >= buffer->len)
+    {
+        return -1;
+    }
+    char c = buffer->data[buffer->rindex];
+    return c;
+}
+
 void buffer_free(struct buffer* buffer)
 {
     free(buffer->data);
     free(buffer);
 }
+
+

@@ -1,1 +1,3 @@
-#include <stdio.h>
+#include <stddef.h>
+
+size_t a = 50;

@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <string.h>
+#include <linux/limits.h>
 
 #include "helpers/vector.h"
 
@@ -277,6 +278,17 @@ struct preprocessor_definition
     struct preprocessor *preprocessor;
 };
 
+struct preprocessor_included_file
+{
+    char filename[PATH_MAX];
+};
+
+/**
+ * The pointer type used for static includes that exist in the compiler binary its self
+ * such as stddef.h
+ */
+typedef void (*PREPROCESSOR_STATIC_INCLUDE_HANDLER_POST_CREATION)(struct preprocessor *preprocessor, struct preprocessor_included_file *included_file);
+
 struct preprocessor
 {
 
@@ -290,6 +302,11 @@ struct preprocessor
     struct expressionable *expressionable;
 
     struct compile_process *compiler;
+
+    /** 
+     * Vector of included files struct preprocessor_included_file*
+     */
+    struct vector *includes;
 };
 
 struct string_table_element
@@ -361,6 +378,28 @@ enum
     COMPILE_PROCESS_EXECUTE_NASM = 0b00000010
 };
 
+struct compile_process;
+struct lex_process;
+typedef char (*LEX_PROCESS_NEXT_CHAR)(struct lex_process *process);
+typedef char (*LEX_PROCESS_PEEK_CHAR)(struct lex_process *process);
+typedef void (*LEX_PROCESS_PUSH_CHAR)(struct lex_process *process, char c);
+
+struct lex_process_functions
+{
+    LEX_PROCESS_NEXT_CHAR next_char;
+    LEX_PROCESS_PEEK_CHAR peek_char;
+    LEX_PROCESS_PUSH_CHAR push_char;
+};
+
+struct lex_process
+{
+    // Current line position information.
+    struct pos pos;
+    struct vector *token_vec;
+    struct compile_process *compiler;
+
+    struct lex_process_functions* function;
+};
 /**
  * This file represents a compilation process
  */
@@ -370,7 +409,12 @@ struct compile_process
     int flags;
 
     // The current file being compiled
-    FILE *cfile;
+    struct compile_process_input_file
+    {
+        FILE *fp;
+        // The absolute path of the compiler process input file
+        char abs_path[PATH_MAX];
+    } cfile;
 
     // The output file to compile to. NULL if this is a sub-file included with "include"
     FILE *ofile;
@@ -876,7 +920,7 @@ struct node
         struct node *owner;
 
         // The function that this node is apart of
-        struct node* function;
+        struct node *function;
     } binded;
 
     union
@@ -1088,8 +1132,8 @@ struct node
         {
             // No need for a condition node in the tenary as this will be present
             // in the expression node for the tenary i.e E(COND, TENARY[true_node,false_node])
-            struct node* true_node;
-            struct node* false_node;
+            struct node *true_node;
+            struct node *false_node;
         } tenary;
     };
 
@@ -1109,6 +1153,7 @@ enum
     COMPILER_FILE_COMPILED_OK,
     COMPILER_FAILED_WITH_ERRORS,
 };
+
 
 /**
  * Called to issue a compiler error and terminate the compiler
@@ -1137,7 +1182,13 @@ struct compile_process *compile_include(const char *filename, struct compile_pro
 /**
  * Lexical analysis
  */
-int lex(struct compile_process *process);
+int lex(struct lex_process *process);
+struct lex_process* lex_process_new(struct compile_process* compiler, struct lex_process_functions* functions);
+void lex_process_free(struct lex_process* process);
+/**
+ * Returns the generated tokens from lexical analysis for this lexical analysis process
+ */
+struct vector* lex_process_tokens(struct lex_process* process);
 
 /**
  * Parses the tree provided from lexical analysis
@@ -1173,20 +1224,20 @@ FILE *compile_process_file(struct compile_process *process);
 /**
  * Gets the next character from the current file
  */
-char compile_process_next_char(struct compile_process *process);
+char compile_process_next_char(struct lex_process* lex_process);
 
 /**
  * Peeks in the stream for the next char from the current file.
  * Does not impact the file pointer.
  */
-char compile_process_peek_char(struct compile_process *process);
+char compile_process_peek_char(struct lex_process *lex_process);
 
 /**
  * Unsets the given character pushing it back into the end of the input stream.
  * The next time compile_process_next_char or compile_process_peek_char is called
  * the given character provided here will be given
  */
-void compile_process_push_char(struct compile_process *process, char c);
+void compile_process_push_char(struct lex_process *lex_process, char c);
 
 struct scope *scope_alloc();
 struct scope *scope_create_root(struct compile_process *process);
@@ -1319,15 +1370,14 @@ bool node_is_root_expression(struct node *node);
 /**
  * Returns the entire stack size for the given function, including all sub scopes
  */
-size_t function_node_stack_size(struct node* node);
+size_t function_node_stack_size(struct node *node);
 
 /**
  * Returns true if the provided node is just a prototype.
  * 
  * I.e "int abc();"
  */
-bool function_node_is_prototype(struct node* node);
-
+bool function_node_is_prototype(struct node *node);
 
 /**
  * Returns true if the given operator is an access operator.
@@ -1580,10 +1630,18 @@ struct vector *preprocessor_line_macro_value(struct preprocessor_definition *def
  */
 void preprocessor_create_definitions(struct preprocessor *preprocessor);
 
+struct preprocessor_definition *preprocessor_definition_create(const char *name, struct vector *value_vec, struct vector *arguments, struct preprocessor *preprocessor);
+
 /**
  * Creates a new preprocessor instance
  */
 struct preprocessor *preprocessor_create(struct compile_process *compiler);
+
+/**
+ * Returns the static include handler for the given filename, if none exists then NULL Is returned.
+ * Some header files are compiled into the binary its self, this function resolves them
+ */
+PREPROCESSOR_STATIC_INCLUDE_HANDLER_POST_CREATION preprocessor_static_include_handler_for(const char *filename);
 
 // Expressionable system, parses expressions
 
@@ -1606,7 +1664,7 @@ struct expressionable;
 typedef void *(*EXPRESSIONABLE_HANDLE_NUMBER)(struct expressionable *expressionable);
 typedef void *(*EXPRESSIONABLE_HANDLE_IDENTIFIER)(struct expressionable *expressionable);
 typedef void (*EXPRESSIONABLE_MAKE_EXPRESSION_NODE)(struct expressionable *expressionable, void *left_node_ptr, void *right_node_ptr, const char *op);
-typedef void (*EXPRESSIONABLE_MAKE_TENARY_NODE)(struct expressionable* expressionable, void* true_result_node, void* false_result_node);
+typedef void (*EXPRESSIONABLE_MAKE_TENARY_NODE)(struct expressionable *expressionable, void *true_result_node, void *false_result_node);
 typedef void (*EXPRESSIONABLE_MAKE_PARENTHESES_NODE)(struct expressionable *expressionable, void *node_ptr);
 typedef void (*EXPRESSIONABLE_MAKE_UNARY_NODE)(struct expressionable *expressionable, const char *op, void *right_operand_node_ptr);
 typedef void (*EXPRESSIONABLE_MAKE_UNARY_INDIRECTION_NODE)(struct expressionable *expressionable, int ptr_depth, void *right_operand_node_ptr);
@@ -1617,9 +1675,9 @@ typedef const char *(*EXPRESSIONABLE_GET_NODE_OPERATOR)(struct expressionable *e
 typedef void **(*EXPRESSIONABLE_GET_NODE_ADDRESS)(struct expressionable *expressionable, void *target_node);
 typedef void (*EXPPRESIONABLE_SET_EXPRESSION_NODE)(struct expressionable *expressionable, void *node, void *left_node, void *right_node, const char *op);
 
-typedef bool (*EXPRESSIONABLE_SHOULD_JOIN_NODES)(struct expressionable* expressionable, void* previous_node, void* node);
-typedef void* (*EXPRESSIONABLE_JOIN_NODES)(struct expressionable* expressionable, void* previous_node, void* node);
-typedef bool (*EXPRESSIONABLE_EXPECTING_ADDITIONAL_NODE)(struct expressionable* expressionable, void* node);
+typedef bool (*EXPRESSIONABLE_SHOULD_JOIN_NODES)(struct expressionable *expressionable, void *previous_node, void *node);
+typedef void *(*EXPRESSIONABLE_JOIN_NODES)(struct expressionable *expressionable, void *previous_node, void *node);
+typedef bool (*EXPRESSIONABLE_EXPECTING_ADDITIONAL_NODE)(struct expressionable *expressionable, void *node);
 
 struct expressionable_config
 {
@@ -1767,18 +1825,16 @@ bool is_compile_computable(struct node *node);
  */
 bool char_is_delim(char c, const char *delims);
 
-
-bool node_is_expression_or_parentheses(struct node* node);
+bool node_is_expression_or_parentheses(struct node *node);
 
 /**
  * Returns true if the given node can be apart of an expression
  */
-bool node_is_value_type(struct node* node);
+bool node_is_value_type(struct node *node);
 
 /**
  * Returns true if the given character is a hexadecimal character
  */
 bool is_hex_char(char c);
-
 
 #endif

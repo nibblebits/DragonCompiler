@@ -1,6 +1,12 @@
 #include "compiler.h"
 #include "misc.h"
 #include "helpers/vector.h"
+
+struct lex_process_functions compiler_lex_functions = {
+    .next_char = compile_process_next_char,
+    .peek_char = compile_process_peek_char,
+    .push_char = compile_process_push_char};
+
 void compiler_error(struct compile_process *compiler, const char *msg, ...)
 {
     va_list args;
@@ -22,8 +28,6 @@ void compiler_warning(struct compile_process *compiler, const char *msg, ...)
 
     fprintf(stderr, " on line %i, col %i\n", compiler->pos.line, compiler->pos.col);
 }
-
-
 
 void test(struct node *node);
 void test_vec(struct vector *vec)
@@ -90,7 +94,7 @@ struct compile_process *compile_include(const char *filename, struct compile_pro
 {
     char tmp_filename[512];
     sprintf(tmp_filename, "/usr/include/%s", filename);
-    if(file_exists(tmp_filename))
+    if (file_exists(tmp_filename))
     {
         filename = tmp_filename;
     }
@@ -99,8 +103,16 @@ struct compile_process *compile_include(const char *filename, struct compile_pro
     if (!process)
         return NULL;
 
-    if (lex(process) != LEXICAL_ANALYSIS_ALL_OK)
+    struct lex_process *lex_process = lex_process_new(process, &compiler_lex_functions);
+    if (!lex_process)
+    {
         return NULL;
+    }
+
+    if (lex(lex_process) != LEXICAL_ANALYSIS_ALL_OK)
+        return NULL;
+
+    process->token_vec_original = lex_process_tokens(lex_process);
 
     if (preprocessor_run(process) != 0)
     {
@@ -110,15 +122,22 @@ struct compile_process *compile_include(const char *filename, struct compile_pro
     return process;
 }
 
-int compile_file(const char *filename, const char* out_filename, int flags)
+int compile_file(const char *filename, const char *out_filename, int flags)
 {
     struct compile_process *process = compile_process_create(filename, out_filename, flags, NULL);
     if (!process)
         return COMPILER_FAILED_WITH_ERRORS;
 
-    if (lex(process) != LEXICAL_ANALYSIS_ALL_OK)
+    struct lex_process *lex_process = lex_process_new(process, &compiler_lex_functions);
+    if (!lex_process)
+    {
+        return COMPILER_FAILED_WITH_ERRORS;
+    }
+
+    if (lex(lex_process) != LEXICAL_ANALYSIS_ALL_OK)
         return COMPILER_FAILED_WITH_ERRORS;
 
+    process->token_vec_original = lex_process_tokens(lex_process);
     if (preprocessor_run(process) != 0)
     {
         return COMPILER_FAILED_WITH_ERRORS;

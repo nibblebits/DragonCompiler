@@ -26,28 +26,28 @@
     }
 
 static struct token tmp_token;
-static struct compile_process *current_process;
+static struct lex_process *lex_process;
 void error(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    compiler_error(current_process, fmt, args);
+    compiler_error(lex_process->compiler, fmt, args);
     va_end(args);
 }
 
 static char nextc()
 {
-    return compile_process_next_char(current_process);
+    return lex_process->function->next_char(lex_process);
 }
 
 static char peekc()
 {
-    return compile_process_peek_char(current_process);
+    return lex_process->function->peek_char(lex_process);
 }
 
 static void pushc(char c)
 {
-    return compile_process_push_char(current_process, c);
+    return lex_process->function->push_char(lex_process, c);
 }
 
 bool is_keyword(const char *str)
@@ -161,24 +161,24 @@ static bool op_valid(const char *op)
            S_EQ(op, "?");
 }
 
-static struct compile_process *compiler_process()
+static struct lex_process *lex_get_process()
 {
-    return current_process;
+    return lex_process;
 }
 
-static struct pos compiler_file_position()
+static struct pos lex_file_position()
 {
-    return current_process->pos;
+    return lex_process->pos;
 }
 
 static struct token *lexer_last_token()
 {
-    return vector_back_or_null(current_process->token_vec_original);
+    return vector_back_or_null(lex_process->token_vec);
 }
 
 void lexer_pop_token()
 {
-    vector_pop(current_process->token_vec_original);
+    vector_pop(lex_process->token_vec);
 }
 
 static char assert_next_char(char expected_char)
@@ -194,7 +194,7 @@ static struct token *token_create(struct token *_token)
     // per build token, to avoid memory leaks.
     // Once its pushed to the token stack then its safe to call this function again
     memcpy(&tmp_token, _token, sizeof(tmp_token));
-    tmp_token.pos = compiler_file_position();
+    tmp_token.pos = lex_file_position();
     return &tmp_token;
 }
 
@@ -233,7 +233,7 @@ void lexer_validate_binary_string(const char *number_str)
     {
         if (number_str[i] != '0' && number_str[i] != '1')
         {
-            compiler_error(current_process, "Expecting a binary string but we found a character that is not a hex value %c\n", number_str[i]);
+            compiler_error(lex_process->compiler, "Expecting a binary string but we found a character that is not a hex value %c\n", number_str[i]);
         }
     }
 }
@@ -290,7 +290,7 @@ static const char *read_op()
     }
     else if (!op_valid(ptr))
     {
-        compiler_error(current_process, "The operator %s is invalid\n", ptr);
+        compiler_error(lex_process->compiler, "The operator %s is invalid\n", ptr);
     }
     return ptr;
 }
@@ -637,7 +637,7 @@ static struct token *read_next_token()
         token = read_token_special();
         if (!token)
         {
-            compiler_error(current_process, "Invalid token provided. Character %c\n", c);
+            compiler_error(lex_process->compiler, "Invalid token provided. Character %c\n", c);
         }
         break;
     }
@@ -645,14 +645,14 @@ static struct token *read_next_token()
     return token;
 }
 
-int lex(struct compile_process *process)
+int lex(struct lex_process *process)
 {
-    current_process = process;
+    lex_process = process;
 
     struct token *token = read_next_token();
     while (token)
     {
-        vector_push(process->token_vec_original, token);
+        vector_push(lex_process->token_vec, token);
         token = read_next_token();
     }
 

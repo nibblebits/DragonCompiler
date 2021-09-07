@@ -249,7 +249,7 @@ void expressionable_parse_for_indirection_unary(struct expressionable *expressio
 void expressionable_parse_for_normal_unary(struct expressionable *expressionable)
 {
     const char *unary_op = expressionable_token_next(expressionable)->sval;
-    expressionable_parse_single(expressionable);
+    expressionable_parse(expressionable);
 
     void *unary_operand_node = expressionable_node_pop(expressionable);
     expressionable_callbacks(expressionable)->make_unary_node(expressionable, unary_op, unary_operand_node);

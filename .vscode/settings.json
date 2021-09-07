@@ -8,6 +8,9 @@
         "string.h": "c",
         "features.h": "c",
         "stdc-predef.h": "c",
-        "stubs-x32.h": "c"
+        "stubs-x32.h": "c",
+        "stubs.h": "c",
+        "stubs-64.h": "c",
+        "stubs-32.h": "c"
     }
 }

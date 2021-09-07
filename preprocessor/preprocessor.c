@@ -1324,7 +1324,7 @@ void preprocessor_evaluate_function_call_argument(struct compile_process *compil
         preprocessor_evaluate_function_call_argument(compiler, node->exp.right, arguments);
         return;
     }
-    else if(node->type == NODE_TYPE_EXPRESSION_PARENTHESIS)
+    else if(node->type == PREPROCESSOR_EXPRESSION_NODE)
     {
         preprocessor_evaluate_function_call_argument(compiler, node->parenthesis.exp, arguments);
         return;

@@ -231,16 +231,30 @@ enum
 
 struct preprocessor;
 struct preprocessor_definition;
+
+struct preprocessor_function_argument
+{
+    // Tokens for this argument struct token
+    struct vector *tokens;
+};
+
+struct preprocessor_function_arguments
+{
+    // Vector of struct preprocessor_function_argument
+    struct vector *arguments;
+};
+
+
 /**
  * Should evaluate the given definition into an integer
  */
-typedef int (*PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE)(struct preprocessor_definition *definition);
+typedef int (*PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE)(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments);
 
 /**
  * Function pointer must return a vector of struct token. That represents the value
  * of this native definition
  */
-typedef struct vector *(*PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE)(struct preprocessor_definition *definition);
+typedef struct vector *(*PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE)(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments);
 struct preprocessor_definition
 {
     // The type of definition i.e standard or macro function
@@ -288,6 +302,7 @@ struct preprocessor_included_file
  * such as stddef.h
  */
 typedef void (*PREPROCESSOR_STATIC_INCLUDE_HANDLER_POST_CREATION)(struct preprocessor *preprocessor, struct preprocessor_included_file *included_file);
+
 
 struct preprocessor
 {
@@ -1637,8 +1652,18 @@ struct vector *preprocessor_build_value_vector_for_integer(int value);
 struct preprocessor_definition *preprocessor_definition_create_native(const char *name, PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE evaluate, PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE value, struct preprocessor *preprocessor);
 struct token *preprocessor_previous_token(struct compile_process *compiler);
 struct token *preprocessor_next_token(struct compile_process *compiler);
-int preprocessor_line_macro_evaluate(struct preprocessor_definition *definition);
-struct vector *preprocessor_line_macro_value(struct preprocessor_definition *definition);
+
+/**
+ * Returns the total number of function arguments
+ */
+int preprocessor_function_arguments_count(struct preprocessor_function_arguments *arguments);
+/**
+ * Returns the given function argument from the arguments vector for the given index
+ */
+struct preprocessor_function_argument *preprocessor_function_argument_at(struct preprocessor_function_arguments *arguments, int index);
+
+int preprocessor_line_macro_evaluate(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments);
+struct vector *preprocessor_line_macro_value(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments);
 /**
  * This creates the definitions for the preprocessor that should always exist
  */
@@ -1811,6 +1836,11 @@ struct resolver_default_scope_data
 {
     int flags;
 };
+
+struct resolver_result *resolver_new_result(struct resolver_process *process);
+void resolver_result_free(struct resolver_result *result);
+struct resolver_entity *resolver_get_entity_for_type(struct resolver_result *result, struct resolver_process *resolver, const char *entity_name, int entity_type);
+struct resolver_entity *resolver_get_entity(struct resolver_result *result, struct resolver_process *resolver, const char *entity_name);
 
 struct resolver_default_entity_data *resolver_default_new_entity_data();
 struct resolver_default_entity_data *resolver_default_new_entity_data_for_var_node(struct node *var_node, int offset, int flags);

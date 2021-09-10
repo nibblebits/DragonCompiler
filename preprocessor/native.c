@@ -1,21 +1,30 @@
 #include "compiler.h"
 
-int preprocessor_line_macro_evaluate(struct preprocessor_definition *definition)
+int preprocessor_line_macro_evaluate(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments)
 {
-    struct preprocessor* preprocessor = definition->preprocessor;
-    struct compile_process* compiler = preprocessor->compiler;
-    struct token* previous_token = preprocessor_previous_token(compiler);
+    struct preprocessor *preprocessor = definition->preprocessor;
+    struct compile_process *compiler = preprocessor->compiler;
+
+    if (arguments)
+    {
+        compiler_error(compiler, "The __LINE__ macro expects no arguments!");
+    }
+
+    struct token *previous_token = preprocessor_previous_token(compiler);
     return previous_token->pos.line;
 }
 
-struct vector* preprocessor_line_macro_value(struct preprocessor_definition* definition)
+struct vector *preprocessor_line_macro_value(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments)
 {
-    struct preprocessor* preprocessor = definition->preprocessor;
-    struct compile_process* compiler = preprocessor->compiler;
-    struct token* previous_token = preprocessor_previous_token(compiler);
+    struct preprocessor *preprocessor = definition->preprocessor;
+    struct compile_process *compiler = preprocessor->compiler;
+    if (arguments)
+    {
+        compiler_error(compiler, "The __LINE__ macro expects no arguments!");
+    }
+    struct token *previous_token = preprocessor_previous_token(compiler);
     return preprocessor_build_value_vector_for_integer(previous_token->pos.line);
 }
-
 
 /**
  * This creates the definitions for the preprocessor that should always exist

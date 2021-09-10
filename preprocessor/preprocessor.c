@@ -99,17 +99,6 @@ struct preprocessor_node
     const char *sval;
 };
 
-struct preprocessor_function_argument
-{
-    // Tokens for this argument struct token
-    struct vector *tokens;
-};
-
-struct preprocessor_function_arguments
-{
-    // Vector of struct preprocessor_function_argument
-    struct vector *arguments;
-};
 
 int preprocessor_handle_identifier(struct compile_process *compiler, struct token *token);
 int preprocessor_handle_identifier_for_token_vector(struct compile_process *compiler, struct vector *src_vec, struct token *token);
@@ -400,6 +389,11 @@ struct preprocessor_function_arguments *preprocessor_function_arguments_create()
 
 int preprocessor_function_arguments_count(struct preprocessor_function_arguments *arguments)
 {
+    if (!arguments)
+    {
+        return 0;
+    }
+
     return vector_count(arguments->arguments);
 }
 
@@ -619,9 +613,9 @@ struct vector *preprocessor_definition_value_for_standard(struct preprocessor_de
     return definition->standard.value;
 }
 
-struct vector *preprocessor_definition_value_for_native(struct preprocessor_definition *definition)
+struct vector *preprocessor_definition_value_for_native(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments)
 {
-    return definition->native.value(definition);
+    return definition->native.value(definition, arguments);
 }
 
 struct vector *preprocessor_definition_value_for_typedef(struct preprocessor_definition *definition)
@@ -629,14 +623,11 @@ struct vector *preprocessor_definition_value_for_typedef(struct preprocessor_def
     return definition->_typedef.value;
 }
 
-/**
- * Returns the token value vector for this given definition
- */
-struct vector *preprocessor_definition_value(struct preprocessor_definition *definition)
+struct vector *preprocessor_definition_value_with_arguments(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments)
 {
     if (definition->type == PREPROCESSOR_DEFINITION_NATIVE_CALLBACK)
     {
-        return preprocessor_definition_value_for_native(definition);
+        return preprocessor_definition_value_for_native(definition, arguments);
     }
     else if (definition->type == PREPROCESSOR_DEFINITION_TYPEDEF)
     {
@@ -644,6 +635,13 @@ struct vector *preprocessor_definition_value(struct preprocessor_definition *def
     }
 
     return preprocessor_definition_value_for_standard(definition);
+}
+/**
+ * Returns the token value vector for this given definition
+ */
+struct vector *preprocessor_definition_value(struct preprocessor_definition *definition)
+{
+    return preprocessor_definition_value_with_arguments(definition, NULL);
 }
 
 int preprocessor_definition_evaluated_value_for_standard(struct preprocessor_definition *definition)
@@ -656,12 +654,12 @@ int preprocessor_definition_evaluated_value_for_standard(struct preprocessor_def
     return token->llnum;
 }
 
-int preprocessor_definition_evaluated_value_for_native(struct preprocessor_definition *definition)
+int preprocessor_definition_evaluated_value_for_native(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments)
 {
-    return definition->native.evaluate(definition);
+    return definition->native.evaluate(definition, arguments);
 }
 
-int preprocessor_definition_evaluated_value(struct preprocessor_definition *definition)
+int preprocessor_definition_evaluated_value(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments)
 {
     if (definition->type == PREPROCESSOR_DEFINITION_STANDARD)
     {
@@ -669,7 +667,7 @@ int preprocessor_definition_evaluated_value(struct preprocessor_definition *defi
     }
     else if (definition->type == PREPROCESSOR_DEFINITION_NATIVE_CALLBACK)
     {
-        return preprocessor_definition_evaluated_value_for_native(definition);
+        return preprocessor_definition_evaluated_value_for_native(definition, arguments);
     }
 
     compiler_error(preprocessor_compiler(definition->preprocessor), "The definition %s cannot be evaluated into a number");
@@ -1254,7 +1252,7 @@ int preprocessor_evaluate_identifier(struct compile_process *compiler, struct pr
         return false;
     }
 
-    return preprocessor_definition_evaluated_value(definition);
+    return preprocessor_definition_evaluated_value(definition, NULL);
 }
 
 int preprocessor_arithmetic(struct compile_process *compiler, long left_operand, long right_operand, const char *op)
@@ -1534,6 +1532,11 @@ struct token *preprocessor_handle_identifier_macro_call_argument_parse(struct co
     return token;
 }
 
+static bool preprocessor_is_macro_function(struct preprocessor_definition *definition)
+{
+    return definition->type == PREPROCESSOR_DEFINITION_MACRO_FUNCTION || definition->type == PREPROCESSOR_DEFINITION_NATIVE_CALLBACK;
+}
+
 int preprocessor_macro_function_execute(struct compile_process *compiler, const char *function_name, struct preprocessor_function_arguments *arguments, int flags)
 {
     struct preprocessor *preprocessor = compiler_preprocessor(compiler);
@@ -1543,19 +1546,19 @@ int preprocessor_macro_function_execute(struct compile_process *compiler, const 
         FAIL_ERR("Definition was not found");
     }
 
-    if (definition->type != PREPROCESSOR_DEFINITION_MACRO_FUNCTION)
+    if (!preprocessor_is_macro_function(definition))
     {
         FAIL_ERR("This definition is not a macro function");
     }
 
-    if (vector_count(definition->standard.arguments) != preprocessor_function_arguments_count(arguments))
+    if (vector_count(definition->standard.arguments) != preprocessor_function_arguments_count(arguments) && definition->type != PREPROCESSOR_DEFINITION_NATIVE_CALLBACK)
     {
         FAIL_ERR("You passed too many arguments to this macro functon, expecting %i arguments");
     }
 
     // Let's create a special vector for this value as its being injected with function arugments
     struct vector *value_vec_target = vector_create(sizeof(struct token));
-    struct vector *definition_token_vec = preprocessor_definition_value(definition);
+    struct vector *definition_token_vec = preprocessor_definition_value_with_arguments(definition, arguments);
     vector_set_peek_pointer(definition_token_vec, 0);
     struct token *token = vector_peek(definition_token_vec);
     while (token)

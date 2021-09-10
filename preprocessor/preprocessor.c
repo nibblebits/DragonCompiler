@@ -103,7 +103,8 @@ int preprocessor_handle_identifier(struct compile_process *compiler, struct toke
 int preprocessor_handle_identifier_for_token_vector(struct compile_process *compiler, struct vector *src_vec, struct token *token);
 int preprocessor_macro_function_execute(struct compile_process *compiler, const char *function_name, struct preprocessor_function_arguments *arguments, int flags);
 int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_node *root_node);
-int preprocessor_parse_evaluate_token(struct compile_process *compiler, struct token* token);
+int preprocessor_parse_evaluate_token(struct compile_process *compiler, struct token *token);
+void preprocessor_handle_elif_token(struct compile_process* compiler, bool previous_if_result);
 
 void preprocessor_execute_warning(struct compile_process *compiler, const char *msg)
 {
@@ -504,12 +505,14 @@ bool preprocessor_is_preprocessor_keyword(const char *value)
            S_EQ(value, "warning") ||
            S_EQ(value, "error") ||
            S_EQ(value, "if") ||
+           S_EQ(value, "elif") ||
            S_EQ(value, "ifdef") ||
            S_EQ(value, "ifndef") ||
            S_EQ(value, "endif") ||
            S_EQ(value, "include") ||
            S_EQ(value, "typedef");
 }
+
 bool preprocessor_token_is_preprocessor_keyword(struct token *token)
 {
     return token->type == TOKEN_TYPE_IDENTIFIER || token->type == TOKEN_TYPE_KEYWORD && preprocessor_is_preprocessor_keyword(token->sval);
@@ -573,6 +576,9 @@ bool preprocessor_token_is_error(struct token *token)
     return (S_EQ(token->sval, "error"));
 }
 
+/**
+ * Many many functions, maybe better for an array if valid keywords
+ */
 bool preprocessor_token_is_ifdef(struct token *token)
 {
     if (!preprocessor_token_is_preprocessor_keyword(token))
@@ -601,6 +607,15 @@ bool preprocessor_token_is_if(struct token *token)
     }
 
     return (S_EQ(token->sval, "if"));
+}
+
+bool preprocessor_token_is_elif(struct token* token)
+{
+    if (!preprocessor_token_is_preprocessor_keyword(token))
+    {
+        return false;
+    }
+    return (S_EQ(token->sval, "elif"));
 }
 
 struct compile_process *preprocessor_compiler(struct preprocessor *preprocessor)
@@ -1133,8 +1148,10 @@ void preprocessor_handle_typedef_token(struct compile_process *compiler)
 /**
  * Returns true if their is a hashtag and any type of preprocessor if statement
  * Returns true if we have #if, #ifdef or #ifndef
+ * 
+ * elif is not included, its not the start of an if statement.
  */
-bool preprocessor_is_hashtag_and_any_if(struct compile_process *compiler)
+bool preprocessor_is_hashtag_and_any_starting_if(struct compile_process *compiler)
 {
     return preprocessor_hashtag_and_identifier(compiler, "if") ||
            preprocessor_hashtag_and_identifier(compiler, "ifdef") ||
@@ -1149,7 +1166,7 @@ void preprocessor_skip_to_endif(struct compile_process *compiler)
 {
     while (!preprocessor_hashtag_and_identifier(compiler, "endif"))
     {
-        if (preprocessor_is_hashtag_and_any_if(compiler))
+        if (preprocessor_is_hashtag_and_any_starting_if(compiler))
         {
             // We have a sub if statement, lets skip it
             preprocessor_skip_to_endif(compiler);
@@ -1172,6 +1189,11 @@ void preprocessor_read_to_end_if(struct compile_process *compiler, bool true_cla
             preprocessor_read_to_end_if(compiler, !true_clause);
             break;
         }
+        else if(preprocessor_hashtag_and_identifier(compiler, "elif"))
+        {
+            preprocessor_handle_elif_token(compiler, true_clause);
+            break;
+        }
 
         if (true_clause)
         {
@@ -1185,7 +1207,7 @@ void preprocessor_read_to_end_if(struct compile_process *compiler, bool true_cla
         // We just skipped something as it wasent true, if we have
         // an if or ifdef statement we should now skip the entire thing
         // as the first clause failed.
-        if (preprocessor_is_hashtag_and_any_if(compiler))
+        if (preprocessor_is_hashtag_and_any_starting_if(compiler))
         {
             // We have another IFDEF. Then we need to do something here
             // to avoid a rouge endif
@@ -1233,9 +1255,9 @@ int preprocessor_parse_evaluate(struct compile_process *compiler, struct vector 
     return preprocessor_evaluate(compiler, root_node);
 }
 
-int preprocessor_parse_evaluate_token(struct compile_process *compiler, struct token* token)
+int preprocessor_parse_evaluate_token(struct compile_process *compiler, struct token *token)
 {
-    struct vector* token_vec = vector_create(sizeof(struct token));
+    struct vector *token_vec = vector_create(sizeof(struct token));
     vector_push(token_vec, token);
     return preprocessor_parse_evaluate(compiler, token_vec);
 }
@@ -1516,6 +1538,18 @@ void preprocessor_handle_if_token(struct compile_process *compiler)
 
     struct preprocessor_node *node = expressionable_node_pop(expressionable);
     int result = preprocessor_evaluate(compiler, node);
+    preprocessor_read_to_end_if(compiler, result > 0);
+}
+
+void preprocessor_handle_elif_token(struct compile_process* compiler, bool previous_if_result)
+{
+    int result = previous_if_result;
+    // Have we not yet resolved an IF statement? Then this else if is still valid
+    // evaluate it.
+    if (!previous_if_result)
+    {
+        result = preprocessor_parse_evaluate(compiler, compiler->token_vec_original);
+    }
     preprocessor_read_to_end_if(compiler, result > 0);
 }
 

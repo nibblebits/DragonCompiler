@@ -398,5 +398,15 @@ else
     echo -e "Preprocessor multi definition with macro if test passed"
 fi
 
+
+echo -e "Preprocessor elif test"
+./build/preprocessor_elif_test
+if [ $? -ne 90 ]; then
+    echo -e "Preprocessor elif test failed"
+    res_code=1
+else
+    echo -e "Preprocessor elif test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

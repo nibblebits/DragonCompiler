@@ -111,11 +111,20 @@ void preprocessor_stddef_include(struct preprocessor *preprocessor, struct prepr
     preprocessor_definition_create_native("offsetof", preprocessor_stddef_include_offsetof_evaluate, preprocessor_stddef_include_offsetof_value, preprocessor);
 }
 
+void preprocessor_stdarg_include(struct preprocessor *preprocessor, struct preprocessor_included_file *file)
+{
+
+}
+
 PREPROCESSOR_STATIC_INCLUDE_HANDLER_POST_CREATION preprocessor_static_include_handler_for(const char *filename)
 {
     if (S_EQ(filename, "stddef.h"))
     {
         return preprocessor_stddef_include;
+    }
+    else if(S_EQ(filename, "stdarg.h"))
+    {
+        return preprocessor_stdarg_include;
     }
 
     // This filename we are not responsible for, no static include exists for it.

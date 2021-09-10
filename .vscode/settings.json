@@ -11,6 +11,8 @@
         "stubs-x32.h": "c",
         "stubs.h": "c",
         "stubs-64.h": "c",
-        "stubs-32.h": "c"
+        "stubs-32.h": "c",
+        "timesize.h": "c",
+        "time64.h": "c"
     }
 }

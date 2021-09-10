@@ -99,11 +99,11 @@ struct preprocessor_node
     const char *sval;
 };
 
-
 int preprocessor_handle_identifier(struct compile_process *compiler, struct token *token);
 int preprocessor_handle_identifier_for_token_vector(struct compile_process *compiler, struct vector *src_vec, struct token *token);
 int preprocessor_macro_function_execute(struct compile_process *compiler, const char *function_name, struct preprocessor_function_arguments *arguments, int flags);
 int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_node *root_node);
+int preprocessor_parse_evaluate_token(struct compile_process *compiler, struct token* token);
 
 void preprocessor_execute_warning(struct compile_process *compiler, const char *msg)
 {
@@ -613,7 +613,7 @@ struct vector *preprocessor_definition_value_for_standard(struct preprocessor_de
     return definition->standard.value;
 }
 
-struct vector *preprocessor_definition_value_for_native(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments)
+struct vector *preprocessor_definition_value_for_native(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments)
 {
     return definition->native.value(definition, arguments);
 }
@@ -647,6 +647,16 @@ struct vector *preprocessor_definition_value(struct preprocessor_definition *def
 int preprocessor_definition_evaluated_value_for_standard(struct preprocessor_definition *definition)
 {
     struct token *token = vector_back(definition->standard.value);
+    if (token->type == TOKEN_TYPE_IDENTIFIER)
+    {
+        // We have a definition value of identifier
+        // therefore we are pointing to another definition i.e
+        // #define CBA 50
+        // #define ABC CBA
+
+        return preprocessor_parse_evaluate_token(definition->preprocessor->compiler, token);
+    }
+
     if (token->type != TOKEN_TYPE_NUMBER)
     {
         compiler_error(preprocessor_compiler(definition->preprocessor), "The definition %s must hold a number value, unable to use macro IF", definition->name);
@@ -654,12 +664,12 @@ int preprocessor_definition_evaluated_value_for_standard(struct preprocessor_def
     return token->llnum;
 }
 
-int preprocessor_definition_evaluated_value_for_native(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments)
+int preprocessor_definition_evaluated_value_for_native(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments)
 {
     return definition->native.evaluate(definition, arguments);
 }
 
-int preprocessor_definition_evaluated_value(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments)
+int preprocessor_definition_evaluated_value(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments)
 {
     if (definition->type == PREPROCESSOR_DEFINITION_STANDARD)
     {
@@ -1221,6 +1231,13 @@ int preprocessor_parse_evaluate(struct compile_process *compiler, struct vector 
     expressionable_parse(expressionable);
     struct preprocessor_node *root_node = expressionable_node_pop(expressionable);
     return preprocessor_evaluate(compiler, root_node);
+}
+
+int preprocessor_parse_evaluate_token(struct compile_process *compiler, struct token* token)
+{
+    struct vector* token_vec = vector_create(sizeof(struct token));
+    vector_push(token_vec, token);
+    return preprocessor_parse_evaluate(compiler, token_vec);
 }
 
 int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_node *root_node);

@@ -1,15 +1,6 @@
-//#include <stddef.h>
+#define ABC 50
+#define CBA ABC
 
-
-struct dog
-{
-    int x;
-    int y;
-};
-
-int main()
-{
-    //size_t x = offsetof(struct dog, x);
-
-}
-
+#if CBA == 50
+#warning "valid"
+#endif

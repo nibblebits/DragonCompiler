@@ -389,5 +389,14 @@ else
     echo -e "Preprocessor macro function in IF 2 test passed"
 fi
 
+echo -e "Preprocessor multi definition with macro if test"
+./build/preprocessor_definition_with_macro_if
+if [ $? -ne 26 ]; then
+    echo -e "Preprocessor multi definition with macro if test failed"
+    res_code=1
+else
+    echo -e "Preprocessor multi definition with macro if test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

@@ -111,6 +111,12 @@ int vector_pop_value(struct vector* vector, void* val);
 void vector_pop_at(struct vector *vector, int index);
 
 /**
+ * Decrements the peek pointer so that the next peek
+ * will point at the last peeked token
+ */
+void vector_peek_back(struct vector* vector);
+
+/**
  * Returns the current index that a vector_push would push too
  */
 int vector_current_index(struct vector* vector);

@@ -133,9 +133,19 @@ void *vector_peek_no_increment(struct vector *vector)
     return ptr;
 }
 
+void vector_peek_back(struct vector* vector)
+{
+    vector->pindex--;
+}
+
 void *vector_peek(struct vector *vector)
 {
     void *ptr = vector_peek_no_increment(vector);
+    if (!ptr)
+    {
+        return NULL;
+    }
+
     if (vector->flags & VECTOR_FLAG_PEEK_DECREMENT)
         vector->pindex--;
     else

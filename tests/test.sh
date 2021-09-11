@@ -407,6 +407,14 @@ if [ $? -ne 90 ]; then
 else
     echo -e "Preprocessor elif test passed"
 fi
+echo -e "Preprocessor typedef in definition test"
+./build/preprocessor_typedef_in_def
+if [ $? -ne 50 ]; then
+    echo -e "Preprocessor typedef in definition test failed"
+    res_code=1
+else
+    echo -e "Preprocessor typedef in definition test passed"
+fi
 
 echo -e "All tests finished"
 exit $res_code

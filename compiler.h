@@ -922,7 +922,11 @@ enum
     // does not affect the original node.
     // As cloned nodes do not guarantee to be apart of the tree, it is important the cloner
     // be responsible for the memory.
-    NODE_FLAG_CLONED = 0b00000010
+    NODE_FLAG_CLONED = 0b00000010,
+
+    // This flag is set if this node represents a forward declaration
+    // I could argue this could be in a better place.. WIll reconsider later.
+    NODE_FLAG_IS_FORWARD_DECLARATION = 0b00000100,
 };
 
 struct node

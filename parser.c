@@ -635,7 +635,14 @@ void make_else_node(struct node *body_node)
 
 void make_struct_node(const char *struct_name, struct node *body_node)
 {
-    node_create(&(struct node){NODE_TYPE_STRUCT, ._struct.name = struct_name, ._struct.body_n = body_node});
+    int flags = 0;
+    if (!body_node)
+    {
+        // No body then we have forward declared.
+        flags = NODE_FLAG_IS_FORWARD_DECLARATION;
+    }
+
+    node_create(&(struct node){NODE_TYPE_STRUCT, .flags=flags, ._struct.name = struct_name, ._struct.body_n = body_node});
 }
 
 void make_unary_node(const char *unary_op, struct node *operand_node)
@@ -985,15 +992,22 @@ void parse_struct(struct datatype *dtype)
     resolver_default_new_scope(current_process->resolver, 0);
     // We already have the structure name parsed, its inside dtype.
     // Parse the body of the structure "struct abc {body_here}"
+    struct node* body_node = NULL;
+    size_t body_variable_size = 0;
 
     struct history history;
-    size_t body_variable_size = 0;
-    parse_body(&body_variable_size, history_begin(&history, HISTORY_FLAG_INSIDE_STRUCTURE));
-    struct node *body_node = node_pop();
+    if (token_is_symbol(token_peek_next(), '{'))
+    {
+        parse_body(&body_variable_size, history_begin(&history, HISTORY_FLAG_INSIDE_STRUCTURE));
+        body_node = node_pop();
+    }
+
     make_struct_node(dtype->type_str, body_node);
     struct node *struct_node = node_pop();
-
-    dtype->size = body_node->body.size;
+    if (body_node)
+    {
+        dtype->size = body_node->body.size;
+    }
     dtype->struct_node = struct_node;
 
     // Push the structure node back to the stack
@@ -1870,6 +1884,25 @@ static bool is_datatype_struct_or_union(struct datatype *dtype)
 {
     return dtype->type == DATA_TYPE_STRUCT || dtype->type == DATA_TYPE_UNION;
 }
+
+void parse_forward_declaration_struct(struct datatype* dtype)
+{
+    // Okay lets parse the structure
+    parse_struct(dtype);
+}
+
+void parse_forward_declaration(struct datatype* dtype)
+{
+    if(dtype->type == DATA_TYPE_STRUCT)
+    {
+        // Struct forward declaration
+        parse_forward_declaration_struct(dtype);
+        return;
+    }
+
+    FAIL_ERR("BUG with forward declaration");
+}
+
 /**
  * Parses a variable or function, at this point the parser should be certain
  * that the tokens coming up will form a variable or a function
@@ -1895,9 +1928,17 @@ void parse_variable_function_or_struct_union(struct history *history)
         return;
     }
 
+    // Is this a struct/union forward declaration?.
+    if (token_is_symbol(token_peek_next(), ';'))
+    {
+        // It's a forward declaration Then we are done.
+        parse_forward_declaration(&dtype);
+        // Build forward declaration will handle the semicolon.
+        return;
+    }
+
     // Ok great we have a datatype at this point, next comes the variable name
     // or the function name.. we don't know which one yet ;)
-
     struct token *name_token = token_next();
 
     // If we have a left bracket then this must be a function i.e int abc()

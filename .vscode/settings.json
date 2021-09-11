@@ -13,6 +13,7 @@
         "stubs-64.h": "c",
         "stubs-32.h": "c",
         "timesize.h": "c",
-        "time64.h": "c"
+        "time64.h": "c",
+        "stdio-ldbl.h": "c"
     }
 }

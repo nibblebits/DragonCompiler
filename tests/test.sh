@@ -416,5 +416,15 @@ else
     echo -e "Preprocessor typedef in definition test passed"
 fi
 
+
+echo -e "Structure forward declare test"
+./build/struct_forward_declr_test
+if [ $? -ne 22 ]; then
+    echo -e "Structure forward declare test failed"
+    res_code=1
+else
+    echo -e "Structure forward declare test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

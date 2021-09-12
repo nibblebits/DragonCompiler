@@ -106,8 +106,8 @@ int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_
 int preprocessor_parse_evaluate_token(struct compile_process *compiler, struct token *token);
 void preprocessor_handle_elif_token(struct compile_process *compiler, bool previous_if_result);
 bool preprocessor_token_is_typedef(struct token *token);
-void preprocessor_handle_typedef_token(struct compile_process *compiler, struct vector* src_vec, bool overflow_use_token_vec);
-struct token* preprocessor_next_token_skip_nl(struct compile_process* compiler);
+void preprocessor_handle_typedef_token(struct compile_process *compiler, struct vector *src_vec, bool overflow_use_token_vec);
+struct token *preprocessor_next_token_skip_nl(struct compile_process *compiler);
 
 void preprocessor_execute_warning(struct compile_process *compiler, const char *msg)
 {
@@ -192,7 +192,6 @@ struct preprocessor_function_argument *preprocessor_function_argument_at(struct 
     return argument;
 }
 
-
 void preprocessor_token_push_to_function_arguments(struct preprocessor_function_arguments *arguments, struct token *token)
 {
     struct preprocessor_function_argument arg = {};
@@ -244,9 +243,9 @@ void *preprocessor_handle_identifier_token(struct expressionable *expressionable
  * If theirs no more tokens then this function will read the next token in the compiler->token_vec_original token vector as long as the
  * overflow_use_compiler_tokens boolean is true
  */
-struct token* preprocessor_next_token_with_vector(struct compile_process* compiler, struct vector* priority_token_vec, bool overflow_use_compiler_tokens)
+struct token *preprocessor_next_token_with_vector(struct compile_process *compiler, struct vector *priority_token_vec, bool overflow_use_compiler_tokens)
 {
-    struct token* token = vector_peek(priority_token_vec);
+    struct token *token = vector_peek(priority_token_vec);
     if (token == NULL && overflow_use_compiler_tokens)
     {
         token = preprocessor_next_token_skip_nl(compiler);
@@ -462,17 +461,16 @@ struct token *preprocessor_next_token(struct compile_process *compiler)
     return vector_peek(compiler->token_vec_original);
 }
 
-struct token* preprocessor_next_token_skip_nl(struct compile_process* compiler)
+struct token *preprocessor_next_token_skip_nl(struct compile_process *compiler)
 {
-    struct token* token = preprocessor_next_token(compiler);
-    while(token && token->type == TOKEN_TYPE_NEWLINE)
+    struct token *token = preprocessor_next_token(compiler);
+    while (token && token->type == TOKEN_TYPE_NEWLINE)
     {
         token = preprocessor_next_token(compiler);
     }
 
     return token;
 }
-
 
 struct token *preprocessor_next_token_no_increment(struct compile_process *compiler)
 {
@@ -1054,7 +1052,7 @@ void preprocessor_handle_include_token(struct compile_process *compiler)
     preprocessor_token_vec_push_src(compiler, new_compile_process->token_vec);
 }
 
-void preprocessor_handle_typedef_body_for_brackets(struct compile_process *compiler, struct vector *token_vec, struct vector* src_vec, bool overflow_use_token_vec)
+void preprocessor_handle_typedef_body_for_brackets(struct compile_process *compiler, struct vector *token_vec, struct vector *src_vec, bool overflow_use_token_vec)
 {
     struct token *token = preprocessor_next_token_with_vector(compiler, src_vec, overflow_use_token_vec);
     while (token)
@@ -1075,7 +1073,7 @@ void preprocessor_handle_typedef_body_for_brackets(struct compile_process *compi
         token = preprocessor_next_token_with_vector(compiler, src_vec, overflow_use_token_vec);
     }
 }
-void preprocessor_handle_typedef_body(struct compile_process *compiler, struct vector *token_vec, struct typedef_type *td, struct vector* src_vec, bool overflow_use_token_vec)
+void preprocessor_handle_typedef_body(struct compile_process *compiler, struct vector *token_vec, struct typedef_type *td, struct vector *src_vec, bool overflow_use_token_vec)
 {
     memset(td, 0, sizeof(struct typedef_type));
     td->type = TYPEDEF_TYPE_STANDARD;
@@ -1122,7 +1120,7 @@ void preprocessor_handle_typedef_body(struct compile_process *compiler, struct v
     td->definition_name = name_token->sval;
 }
 
-void preprocessor_handle_typedef_token(struct compile_process *compiler, struct vector* src_vec, bool overflow_use_token_vec)
+void preprocessor_handle_typedef_token(struct compile_process *compiler, struct vector *src_vec, bool overflow_use_token_vec)
 {
     // We expect a format like "typedef unsigned int ABC;" the final identifier
     // is the name of this typedef, the rest are what is represented.
@@ -1536,27 +1534,23 @@ int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_
 }
 void preprocessor_handle_if_token(struct compile_process *compiler)
 {
-    struct vector *node_vector = vector_create(sizeof(struct preprocessor_node *));
-
-    // We will have an expression after the if token that needs to be preprocessed
-    struct expressionable *expressionable = expressionable_create(&preprocessor_expressionable_config, compiler->token_vec_original, node_vector, EXPRESSIONABLE_FLAG_IS_PREPROCESSOR_EXPRESSION);
-    expressionable_parse(expressionable);
-
-    struct preprocessor_node *node = expressionable_node_pop(expressionable);
-    int result = preprocessor_evaluate(compiler, node);
+    int result = preprocessor_parse_evaluate(compiler, compiler->token_vec_original);
     preprocessor_read_to_end_if(compiler, result > 0);
 }
 
 void preprocessor_handle_elif_token(struct compile_process *compiler, bool previous_if_result)
 {
-    int result = previous_if_result;
     // Have we not yet resolved an IF statement? Then this else if is still valid
     // evaluate it.
     if (!previous_if_result)
     {
-        result = preprocessor_parse_evaluate(compiler, compiler->token_vec_original);
+        int result = preprocessor_parse_evaluate(compiler, compiler->token_vec_original);
+        preprocessor_read_to_end_if(compiler, result > 0);
+        return;
     }
-    preprocessor_read_to_end_if(compiler, result > 0);
+
+    // Already a positive result? Then skip to endif
+    preprocessor_skip_to_endif(compiler);
 }
 
 void preprocessor_handle_identifier_macro_call_argument(struct preprocessor_function_arguments *arguments, struct vector *token_vec)

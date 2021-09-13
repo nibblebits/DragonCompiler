@@ -642,7 +642,7 @@ void make_struct_node(const char *struct_name, struct node *body_node)
         flags = NODE_FLAG_IS_FORWARD_DECLARATION;
     }
 
-    node_create(&(struct node){NODE_TYPE_STRUCT, .flags=flags, ._struct.name = struct_name, ._struct.body_n = body_node});
+    node_create(&(struct node){NODE_TYPE_STRUCT, .flags = flags, ._struct.name = struct_name, ._struct.body_n = body_node});
 }
 
 void make_unary_node(const char *unary_op, struct node *operand_node)
@@ -986,17 +986,15 @@ void parse_for_unary()
     parser_deal_with_additional_expression();
 }
 
-void parse_struct(struct datatype *dtype)
+void parse_struct_no_new_scope(struct datatype *dtype, bool is_forward_declaration)
 {
-    parser_scope_new();
-    resolver_default_new_scope(current_process->resolver, 0);
     // We already have the structure name parsed, its inside dtype.
     // Parse the body of the structure "struct abc {body_here}"
-    struct node* body_node = NULL;
+    struct node *body_node = NULL;
     size_t body_variable_size = 0;
 
     struct history history;
-    if (token_is_symbol(token_peek_next(), '{'))
+    if (!is_forward_declaration)
     {
         parse_body(&body_variable_size, history_begin(&history, HISTORY_FLAG_INSIDE_STRUCTURE));
         body_node = node_pop();
@@ -1015,8 +1013,23 @@ void parse_struct(struct datatype *dtype)
 
     // Structures must end with semicolons
     expect_sym(';');
-    resolver_default_finish_scope(current_process->resolver);
-    parser_scope_finish();
+}
+
+void parse_struct(struct datatype *dtype)
+{
+    bool is_forward_declaration = !token_is_symbol(token_peek_next(), '{');
+
+    if (!is_forward_declaration)
+    {
+        parser_scope_new();
+        resolver_default_new_scope(current_process->resolver, 0);
+    }
+    parse_struct_no_new_scope(dtype, is_forward_declaration);
+    if (!is_forward_declaration)
+    {
+        resolver_default_finish_scope(current_process->resolver);
+        parser_scope_finish();
+    }
 }
 
 void parse_struct_or_union(struct datatype *dtype)
@@ -1885,15 +1898,15 @@ static bool is_datatype_struct_or_union(struct datatype *dtype)
     return dtype->type == DATA_TYPE_STRUCT || dtype->type == DATA_TYPE_UNION;
 }
 
-void parse_forward_declaration_struct(struct datatype* dtype)
+void parse_forward_declaration_struct(struct datatype *dtype)
 {
     // Okay lets parse the structure
     parse_struct(dtype);
 }
 
-void parse_forward_declaration(struct datatype* dtype)
+void parse_forward_declaration(struct datatype *dtype)
 {
-    if(dtype->type == DATA_TYPE_STRUCT)
+    if (dtype->type == DATA_TYPE_STRUCT)
     {
         // Struct forward declaration
         parse_forward_declaration_struct(dtype);

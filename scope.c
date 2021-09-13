@@ -17,8 +17,10 @@ struct scope *scope_alloc()
 
 void scope_dealloc(struct scope *scope)
 {
-    vector_free(scope->entities);
-    free(scope);
+    // We don't actually want to free anything, we will worry
+    // about cleanup after compile is done.
+   // vector_free(scope->entities);
+    //free(scope);
 }
 
 

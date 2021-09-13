@@ -1885,4 +1885,61 @@ bool node_is_value_type(struct node *node);
  */
 bool is_hex_char(char c);
 
+
+
+#include "compiler.h"
+
+struct fixup;
+/**
+ * Function pointer that fixup fixers should register.
+ * Returns true on successful fix of the given entity
+ */
+typedef bool(*FIXUP_FIX)(struct fixup* fixup);
+/**
+ * Signifies this fixup has been removed from memory
+ * receiver of this call must free its private data
+ */
+typedef void(*FIXUP_END)(struct fixup* fixup);
+
+struct fixup_config
+{
+    // Fix function pointer, function to resolve this fixup.
+    FIXUP_FIX fix;
+    FIXUP_END end;
+    void* private;
+};
+
+/**
+ * Fixup system will allow us to mark something for modification
+ * at a later time
+ */
+struct fixup
+{
+    // The system who registered this fixup
+    struct fixup_system* system;
+    struct fixup_config config;
+};
+
+struct fixup_system
+{
+    // Registered fixups that need fixing
+    struct vector* fixups;
+};
+
+
+struct fixup_system* fixup_sys_new();
+
+struct fixup_config* fixup_config(struct fixup* fixup);
+void fixup_free(struct fixup* fixup);
+void fixup_sys_fixups_free(struct fixup_system* system);
+void fixup_sys_finish(struct fixup_system* system);
+int fixup_sys_unresolved_fixups_count(struct fixup_system* system);
+void fixup_start_iteration(struct fixup_system* system);
+struct fixup* fixup_next(struct fixup_system* system);
+struct fixup* fixup_register(struct fixup_system* system, struct fixup_config* config);
+
+bool fixup_resolve(struct fixup* fixup);
+void* fixup_private(struct fixup* fixup);
+bool fixups_resolve(struct fixup_system* system);
+
 #endif

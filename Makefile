@@ -1,5 +1,5 @@
 INCLUDES= -I ./ -I ./helpers
-OBJECTS= ./build/misc.o ./build/lexer.o  ./build/lex_process.o ./build/token.o ./build/expressionable.o ./build/parser.o ./build/symresolver.o ./build/scope.o ./build/resolver.o ./build/rdefault.o ./build/helper.o ./build/codegen.o ./build/helpers/vector.o ./build/helpers/buffer.o ./build/helpers/hashmap.o ./build/compiler.o ./build/cprocess.o ./build/preprocessor/preprocessor.o ./build/preprocessor/native.o ./build/array.o ./build/node.o ./build/preprocessor/static-includes.o
+OBJECTS= ./build/misc.o ./build/lexer.o  ./build/lex_process.o ./build/token.o ./build/expressionable.o ./build/parser.o ./build/symresolver.o ./build/scope.o ./build/resolver.o ./build/rdefault.o ./build/helper.o ./build/codegen.o ./build/helpers/vector.o ./build/helpers/buffer.o ./build/helpers/hashmap.o ./build/compiler.o ./build/cprocess.o ./build/preprocessor/preprocessor.o ./build/preprocessor/native.o ./build/array.o ./build/node.o ./build/preprocessor/static-includes.o ./build/fixup.o
 all: ${OBJECTS}
 	gcc main.c -o main ${OBJECTS} -g
 	cd ./tests && ./test.sh
@@ -62,6 +62,8 @@ all: ${OBJECTS}
 ./build/rdefault.o: ./rdefault.c
 	gcc rdefault.c ${INCLUDES} -o ./build/rdefault.o -g -c 
 
+./build/fixup.o: ./fixup.c
+	gcc fixup.c ${INCLUDES} -o ./build/fixup.o -g -c 
 
 # Helper files
 ./build/helpers/vector.o: ./helpers/vector.c
@@ -72,6 +74,7 @@ all: ${OBJECTS}
 
 ./build/helpers/hashmap.o: ./helpers/hashmap.c
 	gcc ./helpers/hashmap.c ${INCLUDES} -o ./build/helpers/hashmap.o -g -c
+
 
 
 

@@ -121,6 +121,7 @@ struct history
 };
 
 static struct compile_process *current_process;
+static struct fixup_system* parser_fixup_sys;
 int parse_next();
 void parse_statement(struct history *history);
 
@@ -753,7 +754,7 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
     parser_current_body = body_node;
 
     struct node *stmt_node = NULL;
-    struct node *largest_primative_var_node = NULL;
+    struct node *largest_applicable_var_node = NULL;
     // Ok we are parsing a full body with many statements.
     expect_sym('{');
     while (!token_next_is_symbol('}'))
@@ -763,10 +764,10 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
 
         if (stmt_node->type == NODE_TYPE_VARIABLE && variable_node_is_primative(stmt_node))
         {
-            if (!largest_primative_var_node ||
-                (largest_primative_var_node->var.type.size <= stmt_node->var.type.size))
+            if (!largest_applicable_var_node ||
+                (largest_applicable_var_node->var.type.size <= stmt_node->var.type.size))
             {
-                largest_primative_var_node = stmt_node;
+                largest_applicable_var_node = stmt_node;
             }
         }
         vector_push(body_vec, &stmt_node);
@@ -779,18 +780,26 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
     // bodies must end with a right curley bracket!
     expect_sym('}');
 
+    if (!largest_applicable_var_node && stmt_node->type == NODE_TYPE_VARIABLE)
+    {
+        // Our largest primative variable node is NULL?
+        // Then lets assign it to the last statement node we have
+        // this is also the only node
+        largest_applicable_var_node = stmt_node;
+    }
+
     // Variable size should be adjusted to + the padding of all the body variables padding
     int padding = compute_sum_padding(body_vec);
     *variable_size += padding;
 
     // Our own variable size must pad to the largest member
-    if (largest_primative_var_node)
+    if (largest_applicable_var_node)
     {
-        *variable_size = align_value(*variable_size, largest_primative_var_node->var.type.size);
+        *variable_size = align_value(*variable_size, largest_applicable_var_node->var.type.size);
     }
     // Let's make the body node now we have parsed all statements.
     bool padded = padding != 0;
-    body_node->body.largest_var_node = largest_primative_var_node;
+    body_node->body.largest_var_node = largest_applicable_var_node;
     body_node->body.padded = padded;
     body_node->body.size = *variable_size;
     body_node->body.statements = body_vec;
@@ -2165,6 +2174,8 @@ int parse(struct compile_process *process)
     scope_create_root(process);
 
     current_process = process;
+    parser_fixup_sys = fixup_sys_new();
+
     vector_set_peek_pointer(process->token_vec, 0);
     struct node *node = NULL;
     while (parse_next() == 0)

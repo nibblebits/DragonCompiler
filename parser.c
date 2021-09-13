@@ -692,8 +692,12 @@ static void parser_append_size_for_node(size_t *_variable_size, struct node *nod
         // as we are a 32 bit C compiler..
         if (node->var.type.type == DATA_TYPE_STRUCT)
         {
-            // Great we need to align to its largest datatype boundary ((Way to large, make a function for that mess))
-            *_variable_size = align_value(*_variable_size, variable_struct_node(node)->_struct.body_n->body.largest_var_node->var.type.size);
+            struct node* largest_var_node = variable_struct_node(node)->_struct.body_n->body.largest_var_node;
+            if (largest_var_node)
+            {
+                // Great we need to align to its largest datatype boundary ((Way to large, make a function for that mess))
+                *_variable_size = align_value(*_variable_size, largest_var_node->var.type.size);
+            }
         }
     }
 }
@@ -779,14 +783,6 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
 
     // bodies must end with a right curley bracket!
     expect_sym('}');
-
-    if (!largest_applicable_var_node && stmt_node->type == NODE_TYPE_VARIABLE)
-    {
-        // Our largest primative variable node is NULL?
-        // Then lets assign it to the last statement node we have
-        // this is also the only node
-        largest_applicable_var_node = stmt_node;
-    }
 
     // Variable size should be adjusted to + the padding of all the body variables padding
     int padding = compute_sum_padding(body_vec);

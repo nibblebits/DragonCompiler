@@ -121,7 +121,7 @@ struct history
 };
 
 static struct compile_process *current_process;
-static struct fixup_system* parser_fixup_sys;
+static struct fixup_system *parser_fixup_sys;
 int parse_next();
 void parse_statement(struct history *history);
 
@@ -161,6 +161,7 @@ static struct history *history_begin(struct history *history_out, int flags)
 #define parser_scope_current() \
     scope_current(current_process)
 
+int size_of_struct(const char *struct_name);
 struct parser_history_switch parser_new_switch_statement(struct history *history)
 {
     memset(&history->_switch, 0x00, sizeof(history->_switch));
@@ -666,9 +667,50 @@ void make_body_node(struct vector *body_vec, size_t size, bool padded, struct no
     node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.size = size, .body.padded = padded, .body.largest_var_node = largest_var_node});
 }
 
+struct datatype_struct_node_fix_private
+{
+    // The variable node whose data type must be fixed as the structure is now present.
+    struct node *node;
+};
+
+bool datatype_struct_node_fix(struct fixup *fixup)
+{
+    struct datatype_struct_node_fix_private *private = fixup_private(fixup);
+    struct datatype *dtype = &private->node->var.type;
+    dtype->type = DATA_TYPE_STRUCT;
+    dtype->size = size_of_struct(dtype->type_str);
+    dtype->struct_node = struct_node_for_name(current_process, dtype->type_str);
+
+    // Still couldnt resolve it? Then they haven't declared it anywhere and lied to us!
+    // There is no structure with the name dtype->type_str.
+    if (!dtype->struct_node)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+void datatype_struct_node_fix_end(struct fixup *fixup)
+{
+    // Let's free the fixup private
+    free(fixup_private(fixup));
+}
+
 void make_variable_node(struct datatype *datatype, struct token *name_token, struct node *value_node)
 {
     node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type = *datatype, .var.name = name_token->sval, .var.val = value_node});
+    struct node *var_node = node_peek_or_null();
+    // Is our struct node NULL? Then a fixup is required a forward declaration was present
+    // Could argue that this is not the most sensible place to put it
+    // but this is a gauranteed way that a fixup will be registered.
+    if (var_node->var.type.type == DATA_TYPE_STRUCT && !var_node->var.type.struct_node)
+    {
+        struct datatype_struct_node_fix_private *private = calloc(sizeof(struct datatype_struct_node_fix_private), 1);
+    private
+        ->node = var_node;
+        fixup_register(parser_fixup_sys, &(struct fixup_config){.fix = datatype_struct_node_fix, .end = datatype_struct_node_fix_end, .private = private});
+    }
 }
 
 void make_bracket_node(struct node *inner_node)
@@ -679,29 +721,62 @@ void make_bracket_node(struct node *inner_node)
 void parse_expressionable(struct history *history);
 void parse_for_parentheses(struct history *history);
 
+
+static void parser_append_size_for_node_struct(size_t *_variable_size, struct node *node)
+{
+   struct node *struct_node = variable_struct_node(node);
+    *_variable_size += variable_size(node);
+    if (node->var.type.flags & DATATYPE_FLAG_IS_POINTER)
+    {
+        // A pointer struct? Well we don't want to do anything else than this
+        return;
+    }
+
+    struct node *largest_var_node = struct_node->_struct.body_n->body.largest_var_node;
+    if (largest_var_node)
+    {
+        // Great we need to align to its largest datatype boundary ((Way to large, make a function for that mess))
+        *_variable_size = align_value(*_variable_size, largest_var_node->var.type.size);
+    }
+}
+
 static void parser_append_size_for_node(size_t *_variable_size, struct node *node)
 {
     if (node->type == NODE_TYPE_VARIABLE)
     {
+        // Is this a structure variable?
+        if (node->var.type.type == DATA_TYPE_STRUCT)
+        {
+            parser_append_size_for_node_struct(_variable_size, node);
+            return;
+        }
+
+        // Normal variable, okay lets append the size.
         // Ok we have a variable lets adjust the variable_size.
         // *variable_size += node->var.type.size;
         // Test new with all possibilities.
         *_variable_size += variable_size(node);
-
-        // If this variable is a structure and we have padding then it must be 4-byte aligned
-        // as we are a 32 bit C compiler..
-        if (node->var.type.type == DATA_TYPE_STRUCT)
-        {
-            struct node* largest_var_node = variable_struct_node(node)->_struct.body_n->body.largest_var_node;
-            if (largest_var_node)
-            {
-                // Great we need to align to its largest datatype boundary ((Way to large, make a function for that mess))
-                *_variable_size = align_value(*_variable_size, largest_var_node->var.type.size);
-            }
-        }
     }
 }
 
+void parser_finalize_body(struct node *body_node, struct vector *body_vec, size_t *variable_size, struct node *largest_applicable_var_node)
+{
+    // Variable size should be adjusted to + the padding of all the body variables padding
+    int padding = compute_sum_padding(body_vec);
+    *variable_size += padding;
+
+    // Our own variable size must pad to the largest member
+    if (largest_applicable_var_node)
+    {
+        *variable_size = align_value(*variable_size, largest_applicable_var_node->var.type.size);
+    }
+    // Let's make the body node now we have parsed all statements.
+    bool padded = padding != 0;
+    body_node->body.largest_var_node = largest_applicable_var_node;
+    body_node->body.padded = padded;
+    body_node->body.size = *variable_size;
+    body_node->body.statements = body_vec;
+}
 /**
  * Parses a single body statement and in the event the statement is a variable
  * the variable_size variable will be incremented by the size of the variable
@@ -731,11 +806,7 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
         largest_var_node = stmt_node;
     }
 
-    // Let's make the body node for this one statement.
-    make_body_node(body_vec, *variable_size, 0, largest_var_node);
-    body_node->body.largest_var_node = largest_var_node;
-    body_node->body.size = *variable_size;
-    body_node->body.statements = body_vec;
+    parser_finalize_body(body_node, body_vec, variable_size, largest_var_node);
 
     // Set the parser body node back to the previous one now that we are done.
     parser_current_body = body_node->binded.owner;
@@ -784,21 +855,8 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
     // bodies must end with a right curley bracket!
     expect_sym('}');
 
-    // Variable size should be adjusted to + the padding of all the body variables padding
-    int padding = compute_sum_padding(body_vec);
-    *variable_size += padding;
-
-    // Our own variable size must pad to the largest member
-    if (largest_applicable_var_node)
-    {
-        *variable_size = align_value(*variable_size, largest_applicable_var_node->var.type.size);
-    }
-    // Let's make the body node now we have parsed all statements.
-    bool padded = padding != 0;
-    body_node->body.largest_var_node = largest_applicable_var_node;
-    body_node->body.padded = padded;
-    body_node->body.size = *variable_size;
-    body_node->body.statements = body_vec;
+    // We must finalize the body
+    parser_finalize_body(body_node, body_vec, variable_size, largest_applicable_var_node);
 
     // Let's not forget to set the old body back now that we are done with this body
     parser_current_body = body_node->binded.owner;
@@ -1646,7 +1704,7 @@ void parse_datatype_modifiers(struct datatype *datatype)
     }
 }
 
-static int size_of_struct(const char *struct_name)
+int size_of_struct(const char *struct_name)
 {
     // We must pull the structure symbol for the given structure name
     // then we will know what the size is.
@@ -1664,7 +1722,6 @@ static int size_of_struct(const char *struct_name)
 
     return node->_struct.body_n->body.size;
 }
-
 void parser_datatype_init(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth)
 {
     // consider changing to an array that we can just map index too ;)
@@ -2185,6 +2242,8 @@ int parse(struct compile_process *process)
         node_push(node);
     }
 
+    // Let's fix the fixups
+    assert(fixups_resolve(parser_fixup_sys));
     scope_free_root(process);
 
     return PARSE_ALL_OK;

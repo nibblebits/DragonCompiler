@@ -1909,12 +1909,18 @@ struct fixup_config
     void* private;
 };
 
+enum
+{
+    FIXUP_FLAG_RESOLVED = 0b00000001
+};
+
 /**
  * Fixup system will allow us to mark something for modification
  * at a later time
  */
 struct fixup
 {
+    int flags;
     // The system who registered this fixup
     struct fixup_system* system;
     struct fixup_config config;

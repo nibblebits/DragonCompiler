@@ -1,25 +1,22 @@
 
-struct dog
-{
-   int x;
-};
+struct dog;
 
-
-struct c
-{
-   int x;
-   int y;
-};
 
 struct cat
 {
-   struct dog d;
-   struct c b;
+   struct dog* d;
+};
+
+struct dog
+{
+   int e;
+   int x;
 };
 
 
 int main()
 {
-   struct cat c;
-   return 0;
+   struct dog c;
+   c.x = 50;
+   return 10;
 }

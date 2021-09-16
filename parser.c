@@ -1738,7 +1738,13 @@ void parser_datatype_init(struct token *datatype_token, struct datatype *datatyp
 {
     // consider changing to an array that we can just map index too ;)
     // too many ifs...
-    if (S_EQ(datatype_token->sval, "char"))
+
+    if (S_EQ(datatype_token->sval, "void"))
+    {
+        datatype_out->type = DATA_TYPE_VOID;
+        datatype_out->size = 0;
+    }
+    else if (S_EQ(datatype_token->sval, "char"))
     {
         datatype_out->type = DATA_TYPE_CHAR;
         datatype_out->size = 1;

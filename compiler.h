@@ -831,6 +831,7 @@ enum
 
 enum
 {
+    DATA_TYPE_VOID,
     DATA_TYPE_CHAR,
     DATA_TYPE_SHORT,
     DATA_TYPE_INTEGER,

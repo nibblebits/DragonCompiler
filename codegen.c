@@ -1486,6 +1486,7 @@ void codegen_generate_global_variable(struct node *node)
 
     switch (node->var.type.type)
     {
+    case DATA_TYPE_VOID:
     case DATA_TYPE_CHAR:
     case DATA_TYPE_SHORT:
     case DATA_TYPE_INTEGER:

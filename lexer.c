@@ -28,29 +28,27 @@
 static struct token tmp_token;
 static struct lex_process *lex_process;
 
-
-char lexer_string_buffer_next_char(struct lex_process* process)
+char lexer_string_buffer_next_char(struct lex_process *process)
 {
-    struct buffer* buf = lex_process_private(process);
+    struct buffer *buf = lex_process_private(process);
     return buffer_read(buf);
 }
-char lexer_string_buffer_peek_char(struct lex_process* process)
+char lexer_string_buffer_peek_char(struct lex_process *process)
 {
-    struct buffer* buf = lex_process_private(process);
+    struct buffer *buf = lex_process_private(process);
     return buffer_peek(buf);
 }
 
-void lexer_string_buffer_push_char(struct lex_process* process, char c)
+void lexer_string_buffer_push_char(struct lex_process *process, char c)
 {
-    struct buffer* buf = lex_process_private(process);
+    struct buffer *buf = lex_process_private(process);
     buffer_write(buf, c);
 }
 
 struct lex_process_functions lexer_string_buffer_functions = {
     .next_char = lexer_string_buffer_next_char,
     .peek_char = lexer_string_buffer_peek_char,
-    .push_char = lexer_string_buffer_push_char
-};
+    .push_char = lexer_string_buffer_push_char};
 
 void error(const char *fmt, ...)
 {
@@ -109,7 +107,8 @@ bool is_keyword(const char *str)
 
 bool keyword_is_datatype(const char *str)
 {
-    return S_EQ(str, "char") ||
+    return S_EQ(str, "void") ||
+           S_EQ(str, "char") ||
            S_EQ(str, "int") ||
            S_EQ(str, "float") ||
            S_EQ(str, "double") ||
@@ -686,7 +685,7 @@ int lex(struct lex_process *process)
 
 struct lex_process *tokens_build_for_string(struct compile_process *compiler, const char *str)
 {
-    struct buffer* buffer = buffer_create();
+    struct buffer *buffer = buffer_create();
     buffer_printf(buffer, str);
     struct lex_process *process = lex_process_create(compiler, &lexer_string_buffer_functions, buffer);
     if (!process)
@@ -694,7 +693,7 @@ struct lex_process *tokens_build_for_string(struct compile_process *compiler, co
         return NULL;
     }
 
-    if(lex(process) != LEXICAL_ANALYSIS_ALL_OK)
+    if (lex(process) != LEXICAL_ANALYSIS_ALL_OK)
     {
         return NULL;
     }

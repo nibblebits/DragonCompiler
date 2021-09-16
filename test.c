@@ -1,6 +1,5 @@
-int* a;
+void* abc;
 int main()
-{ 
-   int x;
-   x = *a;
+{
+   abc = 0x00;
 }

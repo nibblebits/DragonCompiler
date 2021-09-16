@@ -9,7 +9,7 @@
 
 // We want at least 20 vector element spaces in reserve before having
 // to reallocate memory again
-#define VECTOR_ELEMENT_INCREMENT 200
+#define VECTOR_ELEMENT_INCREMENT 20
 
 enum
 {

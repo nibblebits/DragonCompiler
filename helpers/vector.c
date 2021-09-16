@@ -80,6 +80,7 @@ void vector_resize_for_index(struct vector *vector, int start_index, int total_e
         // Nothing to resize
         return;
     }
+
     vector->data = realloc(vector->data, ((start_index + total_elements + VECTOR_ELEMENT_INCREMENT) * vector->esize));
     assert(vector->data);
     vector->mindex = start_index + total_elements;
@@ -233,16 +234,16 @@ void vector_pop_last_peek(struct vector* vector)
 
 void vector_push(struct vector *vector, void *elem)
 {
-    if (vector->rindex >= vector->mindex)
-    {
-        vector_resize(vector);
-    }
-
     void *ptr = vector_at(vector, vector->rindex);
     memcpy(ptr, elem, vector->esize);
 
     vector->rindex++;
     vector->count++;
+
+    if (vector->rindex >= vector->mindex)
+    {
+        vector_resize(vector);
+    }
 }
 
 int vector_fread(struct vector *vector, int amount, FILE *fp)

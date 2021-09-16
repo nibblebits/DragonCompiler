@@ -3,6 +3,14 @@
 #include "helpers/vector.h"
 
 
+/**
+ * Returns true if this node can be used in an expression
+ */
+bool node_is_expressionable(struct node* node)
+{
+    return node->type == NODE_TYPE_EXPRESSION || node->type == NODE_TYPE_EXPRESSION_PARENTHESIS || node->type == NODE_TYPE_UNARY || node->type == NODE_TYPE_IDENTIFIER || node->type == NODE_TYPE_NUMBER;
+
+}
 bool node_is_expression_or_parentheses(struct node* node)
 {
     return node->type == NODE_TYPE_EXPRESSION_PARENTHESIS || node->type == NODE_TYPE_EXPRESSION;

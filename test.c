@@ -1,22 +1,6 @@
-
-struct dog;
-
-
-struct cat
-{
-   struct dog* d;
-};
-
-struct dog
-{
-   int e;
-   int x;
-};
-
-
+int* a;
 int main()
-{
-   struct dog c;
-   c.x = 50;
-   return 10;
+{ 
+   int x;
+   x = *a;
 }

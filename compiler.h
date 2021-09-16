@@ -1179,6 +1179,11 @@ enum
 
 
 /**
+ * Returns true if this node can be used in an expression
+ */
+bool node_is_expressionable(struct node* node);
+
+/**
  * Called to issue a compiler error and terminate the compiler
  */
 void compiler_error(struct compile_process *compiler, const char *msg, ...);

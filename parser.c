@@ -472,6 +472,18 @@ static struct node *node_peek_or_null()
 }
 
 /**
+ * Peeks at the last node and if it can be used in an expression, 
+ * then this function will return that node otherwise NULL.
+ * 
+ * Expressionable node types are: NODE_TYPE_NUMERIC, NODE_TYPE_EXPRESSION, NODE_TYPE_PARENTHESES, NODE_TYPE_IDENTIFIER
+ */
+static struct node* node_peek_expressionable_or_null()
+{
+    struct node* last_node = node_peek_or_null();
+    return node_is_expressionable(last_node) ? last_node : NULL;
+}
+
+/**
  * Peeks at the last node pushed to the stack
  */
 static struct node *node_peek()
@@ -1439,7 +1451,7 @@ void parse_exp_normal(struct history *history)
     struct token *op_token = token_peek_next();
     const char *op = op_token->sval;
     // We must pop the last node as this will be the left operand
-    struct node *node_left = node_peek_or_null();
+    struct node *node_left = node_peek_expressionable_or_null();
     if (!node_left)
     {
         // If we have a NULL Left node then this expression has no left operand

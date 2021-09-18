@@ -366,6 +366,7 @@ struct code_generator
         struct vector *switches;
     } _switch;
 
+
     // This is a bitmask of flags for registers that are in use
     // if the bit is set the register is currently being used
     // this helps the system control how to do things.
@@ -928,6 +929,16 @@ enum
     // This flag is set if this node represents a forward declaration
     // I could argue this could be in a better place.. WIll reconsider later.
     NODE_FLAG_IS_FORWARD_DECLARATION = 0b00000100,
+
+    /**
+     * When set states that this node also represents a variable declaration
+     * Examples include structures i.e
+     * 
+     * struct abc
+     * {
+     * } var_name;
+     */
+    NODE_FLAG_HAS_VARIABLE_COMBINED = 0b00001000
 };
 
 struct node
@@ -991,6 +1002,14 @@ struct node
         {
             const char *name;
             struct node *body_n;
+
+            // The variable node for this structure i.e
+            // struct abc
+            // {
+            //   
+            // } var_name;
+            // If not set then this is NULL.
+            struct node* var;
         } _struct;
 
         struct function

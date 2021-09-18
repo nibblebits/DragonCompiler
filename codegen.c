@@ -1945,10 +1945,21 @@ void codegen_generate_root_node(struct node *node)
     case NODE_TYPE_VARIABLE:
         // Was processed earlier.. for data section
         break;
-
+    
     case NODE_TYPE_FUNCTION:
         codegen_generate_function(node);
         break;
+    }
+}
+
+
+void codegen_generate_struct(struct node* node)
+{
+    // We only have to care if we have a variable on this struct
+    if(node->flags & NODE_FLAG_HAS_VARIABLE_COMBINED)
+    {
+        // Generate the structure variable
+        codegen_generate_global_variable(node->_struct.var);
     }
 }
 
@@ -1958,6 +1969,10 @@ void codegen_generate_data_section_part(struct node *node)
     {
         codegen_generate_global_variable(node);
     }
+    else if(node->type == NODE_TYPE_STRUCT)
+    {
+        codegen_generate_struct(node);
+    } 
 }
 
 void codegen_generate_data_section()

@@ -1083,11 +1083,25 @@ void parse_struct_no_new_scope(struct datatype *dtype, bool is_forward_declarati
     }
     dtype->struct_node = struct_node;
 
-    // Push the structure node back to the stack
-    node_push(struct_node);
+    // Do we have an identifier? Then we are also creating a variable
+    // for this structure.
+    if (token_peek_next()->type == TOKEN_TYPE_IDENTIFIER)
+    {
+        // alright parse the name of this structure variable
+        struct token* var_name = token_next();
+        struct_node->flags |= NODE_FLAG_HAS_VARIABLE_COMBINED;
+
+        // We must create a variable for this structure
+        make_variable_node(dtype, var_name, NULL);
+        struct_node->_struct.var = node_pop();
+    }
 
     // Structures must end with semicolons
     expect_sym(';');
+
+    // Push the structure node back to the stack
+    node_push(struct_node);
+
 }
 
 void parse_struct(struct datatype *dtype)

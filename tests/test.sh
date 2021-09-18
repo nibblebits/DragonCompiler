@@ -426,5 +426,16 @@ else
     echo -e "Structure forward declare test passed"
 fi
 
+echo -e "Structure with declaration test"
+./build/struct_with_declaration_test
+if [ $? -ne 30 ]; then
+    echo -e "Structure with declaration test failed"
+    res_code=1
+else
+    echo -e "Structure with declaration test passed"
+fi
+
+
+
 echo -e "All tests finished"
 exit $res_code

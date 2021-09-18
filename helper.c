@@ -463,6 +463,10 @@ bool op_is_indirection(const char *op)
 
 int padding(int val, int to)
 {
+    // We cannot deal with zero., therefore zero padding.
+    if (to <= 0)
+        return 0;
+
     if ((val % to) == 0)
         return 0;
 

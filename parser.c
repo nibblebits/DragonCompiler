@@ -1137,8 +1137,7 @@ void parse_sizeof(struct history *history)
     parse_datatype_type(&dtype);
 
     // Alright we got the size perfect, lets inject a number to represent the size
-    struct node *node = node_create(&(struct node){NODE_TYPE_NUMBER, .llnum = datatype_size(&dtype)});
-    node_push(node);
+    node_create(&(struct node){NODE_TYPE_NUMBER, .llnum = datatype_size(&dtype)});
 
     expect_sym(')');
 }

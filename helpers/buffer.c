@@ -5,8 +5,8 @@
 
 struct buffer* buffer_create()
 {
-    struct buffer* buf = malloc(sizeof(struct buffer));
-    buf->data = malloc(BUFFER_REALLOC_AMOUNT);
+    struct buffer* buf = calloc(sizeof(struct buffer), 1);
+    buf->data = calloc(BUFFER_REALLOC_AMOUNT, 1);
     buf->len = 0;
     buf->msize = BUFFER_REALLOC_AMOUNT;
     return buf;

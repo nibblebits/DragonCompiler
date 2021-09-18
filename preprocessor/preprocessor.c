@@ -122,7 +122,7 @@ void preprocessor_execute_error(struct compile_process *compiler, const char *ms
 struct preprocessor_included_file *preprocessor_add_included_file(struct preprocessor *preprocessor, const char *filename)
 {
     struct preprocessor_included_file *included_file = calloc(sizeof(struct preprocessor_included_file), 1);
-    memcpy(included_file->filename, filename, sizeof(included_file->filename));
+    strncpy(included_file->filename, filename, sizeof(included_file->filename));
     vector_push(preprocessor->includes, &included_file);
     return included_file;
 }

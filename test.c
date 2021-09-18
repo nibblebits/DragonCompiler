@@ -1,6 +1,7 @@
+#include <stddef.h>
 
 int main()
 {
-   int x;
-   x = 15 + sizeof(int);
+   size_t x;
+   x = 15 * sizeof(int) - 4 * sizeof(void *) - sizeof (size_t);
 }

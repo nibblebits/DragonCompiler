@@ -1631,6 +1631,7 @@ int parse_expressionable_single(struct history *history)
         parse_string(history);
         res = 0;
         break;
+
     }
 
     return res;
@@ -1789,6 +1790,8 @@ void parser_datatype_init(struct token *datatype_token, struct datatype *datatyp
         datatype_out->pointer_depth = pointer_depth;
     }
 
+
+    datatype_out->flags = 0;
     datatype_out->type_str = datatype_token->sval;
 }
 

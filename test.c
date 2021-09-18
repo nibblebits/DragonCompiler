@@ -1,6 +1,6 @@
-int x;
 
 int main()
 {
-   x = sizeof(int);
+   int x;
+   x = 15 + sizeof(int);
 }

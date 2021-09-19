@@ -435,6 +435,17 @@ else
     echo -e "Structure with declaration test passed"
 fi
 
+echo -e "Structure with no type name test"
+./build/struct_no_name_test
+if [ $? -ne 20 ]; then
+    echo -e "Structure with no type name test failed"
+    res_code=1
+else
+    echo -e "Structure with no type name test passed"
+fi
+
+
+
 
 
 echo -e "All tests finished"

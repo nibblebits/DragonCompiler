@@ -206,6 +206,26 @@ struct parser_scope_entity
     struct node *node;
 };
 
+
+int parser_get_random_type_index()
+{
+    static int x = 0;
+    x++;
+    return x;
+}
+
+struct token* parser_build_random_type_name()
+{
+    char tmp_name[25];
+    sprintf(tmp_name, "customtypeamenNI_%i", parser_get_random_type_index());
+    char* sval = malloc(sizeof(tmp_name));
+    strncpy(sval, tmp_name, sizeof(tmp_name));
+    struct token* token = calloc(sizeof(struct token), 1);
+    token->type = TOKEN_TYPE_IDENTIFIER;
+    token->sval = sval;
+    return token;
+}
+
 struct parser_scope_entity *parser_new_scope_entity(struct node *node, int stack_offset, int flags)
 {
     struct parser_scope_entity *entity = calloc(sizeof(struct parser_scope_entity), 1);
@@ -477,9 +497,9 @@ static struct node *node_peek_or_null()
  * 
  * Expressionable node types are: NODE_TYPE_NUMERIC, NODE_TYPE_EXPRESSION, NODE_TYPE_PARENTHESES, NODE_TYPE_IDENTIFIER
  */
-static struct node* node_peek_expressionable_or_null()
+static struct node *node_peek_expressionable_or_null()
 {
-    struct node* last_node = node_peek_or_null();
+    struct node *last_node = node_peek_or_null();
     return node_is_expressionable(last_node) ? last_node : NULL;
 }
 
@@ -733,10 +753,9 @@ void make_bracket_node(struct node *inner_node)
 void parse_expressionable(struct history *history);
 void parse_for_parentheses(struct history *history);
 
-
 static void parser_append_size_for_node_struct(size_t *_variable_size, struct node *node)
 {
-   struct node *struct_node = variable_struct_node(node);
+    struct node *struct_node = variable_struct_node(node);
     *_variable_size += variable_size(node);
     if (node->var.type.flags & DATATYPE_FLAG_IS_POINTER)
     {
@@ -1088,7 +1107,7 @@ void parse_struct_no_new_scope(struct datatype *dtype, bool is_forward_declarati
     if (token_peek_next()->type == TOKEN_TYPE_IDENTIFIER)
     {
         // alright parse the name of this structure variable
-        struct token* var_name = token_next();
+        struct token *var_name = token_next();
         struct_node->flags |= NODE_FLAG_HAS_VARIABLE_COMBINED;
 
         // We must create a variable for this structure
@@ -1101,7 +1120,6 @@ void parse_struct_no_new_scope(struct datatype *dtype, bool is_forward_declarati
 
     // Push the structure node back to the stack
     node_push(struct_node);
-
 }
 
 void parse_struct(struct datatype *dtype)
@@ -1135,6 +1153,8 @@ void parse_struct_or_union(struct datatype *dtype)
 void parse_variable_function_or_struct_union(struct history *history);
 void parse_keyword_return(struct history *history);
 void parse_datatype_type(struct datatype *datatype);
+void parse_datatype(struct datatype* datatype);
+
 
 void parse_identifier(struct history *history)
 {
@@ -1148,7 +1168,7 @@ void parse_sizeof(struct history *history)
     expect_op("(");
     // Now for our expression
     struct datatype dtype;
-    parse_datatype_type(&dtype);
+    parse_datatype(&dtype);
 
     // Alright we got the size perfect, lets inject a number to represent the size
     node_create(&(struct node){NODE_TYPE_NUMBER, .llnum = datatype_size(&dtype)});
@@ -1645,7 +1665,6 @@ int parse_expressionable_single(struct history *history)
         parse_string(history);
         res = 0;
         break;
-
     }
 
     return res;
@@ -1748,11 +1767,9 @@ int size_of_struct(const char *struct_name)
 
     return node->_struct.body_n->body.size;
 }
-void parser_datatype_init(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth)
-{
-    // consider changing to an array that we can just map index too ;)
-    // too many ifs...
 
+void parser_datatype_init_type_and_size(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth)
+{
     if (S_EQ(datatype_token->sval, "void"))
     {
         datatype_out->type = DATA_TYPE_VOID;
@@ -1803,10 +1820,14 @@ void parser_datatype_init(struct token *datatype_token, struct datatype *datatyp
         datatype_out->flags |= DATATYPE_FLAG_IS_POINTER;
         datatype_out->pointer_depth = pointer_depth;
     }
-
-
-    datatype_out->flags = 0;
-    datatype_out->type_str = datatype_token->sval;
+}
+void parser_datatype_init(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth)
+{
+    if (datatype_token)
+    {
+        parser_datatype_init_type_and_size(datatype_token, datatype_out, pointer_depth);
+        datatype_out->type_str = datatype_token->sval;
+    }
 }
 
 /**
@@ -1820,8 +1841,18 @@ void parse_datatype_type(struct datatype *datatype)
     struct token *datatype_token = token_next();
     if (S_EQ(datatype_token->sval, "struct"))
     {
+        datatype_token = NULL;
         // Since we parased a "struct" keyword the actual data type will be the next token.
-        datatype_token = token_next();
+        if (token_peek_next()->type == TOKEN_TYPE_IDENTIFIER)
+        {
+            datatype_token = token_next();
+        }
+        else
+        {
+            // We have no name for this structure? THen we must make one
+            // as the compiler needs to be able to identify this structure
+            datatype_token = parser_build_random_type_name();
+        }
     }
 
     // Get the pointer depth i.e "int*** abc;" would have a pointer depth of 3.
@@ -1829,6 +1860,13 @@ void parse_datatype_type(struct datatype *datatype)
     int pointer_depth = parser_get_pointer_depth();
 
     parser_datatype_init(datatype_token, datatype, pointer_depth);
+}
+
+void parse_datatype(struct datatype* datatype)
+{
+    memset(datatype, 0, sizeof(struct datatype));
+    parse_datatype_modifiers(datatype);
+    parse_datatype_type(datatype);
 }
 
 struct array_brackets *parse_array_brackets(struct history *history)
@@ -1896,8 +1934,7 @@ void parse_variable_full(struct history *history)
 {
     // Null by default, making this an unsigned non-static variable
     struct datatype dtype;
-    parse_datatype_modifiers(&dtype);
-    parse_datatype_type(&dtype);
+    parse_datatype(&dtype);
 
     struct token *name_token = token_next();
     parse_variable(&dtype, name_token, history);
@@ -2023,8 +2060,7 @@ void parse_variable_function_or_struct_union(struct history *history)
 
     // Null by default, making this an unsigned non-static variable
     struct datatype dtype;
-    parse_datatype_modifiers(&dtype);
-    parse_datatype_type(&dtype);
+    parse_datatype(&dtype);
 
     // If we have a body then we have defined a structure or union.
     if (is_datatype_struct_or_union(&dtype) && token_next_is_symbol('{'))

@@ -1,16 +1,11 @@
-struct eee {
-   int a;
+struct {
    int ee;
-   int dd;
-   int mm;
-   int mmmm;
-   int eeeee;
-
+   int kk;
 } mm;
 
 
 int main()
 {
-   mm.ee = 30;
+   mm.kk = 30;
    return mm.ee;
 }

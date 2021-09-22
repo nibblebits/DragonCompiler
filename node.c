@@ -3,6 +3,19 @@
 #include "helpers/vector.h"
 
 
+bool node_is_struct_or_union_variable(struct node* node)
+{
+    if (node->type != NODE_TYPE_VARIABLE)
+        return false;
+
+    return datatype_is_struct_or_union(&node->var.type);
+}
+
+bool node_is_struct_or_union(struct node* node)
+{
+    return node->type == NODE_TYPE_STRUCT || node->type == NODE_TYPE_UNION;
+}
+
 /**
  * Returns true if this node can be used in an expression
  */

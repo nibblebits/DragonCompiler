@@ -244,17 +244,16 @@ struct preprocessor_function_arguments
     struct vector *arguments;
 };
 
-
 /**
  * Should evaluate the given definition into an integer
  */
-typedef int (*PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE)(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments);
+typedef int (*PREPROCESSOR_DEFINITION_NATIVE_CALL_EVALUATE)(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments);
 
 /**
  * Function pointer must return a vector of struct token. That represents the value
  * of this native definition
  */
-typedef struct vector *(*PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE)(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments);
+typedef struct vector *(*PREPROCESSOR_DEFINITION_NATIVE_CALL_VALUE)(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments);
 struct preprocessor_definition
 {
     // The type of definition i.e standard or macro function
@@ -302,7 +301,6 @@ struct preprocessor_included_file
  * such as stddef.h
  */
 typedef void (*PREPROCESSOR_STATIC_INCLUDE_HANDLER_POST_CREATION)(struct preprocessor *preprocessor, struct preprocessor_included_file *included_file);
-
 
 struct preprocessor
 {
@@ -366,7 +364,6 @@ struct code_generator
         struct vector *switches;
     } _switch;
 
-
     // This is a bitmask of flags for registers that are in use
     // if the bit is set the register is currently being used
     // this helps the system control how to do things.
@@ -414,11 +411,11 @@ struct lex_process
     struct vector *token_vec;
     struct compile_process *compiler;
 
-    struct lex_process_functions* function;
+    struct lex_process_functions *function;
 
     // Private data that the creator of the lex process can use to store.
     // data they understand
-    void* private;
+    void *private;
 };
 /**
  * This file represents a compilation process
@@ -820,13 +817,13 @@ enum
 
 enum
 {
-    DATATYPE_FLAG_IS_SIGNED =  0b00000001,
-    DATATYPE_FLAG_IS_STATIC =  0b00000010,
-    DATATYPE_FLAG_IS_CONST =   0b00000100,
+    DATATYPE_FLAG_IS_SIGNED = 0b00000001,
+    DATATYPE_FLAG_IS_STATIC = 0b00000010,
+    DATATYPE_FLAG_IS_CONST = 0b00000100,
     DATATYPE_FLAG_IS_POINTER = 0b00001000,
-    DATATYPE_FLAG_IS_ARRAY =   0b00010000,
-    DATATYPE_FLAG_IS_EXTERN =  0b00100000,
-    DATATYPE_FLAG_IS_RESTRICT =0b01000000
+    DATATYPE_FLAG_IS_ARRAY = 0b00010000,
+    DATATYPE_FLAG_IS_EXTERN = 0b00100000,
+    DATATYPE_FLAG_IS_RESTRICT = 0b01000000
 
 };
 
@@ -909,6 +906,7 @@ enum
     NODE_TYPE_LABEL,
     NODE_TYPE_UNARY,
     NODE_TYPE_STRUCT,
+    NODE_TYPE_UNION,
     NODE_TYPE_BRACKET // Array brackets i.e [50][20] Two node brackets.
 };
 
@@ -1006,11 +1004,25 @@ struct node
             // The variable node for this structure i.e
             // struct abc
             // {
-            //   
+            //
             // } var_name;
             // If not set then this is NULL.
-            struct node* var;
+            struct node *var;
         } _struct;
+
+        struct _union
+        {
+            const char *name;
+            struct node *body_n;
+
+            // The variable node for this union i.e
+            // union abc
+            // {
+            //
+            // } var_name;
+            // If not set then this is NULL.
+            struct node *var;
+        } _union;
 
         struct function
         {
@@ -1197,11 +1209,10 @@ enum
     COMPILER_FAILED_WITH_ERRORS,
 };
 
-
 /**
  * Returns true if this node can be used in an expression
  */
-bool node_is_expressionable(struct node* node);
+bool node_is_expressionable(struct node *node);
 
 /**
  * Called to issue a compiler error and terminate the compiler
@@ -1235,18 +1246,18 @@ int lex(struct lex_process *process);
  * Builds tokens for the given input string, returns a lexical analysis process.
  */
 struct lex_process *tokens_build_for_string(struct compile_process *compiler, const char *str);
-struct lex_process* lex_process_create(struct compile_process* compiler, struct lex_process_functions* functions, void* private);
-void lex_process_free(struct lex_process* process);
+struct lex_process *lex_process_create(struct compile_process *compiler, struct lex_process_functions *functions, void *private);
+void lex_process_free(struct lex_process *process);
 
 /**
  * Returns the private data of this lexical process
  */
-void* lex_process_private(struct lex_process* process);
+void *lex_process_private(struct lex_process *process);
 
 /**
  * Returns the generated tokens from lexical analysis for this lexical analysis process
  */
-struct vector* lex_process_tokens(struct lex_process* process);
+struct vector *lex_process_tokens(struct lex_process *process);
 
 /**
  * Parses the tree provided from lexical analysis
@@ -1282,7 +1293,7 @@ FILE *compile_process_file(struct compile_process *process);
 /**
  * Gets the next character from the current file
  */
-char compile_process_next_char(struct lex_process* lex_process);
+char compile_process_next_char(struct lex_process *lex_process);
 
 /**
  * Peeks in the stream for the next char from the current file.
@@ -1515,6 +1526,7 @@ size_t node_sum_scope_size(struct node *node);
 struct node *node_from_symbol(struct compile_process *current_process, const char *name);
 struct node *node_from_sym(struct symbol *sym);
 struct node *struct_node_for_name(struct compile_process *current_process, const char *struct_name);
+struct node *union_node_for_name(struct compile_process *current_process, const char *struct_name);
 
 /**
  * Returns a node that has the given structure for the provided var_node.
@@ -1527,11 +1539,16 @@ struct node *struct_node_for_name(struct compile_process *current_process, const
  */
 struct node *variable_struct_node(struct node *var_node);
 
+struct node* variable_struct_or_union_body_node(struct node* var_node);
+
 /**
  * Returns true if the given node is a variable node that is a structure variable and
  * that structures memory is padded. Otherwise false.
  */
 bool variable_struct_padded(struct node *var_node);
+
+
+bool variable_padded(struct node* var_node);
 
 /**
  * Returns the largest variable node for the given structure, otherwise NULL.
@@ -1691,8 +1708,8 @@ int preprocessor_function_arguments_count(struct preprocessor_function_arguments
  */
 struct preprocessor_function_argument *preprocessor_function_argument_at(struct preprocessor_function_arguments *arguments, int index);
 
-int preprocessor_line_macro_evaluate(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments);
-struct vector *preprocessor_line_macro_value(struct preprocessor_definition *definition, struct preprocessor_function_arguments* arguments);
+int preprocessor_line_macro_evaluate(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments);
+struct vector *preprocessor_line_macro_value(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments);
 /**
  * This creates the definitions for the preprocessor that should always exist
  */
@@ -1898,6 +1915,21 @@ bool is_compile_computable(struct node *node);
  */
 bool char_is_delim(char c, const char *delims);
 
+/**
+ * Returns true if the given node is a structure or a union
+ */
+bool node_is_struct_or_union(struct node* node);
+
+/**
+ * Returns true if the given datatype is a structure or union datatype
+ */
+bool datatype_is_struct_or_union(struct datatype* dtype);
+
+/**
+ * Returns true if this given variable node's data type is a structure or union
+ */
+bool node_is_struct_or_union_variable(struct node* node);
+
 bool node_is_expression_or_parentheses(struct node *node);
 
 /**
@@ -1910,8 +1942,6 @@ bool node_is_value_type(struct node *node);
  */
 bool is_hex_char(char c);
 
-
-
 #include "compiler.h"
 
 struct fixup;
@@ -1919,19 +1949,19 @@ struct fixup;
  * Function pointer that fixup fixers should register.
  * Returns true on successful fix of the given entity
  */
-typedef bool(*FIXUP_FIX)(struct fixup* fixup);
+typedef bool (*FIXUP_FIX)(struct fixup *fixup);
 /**
  * Signifies this fixup has been removed from memory
  * receiver of this call must free its private data
  */
-typedef void(*FIXUP_END)(struct fixup* fixup);
+typedef void (*FIXUP_END)(struct fixup *fixup);
 
 struct fixup_config
 {
     // Fix function pointer, function to resolve this fixup.
     FIXUP_FIX fix;
     FIXUP_END end;
-    void* private;
+    void *private;
 };
 
 enum
@@ -1947,30 +1977,29 @@ struct fixup
 {
     int flags;
     // The system who registered this fixup
-    struct fixup_system* system;
+    struct fixup_system *system;
     struct fixup_config config;
 };
 
 struct fixup_system
 {
     // Registered fixups that need fixing
-    struct vector* fixups;
+    struct vector *fixups;
 };
 
+struct fixup_system *fixup_sys_new();
 
-struct fixup_system* fixup_sys_new();
+struct fixup_config *fixup_config(struct fixup *fixup);
+void fixup_free(struct fixup *fixup);
+void fixup_sys_fixups_free(struct fixup_system *system);
+void fixup_sys_finish(struct fixup_system *system);
+int fixup_sys_unresolved_fixups_count(struct fixup_system *system);
+void fixup_start_iteration(struct fixup_system *system);
+struct fixup *fixup_next(struct fixup_system *system);
+struct fixup *fixup_register(struct fixup_system *system, struct fixup_config *config);
 
-struct fixup_config* fixup_config(struct fixup* fixup);
-void fixup_free(struct fixup* fixup);
-void fixup_sys_fixups_free(struct fixup_system* system);
-void fixup_sys_finish(struct fixup_system* system);
-int fixup_sys_unresolved_fixups_count(struct fixup_system* system);
-void fixup_start_iteration(struct fixup_system* system);
-struct fixup* fixup_next(struct fixup_system* system);
-struct fixup* fixup_register(struct fixup_system* system, struct fixup_config* config);
-
-bool fixup_resolve(struct fixup* fixup);
-void* fixup_private(struct fixup* fixup);
-bool fixups_resolve(struct fixup_system* system);
+bool fixup_resolve(struct fixup *fixup);
+void *fixup_private(struct fixup *fixup);
+bool fixups_resolve(struct fixup_system *system);
 
 #endif

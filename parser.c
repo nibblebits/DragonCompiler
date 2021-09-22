@@ -59,6 +59,7 @@ enum
     HISTORY_FLAG_IN_SWITCH_STATEMENT = 0b00100000,
     HISTORY_FLAG_INSIDE_FUNCTION_BODY = 0b01000000,
     HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL = 0b10000000,
+    HISTORY_FLAG_INSIDE_UNION = 0b100000000
 };
 
 // Expression flags
@@ -206,7 +207,6 @@ struct parser_scope_entity
     struct node *node;
 };
 
-
 int parser_get_random_type_index()
 {
     static int x = 0;
@@ -214,13 +214,13 @@ int parser_get_random_type_index()
     return x;
 }
 
-struct token* parser_build_random_type_name()
+struct token *parser_build_random_type_name()
 {
     char tmp_name[25];
     sprintf(tmp_name, "customtypeamenNI_%i", parser_get_random_type_index());
-    char* sval = malloc(sizeof(tmp_name));
+    char *sval = malloc(sizeof(tmp_name));
     strncpy(sval, tmp_name, sizeof(tmp_name));
-    struct token* token = calloc(sizeof(struct token), 1);
+    struct token *token = calloc(sizeof(struct token), 1);
     token->type = TOKEN_TYPE_IDENTIFIER;
     token->sval = sval;
     return token;
@@ -274,7 +274,7 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
     // If this is a structure variable then we must align the padding to a 4-byte boundary so long
     // as their was any padding in the original structure scope
     // \attention Maybe make a new function for second operand, a bit long...
-    if (!variable_node_is_primative(node) && variable_struct_node(node)->_struct.body_n->body.padded)
+    if (!variable_node_is_primative(node) && variable_struct_or_union_body_node(node)->body.padded)
     {
         node->var.padding = padding(upward_stack ? offset : -offset, DATA_SIZE_DWORD);
     }
@@ -667,6 +667,18 @@ void make_else_node(struct node *body_node)
     node_create(&(struct node){NODE_TYPE_STATEMENT_ELSE, .stmt._else.body_node = body_node});
 }
 
+void make_union_node(const char *struct_name, struct node *body_node)
+{
+    int flags = 0;
+    if (!body_node)
+    {
+        // No body then we have forward declared.
+        flags = NODE_FLAG_IS_FORWARD_DECLARATION;
+    }
+
+    node_create(&(struct node){NODE_TYPE_UNION, .flags = flags, ._union.name = struct_name, ._union.body_n = body_node});
+}
+
 void make_struct_node(const char *struct_name, struct node *body_node)
 {
     int flags = 0;
@@ -753,7 +765,7 @@ void make_bracket_node(struct node *inner_node)
 void parse_expressionable(struct history *history);
 void parse_for_parentheses(struct history *history);
 
-static void parser_append_size_for_node_struct(size_t *_variable_size, struct node *node)
+static void parser_append_size_for_node_struct(struct history *history, size_t *_variable_size, struct node *node)
 {
     struct node *struct_node = variable_struct_node(node);
     *_variable_size += variable_size(node);
@@ -771,14 +783,14 @@ static void parser_append_size_for_node_struct(size_t *_variable_size, struct no
     }
 }
 
-static void parser_append_size_for_node(size_t *_variable_size, struct node *node)
+static void parser_append_size_for_node(struct history *history, size_t *_variable_size, struct node *node)
 {
     if (node->type == NODE_TYPE_VARIABLE)
     {
         // Is this a structure variable?
         if (node->var.type.type == DATA_TYPE_STRUCT)
         {
-            parser_append_size_for_node_struct(_variable_size, node);
+            parser_append_size_for_node_struct(history, _variable_size, node);
             return;
         }
 
@@ -790,22 +802,31 @@ static void parser_append_size_for_node(size_t *_variable_size, struct node *nod
     }
 }
 
-void parser_finalize_body(struct node *body_node, struct vector *body_vec, size_t *variable_size, struct node *largest_applicable_var_node)
+void parser_finalize_body(struct history *history, struct node *body_node, struct vector *body_vec, size_t *_variable_size, struct node *largest_align_eligible_var_node, struct node *largest_possible_var_node)
 {
+    if (history->flags & HISTORY_FLAG_INSIDE_UNION)
+    {
+        // Unions variable size is equal to the largest variable node size
+        if (largest_possible_var_node)
+        {
+            *_variable_size = variable_size(largest_possible_var_node);
+        }
+    }
+
     // Variable size should be adjusted to + the padding of all the body variables padding
     int padding = compute_sum_padding(body_vec);
-    *variable_size += padding;
+    *_variable_size += padding;
 
     // Our own variable size must pad to the largest member
-    if (largest_applicable_var_node)
+    if (largest_align_eligible_var_node)
     {
-        *variable_size = align_value(*variable_size, largest_applicable_var_node->var.type.size);
+        *_variable_size = align_value(*_variable_size, largest_align_eligible_var_node->var.type.size);
     }
     // Let's make the body node now we have parsed all statements.
     bool padded = padding != 0;
-    body_node->body.largest_var_node = largest_applicable_var_node;
+    body_node->body.largest_var_node = largest_align_eligible_var_node;
     body_node->body.padded = padded;
-    body_node->body.size = *variable_size;
+    body_node->body.size = *_variable_size;
     body_node->body.statements = body_vec;
 }
 /**
@@ -829,7 +850,7 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
 
     // Change the variable_size if this statement is a variable.
     // Incrementing it by the size of our variable
-    parser_append_size_for_node(variable_size, stmt_node);
+    parser_append_size_for_node(history, variable_size, stmt_node);
 
     struct node *largest_var_node = NULL;
     if (stmt_node->type == NODE_TYPE_VARIABLE)
@@ -837,7 +858,7 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
         largest_var_node = stmt_node;
     }
 
-    parser_finalize_body(body_node, body_vec, variable_size, largest_var_node);
+    parser_finalize_body(history, body_node, body_vec, variable_size, largest_var_node, largest_var_node);
 
     // Set the parser body node back to the previous one now that we are done.
     parser_current_body = body_node->binded.owner;
@@ -860,7 +881,8 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
     parser_current_body = body_node;
 
     struct node *stmt_node = NULL;
-    struct node *largest_applicable_var_node = NULL;
+    struct node *largest_align_eligible_var_node = NULL;
+    struct node *largest_possible_var_node = NULL;
     // Ok we are parsing a full body with many statements.
     expect_sym('{');
     while (!token_next_is_symbol('}'))
@@ -868,26 +890,34 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
         parse_statement(history_down(history, history->flags));
         stmt_node = node_pop();
 
+        if (stmt_node->type == NODE_TYPE_VARIABLE)
+        {
+            if (!largest_possible_var_node ||
+                (largest_possible_var_node->var.type.size <= stmt_node->var.type.size))
+            {
+                largest_possible_var_node = stmt_node;
+            }
+        }
         if (stmt_node->type == NODE_TYPE_VARIABLE && variable_node_is_primative(stmt_node))
         {
-            if (!largest_applicable_var_node ||
-                (largest_applicable_var_node->var.type.size <= stmt_node->var.type.size))
+            if (!largest_align_eligible_var_node ||
+                (largest_align_eligible_var_node->var.type.size <= stmt_node->var.type.size))
             {
-                largest_applicable_var_node = stmt_node;
+                largest_align_eligible_var_node = stmt_node;
             }
         }
         vector_push(body_vec, &stmt_node);
 
         // Change the variable_size if this statement is a variable.
         // Incrementing it by the size of our variable
-        parser_append_size_for_node(variable_size, stmt_node);
+        parser_append_size_for_node(history, variable_size, stmt_node);
     }
 
     // bodies must end with a right curley bracket!
     expect_sym('}');
 
     // We must finalize the body
-    parser_finalize_body(body_node, body_vec, variable_size, largest_applicable_var_node);
+    parser_finalize_body(history, body_node, body_vec, variable_size, largest_align_eligible_var_node, largest_possible_var_node);
 
     // Let's not forget to set the old body back now that we are done with this body
     parser_current_body = body_node->binded.owner;
@@ -1122,6 +1152,64 @@ void parse_struct_no_new_scope(struct datatype *dtype, bool is_forward_declarati
     node_push(struct_node);
 }
 
+void parse_union_no_scope(struct datatype *dtype, bool is_forward_declaration)
+{
+    // We already have the structure name parsed, its inside dtype.
+    // Parse the body of the structure "struct abc {body_here}"
+    struct node *body_node = NULL;
+    size_t body_variable_size = 0;
+
+    struct history history;
+    if (!is_forward_declaration)
+    {
+        parse_body(&body_variable_size, history_begin(&history, HISTORY_FLAG_INSIDE_UNION));
+        body_node = node_pop();
+    }
+
+    make_union_node(dtype->type_str, body_node);
+    struct node *union_node = node_pop();
+    if (body_node)
+    {
+        dtype->size = body_node->body.size;
+    }
+    dtype->union_node = union_node;
+
+    // Do we have an identifier? Then we are also creating a variable
+    // for this union.
+    if (token_peek_next()->type == TOKEN_TYPE_IDENTIFIER)
+    {
+        // alright parse the name of this union variable
+        struct token *var_name = token_next();
+        union_node->flags |= NODE_FLAG_HAS_VARIABLE_COMBINED;
+
+        // We must create a variable for this union
+        make_variable_node(dtype, var_name, NULL);
+        union_node->_union.var = node_pop();
+    }
+
+    // Unions must end with semicolons
+    expect_sym(';');
+
+    // Push the union node back to the stack
+    node_push(union_node);
+}
+
+void parse_union(struct datatype *dtype)
+{
+    bool is_forward_declaration = !token_is_symbol(token_peek_next(), '{');
+
+    if (!is_forward_declaration)
+    {
+        parser_scope_new();
+        resolver_default_new_scope(current_process->resolver, 0);
+    }
+    parse_union_no_scope(dtype, is_forward_declaration);
+    if (!is_forward_declaration)
+    {
+        resolver_default_finish_scope(current_process->resolver);
+        parser_scope_finish();
+    }
+}
 void parse_struct(struct datatype *dtype)
 {
     bool is_forward_declaration = !token_is_symbol(token_peek_next(), '{');
@@ -1141,20 +1229,25 @@ void parse_struct(struct datatype *dtype)
 
 void parse_struct_or_union(struct datatype *dtype)
 {
-    if (dtype->type == DATA_TYPE_STRUCT)
+    switch (dtype->type)
     {
+    case DATA_TYPE_STRUCT:
         parse_struct(dtype);
-        return;
-    }
+        break;
 
-    parse_err("Unions are not yet supported");
+    case DATA_TYPE_UNION:
+        parse_union(dtype);
+        break;
+
+    default:
+        parse_err("What is that your providing.. struct or union only! BUG!");
+    };
 }
 
 void parse_variable_function_or_struct_union(struct history *history);
 void parse_keyword_return(struct history *history);
 void parse_datatype_type(struct datatype *datatype);
-void parse_datatype(struct datatype* datatype);
-
+void parse_datatype(struct datatype *datatype);
 
 void parse_identifier(struct history *history)
 {
@@ -1768,7 +1861,26 @@ int size_of_struct(const char *struct_name)
     return node->_struct.body_n->body.size;
 }
 
-void parser_datatype_init_type_and_size(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth)
+int size_of_union(const char *union_name)
+{
+    // We must pull the structure symbol for the given structure name
+    // then we will know what the size is.
+    struct symbol *sym = symresolver_get_symbol(current_process, union_name);
+    if (!sym)
+    {
+        return 0;
+    }
+
+    assert(sym->type == SYMBOL_TYPE_NODE);
+
+    struct node *node = sym->data;
+    assert(node->type == NODE_TYPE_UNION);
+
+    return node->_union.body_n->body.size;
+}
+
+
+void parser_datatype_init_type_and_size(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth, bool is_union)
 {
     if (S_EQ(datatype_token->sval, "void"))
     {
@@ -1808,11 +1920,19 @@ void parser_datatype_init_type_and_size(struct token *datatype_token, struct dat
     }
     else
     {
-        // I hate else, change this later. We will assume its a struct
-        // in future we need to check for this as we have unions.
-        datatype_out->type = DATA_TYPE_STRUCT;
-        datatype_out->size = size_of_struct(datatype_token->sval);
-        datatype_out->struct_node = struct_node_for_name(current_process, datatype_token->sval);
+        if (is_union)
+        {
+            datatype_out->type = DATA_TYPE_UNION;
+            datatype_out->size = size_of_union(datatype_token->sval);
+            datatype_out->union_node = union_node_for_name(current_process, datatype_token->sval);
+
+        }
+        else
+        {
+            datatype_out->type = DATA_TYPE_STRUCT;
+            datatype_out->size = size_of_struct(datatype_token->sval);
+            datatype_out->struct_node = struct_node_for_name(current_process, datatype_token->sval);
+        }
     }
 
     if (pointer_depth > 0)
@@ -1821,13 +1941,18 @@ void parser_datatype_init_type_and_size(struct token *datatype_token, struct dat
         datatype_out->pointer_depth = pointer_depth;
     }
 }
-void parser_datatype_init(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth)
+void parser_datatype_init(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth, bool is_union)
 {
     if (datatype_token)
     {
-        parser_datatype_init_type_and_size(datatype_token, datatype_out, pointer_depth);
+        parser_datatype_init_type_and_size(datatype_token, datatype_out, pointer_depth, is_union);
         datatype_out->type_str = datatype_token->sval;
     }
+}
+
+static bool datatype_is_struct_or_union_for_name(const char *name)
+{
+    return S_EQ(name, "struct") || S_EQ(name, "union");
 }
 
 /**
@@ -1839,8 +1964,10 @@ void parser_datatype_init(struct token *datatype_token, struct datatype *datatyp
 void parse_datatype_type(struct datatype *datatype)
 {
     struct token *datatype_token = token_next();
-    if (S_EQ(datatype_token->sval, "struct"))
+    bool is_union = false;
+    if (datatype_is_struct_or_union_for_name(datatype_token->sval))
     {
+        is_union = S_EQ(datatype_token->sval, "union");
         datatype_token = NULL;
         // Since we parased a "struct" keyword the actual data type will be the next token.
         if (token_peek_next()->type == TOKEN_TYPE_IDENTIFIER)
@@ -1859,10 +1986,10 @@ void parse_datatype_type(struct datatype *datatype)
     // If this is a normal variable i.e "int abc" then pointer_depth will equal zero
     int pointer_depth = parser_get_pointer_depth();
 
-    parser_datatype_init(datatype_token, datatype, pointer_depth);
+    parser_datatype_init(datatype_token, datatype, pointer_depth, is_union);
 }
 
-void parse_datatype(struct datatype* datatype)
+void parse_datatype(struct datatype *datatype)
 {
     memset(datatype, 0, sizeof(struct datatype));
     parse_datatype_modifiers(datatype);
@@ -2026,11 +2153,6 @@ void parse_function(struct datatype *dtype, struct token *name_token, struct his
     resolver_finish_scope(current_process->resolver);
 }
 
-static bool is_datatype_struct_or_union(struct datatype *dtype)
-{
-    return dtype->type == DATA_TYPE_STRUCT || dtype->type == DATA_TYPE_UNION;
-}
-
 void parse_forward_declaration_struct(struct datatype *dtype)
 {
     // Okay lets parse the structure
@@ -2063,7 +2185,7 @@ void parse_variable_function_or_struct_union(struct history *history)
     parse_datatype(&dtype);
 
     // If we have a body then we have defined a structure or union.
-    if (is_datatype_struct_or_union(&dtype) && token_next_is_symbol('{'))
+    if (datatype_is_struct_or_union(&dtype) && token_next_is_symbol('{'))
     {
         // Ok we have defined a structure or union such as
         // struct abc {}
@@ -2128,6 +2250,7 @@ void parse_keyword_for_global()
     case NODE_TYPE_VARIABLE:
     case NODE_TYPE_FUNCTION:
     case NODE_TYPE_STRUCT:
+    case NODE_TYPE_UNION:
         symresolver_build_for_node(current_process, node);
         break;
     }

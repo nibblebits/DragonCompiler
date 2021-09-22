@@ -113,7 +113,8 @@ bool keyword_is_datatype(const char *str)
            S_EQ(str, "float") ||
            S_EQ(str, "double") ||
            S_EQ(str, "long") ||
-           S_EQ(str, "struct");
+           S_EQ(str, "struct") || 
+           S_EQ(str, "union");
 }
 
 static bool is_single_operator(char op)

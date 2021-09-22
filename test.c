@@ -1,11 +1,15 @@
-struct {
-   int ee;
-   int kk;
-} mm;
+struct mm
+{
+   int e;
+   int k;
+};
 
+struct dog
+{
+   struct mm aa;
+};
 
+struct dog d;
 int main()
 {
-   mm.kk = 30;
-   return mm.ee;
-}
+   d.aa.e = 50;

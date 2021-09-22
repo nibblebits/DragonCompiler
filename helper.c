@@ -8,6 +8,11 @@
 #include <assert.h>
 #include <ctype.h>
 
+bool datatype_is_struct_or_union(struct datatype* dtype)
+{
+    return dtype->type == DATA_TYPE_STRUCT || dtype->type == DATA_TYPE_UNION;
+}
+
 bool is_hex_char(char c)
 {
     c = tolower(c);
@@ -26,11 +31,7 @@ bool is_hex_char(char c)
 struct node *variable_largest(struct node *var_node)
 {
     assert(var_node->type == NODE_TYPE_VARIABLE);
-    if (var_node->var.type.type != DATA_TYPE_STRUCT)
-    {
-        return var_node;
-    }
-    return variable_struct_node(var_node)->_struct.body_n->body.largest_var_node;
+    return variable_struct_or_union_body_node(var_node)->body.largest_var_node;
 }
 
 /**
@@ -60,7 +61,9 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
     assert(struct_sym->type == SYMBOL_TYPE_NODE);
 
     struct node *node = struct_sym->data;
-    assert(node->type == NODE_TYPE_STRUCT);
+
+    // We will allow union access here as they share similar aspects as structures.
+    assert(node_is_struct_or_union(node));
 
     struct vector *struct_vars_vec = node->_struct.body_n->body.statements;
     vector_set_peek_pointer(struct_vars_vec, 0);
@@ -570,6 +573,39 @@ struct node *struct_node_for_name(struct compile_process *current_process, const
     return node;
 }
 
+struct node *union_node_for_name(struct compile_process *current_process, const char *struct_name)
+{
+    struct node *node = node_from_symbol(current_process, struct_name);
+    if (!node)
+        return NULL;
+
+    if (node->type != NODE_TYPE_UNION)
+        return NULL;
+
+    return node;
+}
+
+
+struct node* variable_struct_or_union_body_node(struct node* var_node)
+{
+    if (var_node->type != NODE_TYPE_VARIABLE)
+    {
+        return NULL;
+    }
+
+    if (!datatype_is_struct_or_union(&var_node->var.type))
+    {
+        return NULL;
+    }
+    
+    if (var_node->var.type.type == DATA_TYPE_STRUCT)
+    {
+        return var_node->var.type.struct_node->_struct.body_n;
+    }
+    return var_node->var.type.union_node->_union.body_n;
+}
+
+
 struct node *variable_struct_node(struct node *var_node)
 {
     if (var_node->type != NODE_TYPE_VARIABLE)
@@ -592,6 +628,17 @@ bool variable_struct_padded(struct node *var_node)
     }
 
     return s_node->_struct.body_n->body.padded;
+}
+
+bool variable_padded(struct node* var_node)
+{
+    struct node* node = variable_struct_or_union_body_node(var_node);
+    if (!node)
+    {
+        return false;
+    }
+
+    return node->body.padded;
 }
 
 struct node *body_largest_variable_node(struct node *body_node)

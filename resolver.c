@@ -220,7 +220,7 @@ struct resolver_entity *resolver_new_entity_for_var_node_no_push(struct resolver
 struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private)
 {
 
-    struct resolver_entity* entity = resolver_new_entity_for_var_node_no_push(process, var_node, private);
+    struct resolver_entity *entity = resolver_new_entity_for_var_node_no_push(process, var_node, private);
     vector_push(process->scope.current->entities, &entity);
     return entity;
 }
@@ -260,11 +260,19 @@ struct resolver_entity *resolver_get_entity_in_scope_with_entity_type(struct res
     // If we have a last struct entity set then we must be accessing a structure
     // i.e a.b.c therefore we can assume a variable type since structures can only hold variables
     // and other structures that are named with variables.
-    if (result->last_struct_entity && result->last_struct_entity->node->var.type.type == DATA_TYPE_STRUCT)
+    if (result->last_struct_entity && node_is_struct_or_union_variable(result->last_struct_entity->node))
     {
         struct resolver_scope *scope = result->last_struct_entity->scope;
         struct node *out_node = NULL;
+        struct datatype *node_var_datatype = &result->last_struct_entity->node->var.type;
+
+        // Unions offset will always be zero ;) 
         int offset = struct_offset(resolver_compiler(resolver), node_var_type_str(result->last_struct_entity->node), entity_name, &out_node, 0, 0);
+        if (node_var_datatype->type == DATA_TYPE_UNION)
+        {
+            // Union offset will be zero.
+            offset = 0;
+        }
         return resolver_new_entity_for_var_node_no_push(resolver, out_node, resolver->callbacks.new_struct_entity(result, out_node, offset, scope));
     }
 
@@ -544,7 +552,7 @@ struct resolver_entity *resolver_follow_identifier(struct resolver_process *reso
         result->identifier = entity;
     }
 
-    if (entity->type == RESOLVER_ENTITY_TYPE_VARIABLE && entity->var_data.dtype.type == DATA_TYPE_STRUCT)
+    if (entity->type == RESOLVER_ENTITY_TYPE_VARIABLE && datatype_is_struct_or_union(&entity->var_data.dtype))
     {
         result->last_struct_entity = entity;
     }

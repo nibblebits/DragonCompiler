@@ -1555,6 +1555,9 @@ bool variable_padded(struct node* var_node);
  */
 struct node *variable_struct_largest_variable_node(struct node *var_node);
 
+struct node *variable_struct_or_union_largest_variable_node(struct node *var_node);
+
+
 /**
  * Returns the largest variable declaration inside the provided body.
  * Largest being the variable that takes up the most room. Primitive variables only.

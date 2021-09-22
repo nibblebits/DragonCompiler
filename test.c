@@ -1,4 +1,4 @@
-struct mm
+union mm
 {
    int e;
    int k;
@@ -6,10 +6,15 @@ struct mm
 
 struct dog
 {
-   struct mm aa;
+   int x;
+   int m;
+   union mm aa;
 };
 
 struct dog d;
 int main()
 {
-   d.aa.e = 50;
+   d.x = 10;
+   d.m = 20;
+   d.aa.k = 50;
+}

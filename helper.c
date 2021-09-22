@@ -99,7 +99,7 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
             }
             else
             {
-                position = align_value_treat_positive(position, variable_struct_largest_variable_node(var_node_cur)->var.type.size);
+                position = align_value_treat_positive(position, variable_struct_or_union_largest_variable_node(var_node_cur)->var.type.size);
             }
         }
 
@@ -674,6 +674,11 @@ static long compile_computable_value(struct node *node)
 struct node *variable_struct_largest_variable_node(struct node *var_node)
 {
     return body_largest_variable_node(variable_struct_node(var_node)->_struct.body_n);
+}
+
+struct node* variable_struct_or_union_largest_variable_node(struct node* var_node)
+{
+    return body_largest_variable_node(variable_struct_or_union_body_node(var_node));
 }
 
 int compute_array_offset_with_multiplier(struct node *node, size_t single_element_size, size_t multiplier)

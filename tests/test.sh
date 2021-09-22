@@ -444,6 +444,15 @@ else
     echo -e "Structure with no type name test passed"
 fi
 
+echo -e "Union test"
+./build/union_test
+if [ $? -ne 50 ]; then
+    echo -e "Union test failed"
+    res_code=1
+else
+    echo -e "Union test passed"
+fi
+
 
 
 

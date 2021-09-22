@@ -905,7 +905,7 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     register_unset_flag(REGISTER_EAX_IS_USED);
 
     const char *reg_to_use = "eax";
-    const char *mov_type_keyword = codegen_byte_word_or_dword(datatype_size(&left_entity->node->var.type), &reg_to_use);
+    const char *mov_type_keyword = codegen_byte_word_or_dword(datatype_size(&variable_node(left_entity->node)->var.type), &reg_to_use);
 
     asm_push("mov %s [%s], %s", mov_type_keyword, codegen_entity_private(left_entity)->address, reg_to_use);
 }

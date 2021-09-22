@@ -264,16 +264,16 @@ struct resolver_entity *resolver_get_entity_in_scope_with_entity_type(struct res
     {
         struct resolver_scope *scope = result->last_struct_entity->scope;
         struct node *out_node = NULL;
-        struct datatype *node_var_datatype = &result->last_struct_entity->node->var.type;
+        struct datatype *node_var_datatype = &variable_node(result->last_struct_entity->node)->var.type;
 
         // Unions offset will always be zero ;) 
-        int offset = struct_offset(resolver_compiler(resolver), node_var_type_str(result->last_struct_entity->node), entity_name, &out_node, 0, 0);
+        int offset = struct_offset(resolver_compiler(resolver), node_var_type_str(variable_node(result->last_struct_entity->node)), entity_name, &out_node, 0, 0);
         if (node_var_datatype->type == DATA_TYPE_UNION)
         {
             // Union offset will be zero.
             offset = 0;
         }
-        return resolver_new_entity_for_var_node_no_push(resolver, out_node, resolver->callbacks.new_struct_entity(result, out_node, offset, scope));
+        return resolver_new_entity_for_var_node_no_push(resolver, out_node, resolver->callbacks.new_struct_entity(result, variable_node(out_node), offset, scope));
     }
 
     // Ok this is not a structure variable, lets search the scopes
@@ -441,7 +441,7 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
     }
     else if (right_operand->type == NODE_TYPE_NUMBER)
     {
-        entity = resolver_create_new_entity_for_var_node(resolver, result->identifier->node, resolver->callbacks.new_array_entity(result, left_entity, right_operand->llnum, last_array_index));
+        entity = resolver_create_new_entity_for_var_node(resolver, variable_node(result->identifier->node), resolver->callbacks.new_array_entity(result, left_entity, right_operand->llnum, last_array_index));
     }
 
     resolver_array_push(result, entity);

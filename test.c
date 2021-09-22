@@ -1,20 +1,24 @@
-union mm
-{
-   int e;
-   int k;
-};
 
 struct dog
 {
-   int x;
-   int m;
-   union mm aa;
+   struct nn
+   {
+      int e;
+      int dd;
+      struct ff
+      {
+         int x;
+      } ff;
+   } aa;
+   int k;
 };
 
-struct dog d;
 int main()
 {
-   d.x = 10;
-   d.m = 20;
-   d.aa.k = 50;
+  struct dog d;
+  d.aa.dd = 10;
+  d.aa.e = 20;
+  d.aa.ff.x = 90;
+  d.k = 40;
+
 }

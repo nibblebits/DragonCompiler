@@ -49,8 +49,8 @@ void resolver_default_entity_data_set_address(struct resolver_default_entity_dat
     }
     else
     {
-        resolver_default_global_asm_address(var_node->var.name, offset, entity_data->address);
-        sprintf(entity_data->base_address, "%s", var_node->var.name);
+        resolver_default_global_asm_address(variable_node(var_node)->var.name, offset, entity_data->address);
+        sprintf(entity_data->base_address, "%s", variable_node(var_node)->var.name);
     }
 }
 
@@ -60,7 +60,7 @@ struct resolver_default_entity_data *resolver_default_new_entity_data_for_var_no
     entity_data->offset = offset;
     entity_data->flags = flags;
     entity_data->type = RESOLVER_DEFAULT_ENTITY_DATA_TYPE_VARIABLE;
-    resolver_default_entity_data_set_address(entity_data, var_node, offset, flags);
+    resolver_default_entity_data_set_address(entity_data, variable_node(var_node), offset, flags);
     return entity_data;
 }
 
@@ -76,8 +76,8 @@ struct resolver_default_entity_data *resolver_default_new_entity_data_for_functi
 struct resolver_entity *resolver_default_new_scope_entity(struct resolver_process* resolver, struct node *var_node, int offset, int flags)
 {
     assert(var_node->type == NODE_TYPE_VARIABLE);
-    struct resolver_default_entity_data *entity_data = resolver_default_new_entity_data_for_var_node(var_node, offset, flags);
-    return resolver_new_entity_for_var_node(resolver, var_node, entity_data);
+    struct resolver_default_entity_data *entity_data = resolver_default_new_entity_data_for_var_node(variable_node(var_node), offset, flags);
+    return resolver_new_entity_for_var_node(resolver, variable_node(var_node), entity_data);
 }
 
 struct resolver_entity* resolver_default_register_function(struct resolver_process* resolver, struct node* func_node, int flags)
@@ -123,7 +123,7 @@ void *resolver_default_new_struct_entity(struct resolver_result *result, struct 
         entity_flags |= RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK;
     }
 
-    struct resolver_default_entity_data *result_entity = resolver_default_new_entity_data_for_var_node(result->identifier->node, offset, entity_flags);
+    struct resolver_default_entity_data *result_entity = resolver_default_new_entity_data_for_var_node(variable_node(result->identifier->node), offset, entity_flags);
     return result_entity;
 }
 
@@ -137,14 +137,14 @@ void *resolver_default_merge_struct_entity(struct resolver_result *result, struc
 
     int left_offset = resolver_default_entity_private(left_entity)->offset;
     int right_offset = resolver_default_entity_private(right_entity)->offset;
-    return resolver_default_new_entity_data_for_var_node(result->first_entity_const->node, left_offset + right_offset, entity_flags);
+    return resolver_default_new_entity_data_for_var_node(variable_node(result->first_entity_const->node), left_offset + right_offset, entity_flags);
 }
 
 void *resolver_default_new_array_entity(struct resolver_result *result, struct resolver_entity *array_entity, int index_val, int index)
 {
     int index_offset = array_offset(&array_entity->var_data.dtype, index, index_val);
     int final_offset = resolver_default_entity_private(array_entity)->offset + index_offset;
-    return resolver_default_new_entity_data_for_var_node(result->identifier->node, final_offset, 0);
+    return resolver_default_new_entity_data_for_var_node(variable_node(result->identifier->node), final_offset, 0);
 }
 
 void resolver_default_join_array_entity_index(struct resolver_result *result, struct resolver_entity *join_entity, int index_val, int index)
@@ -152,7 +152,7 @@ void resolver_default_join_array_entity_index(struct resolver_result *result, st
     struct resolver_default_entity_data *private = resolver_default_entity_private(join_entity);
     int index_offset = array_offset(&join_entity->var_data.dtype, index, index_val);
     int final_offset = resolver_default_entity_private(join_entity)->offset + index_offset;
-    resolver_default_entity_data_set_address(resolver_default_entity_private(join_entity), join_entity->node, final_offset, 0);
+    resolver_default_entity_data_set_address(resolver_default_entity_private(join_entity), variable_node(join_entity->node), final_offset, 0);
 }
 
 void resolver_default_delete_entity(struct resolver_entity *entity)

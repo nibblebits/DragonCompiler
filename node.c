@@ -225,3 +225,22 @@ bool function_node_is_prototype(struct node* node)
 {
     return node->func.body_n == NULL;
 }
+
+struct node* variable_node(struct node* node)
+{
+    struct node* var_node = NULL;
+    if (node->type == NODE_TYPE_VARIABLE)
+    {
+        var_node = node;
+    }   
+    else if(node->type == NODE_TYPE_STRUCT)
+    {
+        var_node = node->_struct.var;
+    }
+    else if(node->type == NODE_TYPE_UNION)
+    {
+        var_node = node->_union.var;
+    }
+
+    return var_node;
+}

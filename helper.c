@@ -82,7 +82,7 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
         vector_set_flag(struct_vars_vec, VECTOR_FLAG_PEEK_DECREMENT);
     }
 
-    struct node *var_node_cur = vector_peek_ptr(struct_vars_vec);
+    struct node *var_node_cur = variable_node(vector_peek_ptr(struct_vars_vec));
     struct node *var_node_last = NULL;
     int position = last_pos;
     *var_node_out = NULL;
@@ -112,7 +112,7 @@ int struct_offset(struct compile_process *compile_proc, const char *struct_name,
         }
 
         var_node_last = var_node_cur;
-        var_node_cur = vector_peek_ptr(struct_vars_vec);
+        var_node_cur = variable_node(vector_peek_ptr(struct_vars_vec));
     }
 
     vector_unset_flag(struct_vars_vec, VECTOR_FLAG_PEEK_DECREMENT);
@@ -542,8 +542,10 @@ int compute_sum_padding_for_body(struct node *node)
 
 bool variable_node_is_primative(struct node *node)
 {
+    // It is possible that you can declare structures as well as defining
+    // a variable for them, therefore this has to be allowed.
     assert(node->type == NODE_TYPE_VARIABLE);
-    return node->var.type.type != DATA_TYPE_STRUCT && node->var.type.type != DATA_TYPE_UNION;
+    return !node_is_struct_or_union_variable(node);
 }
 
 size_t datatype_size(struct datatype *datatype)
@@ -586,9 +588,21 @@ struct node *union_node_for_name(struct compile_process *current_process, const 
 }
 
 
+struct node* struct_or_union_declaration_variable(struct node* node)
+{
+    assert(node->type == NODE_TYPE_STRUCT || node->type == NODE_TYPE_UNION);
+
+    if (node->type == NODE_TYPE_STRUCT)
+    {
+        return node->_struct.var;
+    }
+
+    return node->_union.var;
+}
+
 struct node* variable_struct_or_union_body_node(struct node* var_node)
 {
-    if (var_node->type != NODE_TYPE_VARIABLE)
+    if (var_node->type != NODE_TYPE_VARIABLE && !node_is_struct_or_union(var_node))
     {
         return NULL;
     }

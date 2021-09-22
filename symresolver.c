@@ -28,6 +28,12 @@ struct symbol* symresolver_get_symbol(struct compile_process* process, const cha
 
 struct symbol* symresolver_register_symbol(struct compile_process* process, const char* sym_name, int type, void* data)
 {
+    // Already registered then return NULL.
+    if (symresolver_get_symbol(process, sym_name))
+    {
+        return NULL;
+    }
+    
     struct symbol* sym = calloc(sizeof(struct symbol), 1);
     sym->name = sym_name;
     sym->type = type;

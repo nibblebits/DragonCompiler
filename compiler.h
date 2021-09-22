@@ -1941,6 +1941,13 @@ bool node_is_expression_or_parentheses(struct node *node);
 bool node_is_value_type(struct node *node);
 
 /**
+ * Returns the variable node of this node, if its not a variable node then
+ * NULL is returned. If this is a structure or union declaration node, declared
+ * with a variable then it will return the variable
+ */
+struct node* variable_node(struct node* node);
+
+/**
  * Returns true if the given character is a hexadecimal character
  */
 bool is_hex_char(char c);

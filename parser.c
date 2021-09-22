@@ -261,11 +261,11 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
 
     if (last_entity)
     {
-        offset += last_entity->node->var.aoffset;
+        offset += variable_node(last_entity->node)->var.aoffset;
         if (variable_node_is_primative(node))
         {
-            node->var.padding = padding(upward_stack ? offset : -offset, node->var.type.size);
-            last_entity->node->var.padding_after = node->var.padding;
+            variable_node(node)->var.padding = padding(upward_stack ? offset : -offset, node->var.type.size);
+            variable_node(last_entity->node)->var.padding_after = node->var.padding;
         }
     }
 
@@ -274,11 +274,12 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
     // If this is a structure variable then we must align the padding to a 4-byte boundary so long
     // as their was any padding in the original structure scope
     // \attention Maybe make a new function for second operand, a bit long...
-    if (!variable_node_is_primative(node) && variable_struct_or_union_body_node(node)->body.padded)
+    if (!variable_node_is_primative(node) 
+                && variable_struct_or_union_body_node(node)->body.padded)
     {
-        node->var.padding = padding(upward_stack ? offset : -offset, DATA_SIZE_DWORD);
+        variable_node(node)->var.padding = padding(upward_stack ? offset : -offset, DATA_SIZE_DWORD);
     }
-    node->var.aoffset = offset + (upward_stack ? node->var.padding : -node->var.padding);
+    variable_node(node)->var.aoffset = offset + (upward_stack ? variable_node(node)->var.padding : -variable_node(node)->var.padding);
 }
 
 void parser_scope_offset_for_structure(struct node *node, struct history *history)
@@ -757,6 +758,24 @@ void make_variable_node(struct datatype *datatype, struct token *name_token, str
     }
 }
 
+void make_variable_node_and_register(struct history *history, struct datatype *datatype, struct token *name_token, struct node *value_node)
+{
+    if (S_EQ(name_token->sval, "e"))
+    {
+        printf("here");
+    }
+
+    make_variable_node(datatype, name_token, value_node);
+    struct node *var_node = node_pop();
+    // Calculate scope offset
+    parser_scope_offset(var_node, history);
+    parser_scope_push(parser_new_scope_entity(var_node, var_node->var.aoffset, 0), var_node->var.type.size);
+    resolver_default_new_scope_entity(current_process->resolver, var_node, var_node->var.aoffset, 0);
+
+    // Push the variable node back to the stack
+    node_push(var_node);
+}
+
 void make_bracket_node(struct node *inner_node)
 {
     node_create(&(struct node){NODE_TYPE_BRACKET, .bracket.inner = inner_node});
@@ -785,7 +804,7 @@ static void parser_append_size_for_node_struct(struct history *history, size_t *
 
 static void parser_append_size_for_node(struct history *history, size_t *_variable_size, struct node *node)
 {
-    if (node->type == NODE_TYPE_VARIABLE)
+    if (node && node->type == NODE_TYPE_VARIABLE)
     {
         // Is this a structure variable?
         if (node->var.type.type == DATA_TYPE_STRUCT)
@@ -850,7 +869,7 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
 
     // Change the variable_size if this statement is a variable.
     // Incrementing it by the size of our variable
-    parser_append_size_for_node(history, variable_size, stmt_node);
+    parser_append_size_for_node(history, variable_size, variable_node(stmt_node));
 
     struct node *largest_var_node = NULL;
     if (stmt_node->type == NODE_TYPE_VARIABLE)
@@ -910,7 +929,7 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
 
         // Change the variable_size if this statement is a variable.
         // Incrementing it by the size of our variable
-        parser_append_size_for_node(history, variable_size, stmt_node);
+        parser_append_size_for_node(history, variable_size, variable_node(stmt_node));
     }
 
     // bodies must end with a right curley bracket!
@@ -1141,7 +1160,7 @@ void parse_struct_no_new_scope(struct datatype *dtype, bool is_forward_declarati
         struct_node->flags |= NODE_FLAG_HAS_VARIABLE_COMBINED;
 
         // We must create a variable for this structure
-        make_variable_node(dtype, var_name, NULL);
+        make_variable_node_and_register(history_begin(&history, 0), dtype, var_name, NULL);
         struct_node->_struct.var = node_pop();
     }
 
@@ -1879,7 +1898,6 @@ int size_of_union(const char *union_name)
     return node->_union.body_n->body.size;
 }
 
-
 void parser_datatype_init_type_and_size(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth, bool is_union)
 {
     if (S_EQ(datatype_token->sval, "void"))
@@ -1925,7 +1943,6 @@ void parser_datatype_init_type_and_size(struct token *datatype_token, struct dat
             datatype_out->type = DATA_TYPE_UNION;
             datatype_out->size = size_of_union(datatype_token->sval);
             datatype_out->union_node = union_node_for_name(current_process, datatype_token->sval);
-
         }
         else
         {
@@ -2041,16 +2058,7 @@ void parse_variable(struct datatype *dtype, struct token *name_token, struct his
         value_node = node_pop();
     }
 
-    make_variable_node(dtype, name_token, value_node);
-
-    struct node *var_node = node_pop();
-    // Calculate scope offset
-    parser_scope_offset(var_node, history);
-    parser_scope_push(parser_new_scope_entity(var_node, var_node->var.aoffset, 0), var_node->var.type.size);
-    resolver_default_new_scope_entity(current_process->resolver, var_node, var_node->var.aoffset, 0);
-
-    // Push the variable node back to the stack
-    node_push(var_node);
+    make_variable_node_and_register(history, dtype, name_token, value_node);
 }
 
 /**
@@ -2192,6 +2200,12 @@ void parse_variable_function_or_struct_union(struct history *history)
         // Therefore this is not a variable
         // We should parse the structure
         parse_struct_or_union(&dtype);
+
+        struct node *su_node = node_pop();
+        // It's possible we have a sub-structure or sub-union that needs registering
+        // with the symresolver
+        symresolver_build_for_node(current_process, su_node);
+        node_push(su_node);
         return;
     }
 

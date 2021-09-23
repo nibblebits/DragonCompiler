@@ -27,7 +27,7 @@ struct expressionable_op_precedence_group
  * 
  * Also end the collection of groups with a NULL pointer
  */
-static struct expressionable_op_precedence_group op_precedence[TOTAL_OPERATOR_GROUPS] = {
+struct expressionable_op_precedence_group op_precedence[TOTAL_OPERATOR_GROUPS] = {
     {.operators = {"++", "--", "()", "[]", "(", "[", "]", ".", "->", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
     {.operators = {"*", "/", "%%", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},
     {.operators = {"+", "-", NULL}, .associativity = ASSOCIATIVITY_LEFT_TO_RIGHT},

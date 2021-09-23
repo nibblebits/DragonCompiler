@@ -462,6 +462,13 @@ else
     echo -e "Sub-struct test passed"
 fi
 
-
+echo -e "printf test"
+./build/printf_test
+if [ $? -ne 22 ]; then
+    echo -e "printf test failed"
+    res_code=1
+else
+    echo -e "printf test passed"
+fi
 echo -e "All tests finished"
 exit $res_code

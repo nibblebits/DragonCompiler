@@ -1178,6 +1178,8 @@ void codegen_generate_function_call(struct node *node, struct resolver_entity *e
 
     // Now to restore the stack
     codegen_stack_add(entity->func_call_data.stack_size);
+
+    register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
 void codegen_generate_for_entity(struct node *node, struct resolver_entity *entity, struct history *history)

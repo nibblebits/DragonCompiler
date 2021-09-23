@@ -255,19 +255,19 @@ struct resolver_entity *resolver_get_entity_in_scope_with_entity_type(struct res
 {
     // If we have a last structure entity, then they have to be asking for a variable
     // if they are not then theirs a bug here.
-    assert(!result->last_struct_entity || entity_type == -1 || entity_type == RESOLVER_ENTITY_TYPE_VARIABLE);
+    assert(!result->last_struct_union_entity || entity_type == -1 || entity_type == RESOLVER_ENTITY_TYPE_VARIABLE);
 
     // If we have a last struct entity set then we must be accessing a structure
     // i.e a.b.c therefore we can assume a variable type since structures can only hold variables
     // and other structures that are named with variables.
-    if (result->last_struct_entity && node_is_struct_or_union_variable(result->last_struct_entity->node))
+    if (result->last_struct_union_entity && node_is_struct_or_union_variable(result->last_struct_union_entity->node))
     {
-        struct resolver_scope *scope = result->last_struct_entity->scope;
+        struct resolver_scope *scope = result->last_struct_union_entity->scope;
         struct node *out_node = NULL;
-        struct datatype *node_var_datatype = &variable_node(result->last_struct_entity->node)->var.type;
+        struct datatype *node_var_datatype = &variable_node(result->last_struct_union_entity->node)->var.type;
 
         // Unions offset will always be zero ;) 
-        int offset = struct_offset(resolver_compiler(resolver), node_var_type_str(variable_node(result->last_struct_entity->node)), entity_name, &out_node, 0, 0);
+        int offset = struct_offset(resolver_compiler(resolver), node_var_type_str(variable_node(result->last_struct_union_entity->node)), entity_name, &out_node, 0, 0);
         if (node_var_datatype->type == DATA_TYPE_UNION)
         {
             // Union offset will be zero.
@@ -554,7 +554,7 @@ struct resolver_entity *resolver_follow_identifier(struct resolver_process *reso
 
     if (entity->type == RESOLVER_ENTITY_TYPE_VARIABLE && datatype_is_struct_or_union(&entity->var_data.dtype))
     {
-        result->last_struct_entity = entity;
+        result->last_struct_union_entity = entity;
     }
     return entity;
 }

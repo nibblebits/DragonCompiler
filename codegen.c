@@ -283,10 +283,6 @@ static struct resolver_default_entity_data *codegen_new_entity_data()
 {
     return resolver_default_new_entity_data();
 }
-struct resolver_default_entity_data *codegen_new_entity_data_for_var_node(struct node *var_node, int offset, int flags)
-{
-    return resolver_default_new_entity_data_for_var_node(var_node, offset, flags);
-}
 
 struct resolver_default_entity_data *codegen_new_entity_data_for_function(struct node *func_node, int flags)
 {
@@ -1979,6 +1975,18 @@ void codegen_generate_struct(struct node* node)
     }
 }
 
+
+void codegen_generate_union(struct node* node)
+{
+    // We only have to care if we have a variable on this struct
+    if(node->flags & NODE_FLAG_HAS_VARIABLE_COMBINED)
+    {
+        // Generate the structure variable
+        codegen_generate_global_variable(node->_union.var);
+    }
+}
+
+
 void codegen_generate_data_section_part(struct node *node)
 {
     if (node->type == NODE_TYPE_VARIABLE)
@@ -1989,6 +1997,10 @@ void codegen_generate_data_section_part(struct node *node)
     {
         codegen_generate_struct(node);
     } 
+    else if(node->type == NODE_TYPE_UNION)
+    {
+        codegen_generate_union(node);
+    }
 }
 
 void codegen_generate_data_section()

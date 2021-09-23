@@ -722,7 +722,7 @@ struct resolver_result
     struct resolver_entity *identifier;
 
     // Equal to the last structure entity discovered.
-    struct resolver_entity *last_struct_entity;
+    struct resolver_entity *last_struct_union_entity;
 
     struct resolver_array_data array_data;
 

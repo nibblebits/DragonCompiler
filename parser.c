@@ -784,9 +784,8 @@ void make_bracket_node(struct node *inner_node)
 void parse_expressionable(struct history *history);
 void parse_for_parentheses(struct history *history);
 
-static void parser_append_size_for_node_struct(struct history *history, size_t *_variable_size, struct node *node)
+static void parser_append_size_for_node_struct_union(struct history *history, size_t *_variable_size, struct node *node)
 {
-    struct node *struct_node = variable_struct_node(node);
     *_variable_size += variable_size(node);
     if (node->var.type.flags & DATATYPE_FLAG_IS_POINTER)
     {
@@ -794,7 +793,7 @@ static void parser_append_size_for_node_struct(struct history *history, size_t *
         return;
     }
 
-    struct node *largest_var_node = struct_node->_struct.body_n->body.largest_var_node;
+    struct node *largest_var_node = variable_struct_or_union_body_node(node)->body.largest_var_node;
     if (largest_var_node)
     {
         // Great we need to align to its largest datatype boundary ((Way to large, make a function for that mess))
@@ -805,11 +804,11 @@ static void parser_append_size_for_node_struct(struct history *history, size_t *
 static void parser_append_size_for_node(struct history *history, size_t *_variable_size, struct node *node)
 {
     if (node && node->type == NODE_TYPE_VARIABLE)
-    {
+    {   
         // Is this a structure variable?
-        if (node->var.type.type == DATA_TYPE_STRUCT)
+        if (node_is_struct_or_union_variable(node))
         {
-            parser_append_size_for_node_struct(history, _variable_size, node);
+            parser_append_size_for_node_struct_union(history, _variable_size, node);
             return;
         }
 
@@ -1202,7 +1201,7 @@ void parse_union_no_scope(struct datatype *dtype, bool is_forward_declaration)
         union_node->flags |= NODE_FLAG_HAS_VARIABLE_COMBINED;
 
         // We must create a variable for this union
-        make_variable_node(dtype, var_name, NULL);
+        make_variable_node_and_register(history_begin(&history, 0), dtype, var_name, NULL);
         union_node->_union.var = node_pop();
     }
 

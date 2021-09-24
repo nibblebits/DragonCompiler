@@ -1,6 +1,7 @@
-int printf(char* x, int xx);
+const int xx = 50;
 int main()
 {
-   printf("testing %i", 50);
-   return 22;
+   int x;
+   x = xx+40+30;
+   return x;
 }

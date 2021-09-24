@@ -1300,71 +1300,13 @@ int preprocessor_evaluate_identifier(struct compile_process *compiler, struct pr
 
 int preprocessor_arithmetic(struct compile_process *compiler, long left_operand, long right_operand, const char *op)
 {
-    int result = 0;
-    if (S_EQ(op, "*"))
-    {
-        result = left_operand * right_operand;
-    }
-    else if (S_EQ(op, "/"))
-    {
-        result = left_operand / right_operand;
-    }
-    else if (S_EQ(op, "+"))
-    {
-        result = left_operand + right_operand;
-    }
-    else if (S_EQ(op, "-"))
-    {
-        result = left_operand - right_operand;
-    }
-    else if (S_EQ(op, "=="))
-    {
-        result = left_operand == right_operand;
-    }
-    else if (S_EQ(op, "!="))
-    {
-        result = left_operand != right_operand;
-    }
-    else if (S_EQ(op, ">"))
-    {
-        result = left_operand > right_operand;
-    }
-    else if (S_EQ(op, "<"))
-    {
-        result = left_operand < right_operand;
-    }
-    else if (S_EQ(op, ">="))
-    {
-        result = left_operand >= right_operand;
-    }
-    else if (S_EQ(op, "<="))
-    {
-        result = left_operand <= right_operand;
-    }
-    else if (S_EQ(op, "<<"))
-    {
-        result = left_operand << right_operand;
-    }
-    else if (S_EQ(op, ">>"))
-    {
-        result = left_operand >> right_operand;
-    }
-    else if (S_EQ(op, "&&"))
-    {
-        result = left_operand && right_operand;
-    }
-    else if (S_EQ(op, "||"))
-    {
-        result = left_operand || right_operand;
-    }
-    else
+    bool success = false;
+    long result = arithmetic(compiler, left_operand, right_operand, op, &success);
+
+    if (!success)
     {
         compiler_error(compiler, "We do not support the operator %s for preprocessor arithmetic", op);
     }
-
-    // Unary operators will be hanlded later...
-    // Forgot to handle them.
-
     return result;
 }
 

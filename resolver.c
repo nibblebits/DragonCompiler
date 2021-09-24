@@ -537,7 +537,6 @@ static struct resolver_entity *resolver_follow_exp(struct resolver_process *reso
 struct resolver_entity *resolver_follow_identifier(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     struct resolver_entity *entity = resolver_entity_clone(resolver_get_entity(result, resolver, node->sval));
-    assert(entity);
     if (!entity)
     {
         return NULL;

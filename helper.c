@@ -8,6 +8,79 @@
 #include <assert.h>
 #include <ctype.h>
 
+
+long arithmetic(struct compile_process* compiler, long left_operand, long right_operand, const char* op, bool* success)
+{
+    *success = true;
+    int result = 0;
+    if (S_EQ(op, "*"))
+    {
+        result = left_operand * right_operand;
+    }
+    else if (S_EQ(op, "/"))
+    {
+        result = left_operand / right_operand;
+    }
+    else if (S_EQ(op, "+"))
+    {
+        result = left_operand + right_operand;
+    }
+    else if (S_EQ(op, "-"))
+    {
+        result = left_operand - right_operand;
+    }
+    else if (S_EQ(op, "=="))
+    {
+        result = left_operand == right_operand;
+    }
+    else if (S_EQ(op, "!="))
+    {
+        result = left_operand != right_operand;
+    }
+    else if (S_EQ(op, ">"))
+    {
+        result = left_operand > right_operand;
+    }
+    else if (S_EQ(op, "<"))
+    {
+        result = left_operand < right_operand;
+    }
+    else if (S_EQ(op, ">="))
+    {
+        result = left_operand >= right_operand;
+    }
+    else if (S_EQ(op, "<="))
+    {
+        result = left_operand <= right_operand;
+    }
+    else if (S_EQ(op, "<<"))
+    {
+        result = left_operand << right_operand;
+    }
+    else if (S_EQ(op, ">>"))
+    {
+        result = left_operand >> right_operand;
+    }
+    else if (S_EQ(op, "&&"))
+    {
+        result = left_operand && right_operand;
+    }
+    else if (S_EQ(op, "||"))
+    {
+        result = left_operand || right_operand;
+    }
+    else
+    {
+        *success = false;
+    }
+
+    // Unary operators will be hanlded later...
+    // Forgot to handle them.
+
+    return result;
+}
+
+
 bool datatype_is_struct_or_union(struct datatype* dtype)
 {
     return dtype->type == DATA_TYPE_STRUCT || dtype->type == DATA_TYPE_UNION;

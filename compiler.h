@@ -1436,6 +1436,10 @@ bool node_in_expression(struct node *node);
 
 bool node_is_root_expression(struct node *node);
 
+bool node_is_possibly_constant(struct node* node);
+bool node_is_constant(struct resolver_process *process, struct node *node);
+long node_pull_literal(struct resolver_process* process, struct node *node);
+
 /**
  * Returns the entire stack size for the given function, including all sub scopes
  */
@@ -1910,6 +1914,11 @@ struct code_generator *codegenerator_new(struct compile_process *process);
  * Returns true if the address can be caclulated at compile time
  */
 bool is_compile_computable(struct node *node);
+
+/**
+ * Computes the provided expression into a long
+ */
+long arithmetic(struct compile_process* compiler, long left_operand, long right_operand, const char* op, bool* success);
 
 /**
  * Returns true if the given character is one of the provided delims

@@ -112,6 +112,8 @@ static struct compile_process *current_process;
 static struct fixup_system *parser_fixup_sys;
 int parse_next();
 void parse_statement(struct history *history);
+void parse_expressionable_root(struct history *history);
+void parse_expressionable_for_op(struct history *history, const char *op);
 
 static struct history *history_down(struct history *history, int flags)
 {
@@ -261,8 +263,7 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
     // If this is a structure variable then we must align the padding to a 4-byte boundary so long
     // as their was any padding in the original structure scope
     // \attention Maybe make a new function for second operand, a bit long...
-    if (!variable_node_is_primative(node) 
-                && variable_struct_or_union_body_node(node)->body.padded)
+    if (!variable_node_is_primative(node) && variable_struct_or_union_body_node(node)->body.padded)
     {
         variable_node(node)->var.padding = padding(upward_stack ? offset : -offset, DATA_SIZE_DWORD);
     }
@@ -747,11 +748,6 @@ void make_variable_node(struct datatype *datatype, struct token *name_token, str
 
 void make_variable_node_and_register(struct history *history, struct datatype *datatype, struct token *name_token, struct node *value_node)
 {
-    if (S_EQ(name_token->sval, "e"))
-    {
-        printf("here");
-    }
-
     make_variable_node(datatype, name_token, value_node);
     struct node *var_node = node_pop();
     // Calculate scope offset
@@ -791,7 +787,7 @@ static void parser_append_size_for_node_struct_union(struct history *history, si
 static void parser_append_size_for_node(struct history *history, size_t *_variable_size, struct node *node)
 {
     if (node && node->type == NODE_TYPE_VARIABLE)
-    {   
+    {
         // Is this a structure variable?
         if (node_is_struct_or_union_variable(node))
         {
@@ -1279,7 +1275,7 @@ void parse_keyword_parentheses_expression(const char *keyword)
     struct history history;
     expect_keyword(keyword);
     expect_op("(");
-    parse_expressionable(history_begin(&history, 0));
+    parse_expressionable_root(history_begin(&history, 0));
     expect_sym(')');
 }
 
@@ -1330,7 +1326,7 @@ bool parse_for_loop_part(struct history *history)
         return false;
     }
 
-    parse_expressionable(history);
+    parse_expressionable_root(history);
     // We must ignore the semicolon after each expression
     expect_sym(';');
     return true;
@@ -1343,7 +1339,7 @@ bool parse_for_loop_part_loop(struct history *history)
         return false;
     }
 
-    parse_expressionable(history);
+    parse_expressionable_root(history);
     return true;
 }
 
@@ -1382,7 +1378,7 @@ void parse_for(struct history *history)
 void parse_case(struct history *history)
 {
     expect_keyword("case");
-    parse_expressionable(history);
+    parse_expressionable_root(history);
     struct node *case_exp_node = node_pop();
     expect_sym(':');
     make_case_node(case_exp_node);
@@ -1479,7 +1475,7 @@ void parse_if(struct history *history)
 {
     expect_keyword("if");
     expect_op("(");
-    parse_expressionable(history);
+    parse_expressionable_root(history);
     expect_sym(')');
 
     struct node *cond_node = node_pop();
@@ -1626,7 +1622,7 @@ void parse_exp_normal(struct history *history)
     else
     {
         // We must parse the right operand
-        parse_expressionable(history_down(history, history->flags | additional_flags));
+        parse_expressionable_for_op(history_down(history, history->flags | additional_flags), op);
     }
 
     struct node *node_right = node_pop();
@@ -1651,7 +1647,7 @@ void parse_for_array(struct history *history)
     }
 
     expect_op("[");
-    parse_expressionable(history);
+    parse_expressionable_root(history);
     expect_sym(']');
 
     struct node *exp_node = node_pop();
@@ -1676,13 +1672,13 @@ void parse_for_tenary(struct history *history)
     expect_op("?");
 
     // Let's parse the TRUE result of this tenary
-    parse_expressionable(history_down(history, HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL));
+    parse_expressionable_root(history_down(history, HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL));
     struct node *true_result_node = node_pop();
     // Now comes the colon
     expect_sym(':');
 
     // Finally the false result
-    parse_expressionable(history_down(history, HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL));
+    parse_expressionable_root(history_down(history, HISTORY_FLAG_PARENTHESES_IS_NOT_A_FUNCTION_CALL));
     struct node *false_result_node = node_pop();
 
     // Now to craft the tenary
@@ -1767,11 +1763,117 @@ int parse_expressionable_single(struct history *history)
 
     return res;
 }
+
+struct node *parser_evaluate_exp_to_numerical_node(struct node *node)
+{
+    assert(node->type == NODE_TYPE_EXPRESSION);
+    struct node *left_node = node->exp.left;
+    struct node *right_node = node->exp.right;
+    const char *op = node->exp.op;
+
+    assert(node_is_constant(current_process->resolver, left_node) && node_is_constant(current_process->resolver, right_node));
+
+    long left_val = node_pull_literal(current_process->resolver, left_node);
+    long right_val = node_pull_literal(current_process->resolver, right_node);
+
+    bool success = false;
+    long result = arithmetic(current_process, left_val, right_val, op, &success);
+    if (!success)
+    {
+        return node;
+    }
+    // We must create a number node for this expression
+
+    node_create(&(struct node){.type = NODE_TYPE_NUMBER, .llnum = result});
+    return node_pop();
+}
+
+struct node *parser_evaluate_identifier_to_numerical_node(struct node *node)
+{
+    assert(node->type == NODE_TYPE_IDENTIFIER);
+    if (node_is_constant(current_process->resolver, node))
+    {
+        long val = node_pull_literal(current_process->resolver, node);
+        node_create(&(struct node){.type = NODE_TYPE_NUMBER, .llnum = val});
+        return node_pop();
+    }
+
+    return node;
+}
+struct node *parser_const_to_literal(struct node *node);
+
+struct node *parser_exp_const_to_literal(struct node *node)
+{
+    assert(node->type == NODE_TYPE_EXPRESSION);
+
+    node->exp.left = parser_const_to_literal(node->exp.left);
+    node->exp.right = parser_const_to_literal(node->exp.right);
+
+    if (node_is_constant(current_process->resolver, node->exp.left) && node_is_constant(current_process->resolver, node->exp.right))
+    {
+        // We must compute the constant expression into a single literal node
+        return parser_evaluate_exp_to_numerical_node(node);
+    }
+    return node;
+}
+
+struct node *parser_exp_parenthesis_const_to_literal(struct node *node)
+{
+    return parser_const_to_literal(node->parenthesis.exp);
+}
+
+/**
+ * Convert all constant expressions to a single numerical node
+ * 
+ * \return Returns the resulting node.
+ */
+struct node *parser_const_to_literal(struct node *node)
+{
+    struct node *result_node = node;
+    switch (node->type)
+    {
+    case NODE_TYPE_EXPRESSION:
+        result_node = parser_exp_const_to_literal(node);
+        break;
+
+    case NODE_TYPE_EXPRESSION_PARENTHESIS:
+        result_node = parser_exp_parenthesis_const_to_literal(node);
+        break;
+
+    case NODE_TYPE_IDENTIFIER:
+        result_node = parser_evaluate_identifier_to_numerical_node(node);
+        break;
+    }
+    return result_node;
+}
+
+void parse_expressionable_root(struct history *history)
+{
+    parse_expressionable(history);
+    struct node *result_node = parser_const_to_literal(node_pop());
+    node_push(result_node);
+}
+
 void parse_expressionable(struct history *history)
 {
     while (parse_expressionable_single(history) == 0)
     {
     }
+}
+
+void parse_expressionable_for_op(struct history *history, const char *op)
+{
+    struct op_precedence_group *op_group = NULL;
+    parser_get_precedence_for_operator(op, &op_group);
+    if (op_group->associativity == ASSOCIATIVITY_RIGHT_TO_LEFT)
+    {
+        // Right to left associativity? Then this is a root expression
+        parse_expressionable_root(history);
+        return;
+    }
+
+    // Normal expression.
+    parse_expressionable(history);
 }
 
 void parse_for_parentheses(struct history *history)
@@ -1790,7 +1892,7 @@ void parse_for_parentheses(struct history *history)
 
     // We want a new history for parentheses
     expect_op("(");
-    parse_expressionable(history_begin(history, 0));
+    parse_expressionable_root(history_begin(history, 0));
     expect_sym(')');
 
     struct node *exp_node = node_pop();
@@ -2005,7 +2107,7 @@ struct array_brackets *parse_array_brackets(struct history *history)
     while (token_next_is_operator("["))
     {
         expect_op("[");
-        parse_expressionable(history);
+        parse_expressionable_root(history);
         expect_sym(']');
 
         struct node *exp_node = node_pop();
@@ -2040,7 +2142,7 @@ void parse_variable(struct datatype *dtype, struct token *name_token, struct his
         // Now we now we are at the "=" lets pop it off the token stack
         token_next();
         // Parse the value expression i.e the "50"
-        parse_expressionable(history);
+        parse_expressionable_root(history);
         value_node = node_pop();
     }
 
@@ -2229,7 +2331,7 @@ void parse_keyword_return(struct history *history)
 
     // Ok we parsed the return keyword, lets now parse the expression of the return
     // keyword and then we expect a semicolon ;)
-    parse_expressionable(history);
+    parse_expressionable_root(history);
 
     struct node *ret_expr = node_pop();
     make_return_node(ret_expr);
@@ -2273,7 +2375,7 @@ void parse_statement(struct history *history)
     }
     // This must be an expression as its not a keyword
     // I.e a = 50;
-    parse_expressionable(history);
+    parse_expressionable_root(history);
 
     // Do we have a symbol here that is not a semicolon then it may be treated differently if we do
     if (token_peek_next()->type == TOKEN_TYPE_SYMBOL && !token_is_symbol(token_peek_next(), ';'))

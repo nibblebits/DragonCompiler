@@ -7,6 +7,7 @@ struct lex_process_functions compiler_lex_functions = {
     .peek_char = compile_process_peek_char,
     .push_char = compile_process_push_char};
 
+
 void compiler_error(struct compile_process *compiler, const char *msg, ...)
 {
     va_list args;
@@ -14,7 +15,7 @@ void compiler_error(struct compile_process *compiler, const char *msg, ...)
     vfprintf(stderr, msg, args);
     va_end(args);
 
-    fprintf(stderr, " on line %i, col %i\n", compiler->pos.line, compiler->pos.col);
+    fprintf(stderr, " on line %i, col %i in file %s\n", compiler->pos.line, compiler->pos.col, compiler->pos.filename);
 
     exit(-1);
 }

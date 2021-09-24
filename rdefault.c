@@ -35,12 +35,19 @@ void resolver_default_global_asm_address(const char* name, int offset, char *add
         sprintf(address_out, "%s", name);
         return;
     }
-
+    assert(name);
+    assert(address_out);
     sprintf(address_out, "%s+%i", name, offset);
 }
 
 void resolver_default_entity_data_set_address(struct resolver_default_entity_data *entity_data, struct node *var_node, int offset, int flags)
 {
+    if(!variable_node(var_node)->var.name)
+    {
+        // Only variables whome have a name should we care about setting an address for
+        return;
+    }
+
     entity_data->offset = offset;
     if (flags & RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK)
     {
@@ -57,6 +64,7 @@ void resolver_default_entity_data_set_address(struct resolver_default_entity_dat
 struct resolver_default_entity_data *resolver_default_new_entity_data_for_var_node(struct node *var_node, int offset, int flags)
 {
     struct resolver_default_entity_data *entity_data = resolver_default_new_entity_data();
+    assert(variable_node(var_node));
     entity_data->offset = offset;
     entity_data->flags = flags;
     entity_data->type = RESOLVER_DEFAULT_ENTITY_DATA_TYPE_VARIABLE;

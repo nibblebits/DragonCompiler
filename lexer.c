@@ -60,7 +60,14 @@ void error(const char *fmt, ...)
 
 static char nextc()
 {
-    return lex_process->function->next_char(lex_process);
+    char c = lex_process->function->next_char(lex_process);
+    lex_process->pos.col++;
+    if (c == '\n')
+    {
+        lex_process->pos.col = 0;
+        lex_process->pos.line++;
+    }
+    return c;
 }
 
 static char peekc()
@@ -673,7 +680,10 @@ static struct token *read_next_token()
 int lex(struct lex_process *process)
 {
     lex_process = process;
-
+    // Copy filename to the lex process
+    lex_process->pos.filename = process->compiler->cfile.abs_path;
+    
+    
     struct token *token = read_next_token();
     while (token)
     {

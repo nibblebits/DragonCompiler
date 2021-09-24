@@ -83,6 +83,7 @@ struct pos
 {
     int line;
     int col;
+    const char* filename;
 };
 
 enum
@@ -430,7 +431,7 @@ struct compile_process
     {
         FILE *fp;
         // The absolute path of the compiler process input file
-        char abs_path[PATH_MAX];
+        const char* abs_path;
     } cfile;
 
     // The output file to compile to. NULL if this is a sub-file included with "include"
@@ -944,6 +945,9 @@ struct node
     int type;
     // Generic flags for the given node
     int flags;
+
+    // The position in the file for this given node.
+    struct pos pos;
 
     // What is this node binded too?
     struct node_binded

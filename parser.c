@@ -35,6 +35,9 @@ struct node *parser_current_body = NULL;
 // The current function we are in.
 struct node *parser_current_function = NULL;
 
+// The last token parsed by the parser, may be NULL
+struct token* parser_last_token = NULL;
+
 // First in the array = higher priority
 // This array is special, its essentially a group of arrays
 
@@ -392,6 +395,8 @@ static struct token *token_next()
 {
     struct token *next_token = vector_peek_no_increment(current_process->token_vec);
     parser_ignore_nl_or_comment(next_token);
+    current_process->pos = next_token->pos;
+    parser_last_token = next_token;
     return vector_peek(current_process->token_vec);
 }
 
@@ -546,6 +551,10 @@ static struct node *node_create(struct node *_node)
     memcpy(node, _node, sizeof(struct node));
     node->binded.owner = parser_current_body;
     node->binded.function = parser_current_function;
+    if (parser_last_token)
+    {
+        node->pos = parser_last_token->pos;
+    }
     node_push(node);
     return node;
 }
@@ -732,7 +741,12 @@ void datatype_struct_node_fix_end(struct fixup *fixup)
 
 void make_variable_node(struct datatype *datatype, struct token *name_token, struct node *value_node)
 {
-    node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type = *datatype, .var.name = name_token->sval, .var.val = value_node});
+    const char* name_str = NULL;
+    if (name_token)
+    {
+        name_str = name_token->sval;
+    }
+    node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type = *datatype, .var.name = name_str,.var.val = value_node});
     struct node *var_node = node_peek_or_null();
     // Is our struct node NULL? Then a fixup is required a forward declaration was present
     // Could argue that this is not the most sensible place to put it
@@ -754,7 +768,6 @@ void make_variable_node_and_register(struct history *history, struct datatype *d
     parser_scope_offset(var_node, history);
     parser_scope_push(parser_new_scope_entity(var_node, var_node->var.aoffset, 0), var_node->var.type.size);
     resolver_default_new_scope_entity(current_process->resolver, var_node, var_node->var.aoffset, 0);
-
     // Push the variable node back to the stack
     node_push(var_node);
 }
@@ -2159,7 +2172,11 @@ void parse_variable_full(struct history *history)
     struct datatype dtype;
     parse_datatype(&dtype);
 
-    struct token *name_token = token_next();
+    struct token *name_token = NULL;
+    if (token_peek_next()->type == TOKEN_TYPE_IDENTIFIER)
+    {
+        name_token = token_next();
+    }
     parse_variable(&dtype, name_token, history);
 }
 
@@ -2309,6 +2326,10 @@ void parse_variable_function_or_struct_union(struct history *history)
     // Ok great we have a datatype at this point, next comes the variable name
     // or the function name.. we don't know which one yet ;)
     struct token *name_token = token_next();
+    if (name_token->type != TOKEN_TYPE_IDENTIFIER)
+    {
+        parse_err("Expecting a name for the given variable declaration");
+    }
 
     // If we have a left bracket then this must be a function i.e int abc()
     // Let's handle the function
@@ -2520,7 +2541,6 @@ int parse(struct compile_process *process)
     // Create the root scope for parsing.
     // This scope will help us generate static offsets to be used during compile time.
     scope_create_root(process);
-
     current_process = process;
     parser_fixup_sys = fixup_sys_new();
 

@@ -57,8 +57,9 @@ struct compile_process *compile_process_create(const char *filename, const char 
     }
 
     // Load the absolute file path into the file.
-    realpath(filename, process->cfile.abs_path);
-
+    char* path = malloc(PATH_MAX);
+    realpath(filename, path);
+    process->cfile.abs_path = path;
     return process;
 }
 

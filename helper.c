@@ -8,8 +8,7 @@
 #include <assert.h>
 #include <ctype.h>
 
-
-long arithmetic(struct compile_process* compiler, long left_operand, long right_operand, const char* op, bool* success)
+long arithmetic(struct compile_process *compiler, long left_operand, long right_operand, const char *op, bool *success)
 {
     *success = true;
     int result = 0;
@@ -80,8 +79,7 @@ long arithmetic(struct compile_process* compiler, long left_operand, long right_
     return result;
 }
 
-
-bool datatype_is_struct_or_union(struct datatype* dtype)
+bool datatype_is_struct_or_union(struct datatype *dtype)
 {
     return dtype->type == DATA_TYPE_STRUCT || dtype->type == DATA_TYPE_UNION;
 }
@@ -660,8 +658,7 @@ struct node *union_node_for_name(struct compile_process *current_process, const 
     return node;
 }
 
-
-struct node* struct_or_union_declaration_variable(struct node* node)
+struct node *struct_or_union_declaration_variable(struct node *node)
 {
     assert(node->type == NODE_TYPE_STRUCT || node->type == NODE_TYPE_UNION);
 
@@ -673,7 +670,7 @@ struct node* struct_or_union_declaration_variable(struct node* node)
     return node->_union.var;
 }
 
-struct node* variable_struct_or_union_body_node(struct node* var_node)
+struct node *variable_struct_or_union_body_node(struct node *var_node)
 {
     if (var_node->type != NODE_TYPE_VARIABLE && !node_is_struct_or_union(var_node))
     {
@@ -684,14 +681,17 @@ struct node* variable_struct_or_union_body_node(struct node* var_node)
     {
         return NULL;
     }
-    
+
     if (var_node->var.type.type == DATA_TYPE_STRUCT)
     {
+        if (!var_node->var.type.struct_node)
+        {
+            printf("issue");
+        }
         return var_node->var.type.struct_node->_struct.body_n;
     }
     return var_node->var.type.union_node->_union.body_n;
 }
-
 
 struct node *variable_struct_node(struct node *var_node)
 {
@@ -717,9 +717,9 @@ bool variable_struct_padded(struct node *var_node)
     return s_node->_struct.body_n->body.padded;
 }
 
-bool variable_padded(struct node* var_node)
+bool variable_padded(struct node *var_node)
 {
-    struct node* node = variable_struct_or_union_body_node(var_node);
+    struct node *node = variable_struct_or_union_body_node(var_node);
     if (!node)
     {
         return false;
@@ -763,7 +763,7 @@ struct node *variable_struct_largest_variable_node(struct node *var_node)
     return body_largest_variable_node(variable_struct_node(var_node)->_struct.body_n);
 }
 
-struct node* variable_struct_or_union_largest_variable_node(struct node* var_node)
+struct node *variable_struct_or_union_largest_variable_node(struct node *var_node)
 {
     return body_largest_variable_node(variable_struct_or_union_body_node(var_node));
 }

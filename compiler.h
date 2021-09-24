@@ -382,6 +382,9 @@ struct code_generator
     // In the even of a "continue" we must go to the current entry point.
     // This will allow a loop to restart.
     struct vector *entry_points;
+
+    // Vector of struct response*
+    struct vector* responses;
 };
 
 enum
@@ -1941,6 +1944,14 @@ bool node_is_struct_or_union(struct node* node);
  */
 bool datatype_is_struct_or_union(struct datatype* dtype);
 
+/**
+ * Returns true if this type is a pointer
+ */
+bool is_pointer_datatype(struct datatype* dtype);
+/**
+ * Returns true if this type is a structure and not a pointer
+ */
+bool datatype_is_non_pointer_struct(struct datatype* dtype);
 /**
  * Returns true if this given variable node's data type is a structure or union
  */

@@ -84,6 +84,15 @@ bool datatype_is_struct_or_union(struct datatype *dtype)
     return dtype->type == DATA_TYPE_STRUCT || dtype->type == DATA_TYPE_UNION;
 }
 
+bool is_pointer_datatype(struct datatype* dtype)
+{
+    return dtype->pointer_depth > 0;
+}
+
+bool datatype_is_non_pointer_struct(struct datatype* dtype)
+{
+    return dtype->type == DATA_TYPE_STRUCT && !is_pointer_datatype(dtype);
+}
 bool is_hex_char(char c)
 {
     c = tolower(c);

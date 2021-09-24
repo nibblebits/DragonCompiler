@@ -65,6 +65,68 @@ struct history
     };
 };
 
+enum
+{
+    RESPONSE_TYPE_FUNCTION_CALL_ARGUMENT_PUSH
+};
+
+enum
+{
+    RESPONSE_FLAG_ACKNOWLEDGED = 0b00000001,
+    RESPONSE_FLAG_PUSHED_STRUCTURE = 0b00000010,
+};
+
+#define RESPONSE_SET(x) (&(struct response){x})
+#define RESPONSE_EMPTY RESPONSE_SET()
+
+struct response_data
+{
+};
+
+// Operations can pass results back up the stack.
+struct response
+{
+    int flags;
+    struct response_data data;
+};
+
+void codegen_response_expect()
+{
+    struct response *res = calloc(sizeof(struct response), 1);
+    vector_push(current_process->generator->responses, &res);
+}
+
+struct response_data* codegen_response_data(struct response* response)
+{
+    return &response->data;
+}
+
+struct response *codegen_response_pull()
+{
+    struct response *res = vector_back_ptr_or_null(current_process->generator->responses);
+    if (res)
+    {
+        vector_pop(current_process->generator->responses);
+    }
+
+    return res;
+}
+
+void codegen_response_acknowledge(struct response *response_in)
+{
+    struct response *res = vector_back_ptr_or_null(current_process->generator->responses);
+    if (res)
+    {
+        memcpy(res, response_in, sizeof(struct response));
+        res->flags |= RESPONSE_FLAG_ACKNOWLEDGED;
+    }
+}
+
+bool codegen_response_acknowledged(struct response *res)
+{
+    return res && res->flags & RESPONSE_FLAG_ACKNOWLEDGED;
+}
+
 int codegen_label_count()
 {
     static int count = 0;
@@ -743,6 +805,7 @@ static void codegen_gen_mem_access_first_for_expression(struct node *value_node,
     // not something that we want at all
 
     reg_to_use = codegen_sub_register("eax", entity->node->var.type.size);
+    assert(reg_to_use);
     if (!S_EQ(reg_to_use, "eax"))
     {
         // Okay we are not using the full 32 bit, lets XOR this thing we need 0s.
@@ -855,8 +918,30 @@ void codegen_generate_variable_access_for_array(struct resolver_entity *entity, 
     asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
 }
 
+void codegen_generate_structure_push(struct node *node, struct resolver_entity *entity, struct history *history)
+{
+    asm_push("; STRUCTURE PUSH");
+    size_t structure_size = align_value(entity->var_data.dtype.size, DATA_SIZE_DWORD);
+    int pushes = structure_size / DATA_SIZE_DWORD;
+
+    for (int i = pushes - 1; i >= 0; i--)
+    {
+        struct resolver_default_entity_data *private = codegen_entity_private(entity);
+        int chunk_offset = private->offset + (i * DATA_SIZE_DWORD);
+        asm_push("push dword [%s%i]", private->base_address, chunk_offset);
+    }
+    asm_push("; END STRUCTURE PUSH");
+
+    codegen_response_acknowledge(RESPONSE_SET(.flags=RESPONSE_FLAG_PUSHED_STRUCTURE));
+}
+
 void codegen_generate_variable_access_for_non_array(struct node *node, struct resolver_entity *entity, struct history *history)
 {
+    if (datatype_is_non_pointer_struct(&entity->var_data.dtype))
+    {
+        codegen_generate_structure_push(node, entity, history);
+        return;
+    }
     codegen_gen_mem_access(node, history->flags, entity);
 
     entity = resolver_result_entity_next(entity);
@@ -1153,6 +1238,10 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     }
 }
 
+bool codegen_should_push_function_call_argument(struct response *res)
+{
+    return !codegen_response_acknowledged(res) || !(res->flags & RESPONSE_FLAG_PUSHED_STRUCTURE);
+}
 void codegen_generate_function_call(struct node *node, struct resolver_entity *entity, struct history *history)
 {
     // Ok we have a function call entity lets generate it. First we must
@@ -1164,11 +1253,16 @@ void codegen_generate_function_call(struct node *node, struct resolver_entity *e
     struct node *argument_node = vector_peek_ptr(entity->func_call_data.arguments);
     while (argument_node)
     {
+        codegen_response_expect();
         register_unset_flag(REGISTER_EAX_IS_USED);
-        codegen_generate_expressionable(argument_node, history);
-        // At this point EAX will contain the result of the argument, lets push it to the stack
-        // ready for the function call
-        asm_push("PUSH EAX");
+        codegen_generate_expressionable(argument_node, history_down(history, history->flags | EXPRESSION_IN_FUNCTION_CALL));
+        struct response *res = codegen_response_pull();
+        if (codegen_should_push_function_call_argument(res))
+        {
+            // At this point EAX will contain the result of the argument, lets push it to the stack
+            // ready for the function call
+            asm_push("PUSH EAX");
+        }
 
         argument_node = vector_peek_ptr(entity->func_call_data.arguments);
     }
@@ -1959,35 +2053,32 @@ void codegen_generate_root_node(struct node *node)
     case NODE_TYPE_VARIABLE:
         // Was processed earlier.. for data section
         break;
-    
+
     case NODE_TYPE_FUNCTION:
         codegen_generate_function(node);
         break;
     }
 }
 
-
-void codegen_generate_struct(struct node* node)
+void codegen_generate_struct(struct node *node)
 {
     // We only have to care if we have a variable on this struct
-    if(node->flags & NODE_FLAG_HAS_VARIABLE_COMBINED)
+    if (node->flags & NODE_FLAG_HAS_VARIABLE_COMBINED)
     {
         // Generate the structure variable
         codegen_generate_global_variable(node->_struct.var);
     }
 }
 
-
-void codegen_generate_union(struct node* node)
+void codegen_generate_union(struct node *node)
 {
     // We only have to care if we have a variable on this struct
-    if(node->flags & NODE_FLAG_HAS_VARIABLE_COMBINED)
+    if (node->flags & NODE_FLAG_HAS_VARIABLE_COMBINED)
     {
         // Generate the structure variable
         codegen_generate_global_variable(node->_union.var);
     }
 }
-
 
 void codegen_generate_data_section_part(struct node *node)
 {
@@ -1995,11 +2086,11 @@ void codegen_generate_data_section_part(struct node *node)
     {
         codegen_generate_global_variable(node);
     }
-    else if(node->type == NODE_TYPE_STRUCT)
+    else if (node->type == NODE_TYPE_STRUCT)
     {
         codegen_generate_struct(node);
-    } 
-    else if(node->type == NODE_TYPE_UNION)
+    }
+    else if (node->type == NODE_TYPE_UNION)
     {
         codegen_generate_union(node);
     }
@@ -2067,6 +2158,7 @@ struct code_generator *codegenerator_new(struct compile_process *process)
     generator->string_table = vector_create(sizeof(struct string_table_element *));
     generator->exit_points = vector_create(sizeof(struct exit_point *));
     generator->entry_points = vector_create(sizeof(struct entry_point *));
+    generator->responses = vector_create(sizeof(struct response *));
     generator->_switch.switches = vector_create(sizeof(struct generator_switch_stmt_entity));
     return generator;
 }

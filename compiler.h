@@ -83,7 +83,7 @@ struct pos
 {
     int line;
     int col;
-    const char* filename;
+    const char *filename;
 };
 
 enum
@@ -384,7 +384,7 @@ struct code_generator
     struct vector *entry_points;
 
     // Vector of struct response*
-    struct vector* responses;
+    struct vector *responses;
 };
 
 enum
@@ -434,7 +434,7 @@ struct compile_process
     {
         FILE *fp;
         // The absolute path of the compiler process input file
-        const char* abs_path;
+        const char *abs_path;
     } cfile;
 
     // The output file to compile to. NULL if this is a sub-file included with "include"
@@ -504,6 +504,7 @@ struct datatype
     {
         struct node *struct_node;
         struct node *union_node;
+        struct native_variable_type* native;
     };
 
     struct array
@@ -797,6 +798,7 @@ struct sizeable_node
 enum
 {
     SYMBOL_TYPE_NODE,
+    SYMBOL_TYPE_NATIVE_DATATYPE,
     SYMBOL_TYPE_UNKNOWN
 };
 
@@ -827,7 +829,7 @@ enum
     DATATYPE_FLAG_IS_POINTER = 0b00001000,
     DATATYPE_FLAG_IS_ARRAY = 0b00010000,
     DATATYPE_FLAG_IS_EXTERN = 0b00100000,
-    DATATYPE_FLAG_IS_RESTRICT = 0b01000000
+    DATATYPE_FLAG_IS_RESTRICT = 0b01000000,
 
 };
 
@@ -841,7 +843,14 @@ enum
     DATA_TYPE_DOUBLE,
     DATA_TYPE_LONG,
     DATA_TYPE_STRUCT,
-    DATA_TYPE_UNION
+    DATA_TYPE_UNION,
+};
+
+enum
+{
+    DATA_TYPE_EXPECT_PRIMITIVE,
+    DATA_TYPE_EXPECT_UNION,
+    DATA_TYPE_EXPECT_STRUCT,
 };
 
 struct array_brackets
@@ -1216,6 +1225,18 @@ enum
     COMPILER_FAILED_WITH_ERRORS,
 };
 
+struct native_variable_callbacks
+{
+};
+
+/**
+ * Native only variables can exist such as valist
+ */
+struct native_variable_type
+{
+    const char *name;
+};
+
 /**
  * Returns true if this node can be used in an expression
  */
@@ -1353,6 +1374,7 @@ struct symbol *symresolver_register_symbol(struct compile_process *process, cons
  */
 struct symbol *symresolver_get_symbol(struct compile_process *process, const char *name);
 
+
 /**
  * Gets the node from the symbol data
  */
@@ -1436,6 +1458,10 @@ struct node *first_node_of_type(struct node *node, int type);
  */
 struct node *first_node_of_type_from_left(struct node *node, int type, int depth);
 
+void node_set_vector(struct vector *vec);
+void node_push(struct node *node);
+struct node *node_create(struct node *_node);
+
 /**
  * Returns true if the given node is apart of an expression
  */
@@ -1443,9 +1469,33 @@ bool node_in_expression(struct node *node);
 
 bool node_is_root_expression(struct node *node);
 
-bool node_is_possibly_constant(struct node* node);
+bool node_is_possibly_constant(struct node *node);
 bool node_is_constant(struct resolver_process *process, struct node *node);
-long node_pull_literal(struct resolver_process* process, struct node *node);
+long node_pull_literal(struct resolver_process *process, struct node *node);
+
+void make_for_node(struct node *init_node, struct node *cond_node, struct node *loop_node, struct node *body_node);
+void make_case_node(struct node *exp_node);
+void make_default_node();
+void make_switch_node(struct node *exp_node, struct node *body_node, struct vector *cases, bool has_default_case);
+void make_label_node(struct node *label_name_node);
+void make_goto_node(struct node *label_node);
+
+void make_tenary_node(struct node *true_result_node, struct node *false_result_node);
+void make_exp_node(struct node *node_left, struct node *node_right, const char *op);
+void make_exp_parentheses_node(struct node *exp_node);
+void make_break_node();
+void make_continue_node();
+
+void make_if_node(struct node *cond_node, struct node *body_node, struct node *next_node);
+void make_while_node(struct node *cond_node, struct node *body_node);
+void make_do_while_node(struct node *body_node, struct node *cond_node);
+void make_else_node(struct node *body_node);
+void make_union_node(const char *struct_name, struct node *body_node);
+void make_struct_node(const char *struct_name, struct node *body_node);
+void make_unary_node(const char *unary_op, struct node *operand_node);
+void make_return_node(struct node *exp_node);
+void make_function_node(struct datatype *ret_type, const char *name, struct vector *arguments, struct node *body);
+void make_body_node(struct vector *body_vec, size_t size, bool padded, struct node *largest_var_node);
 
 /**
  * Returns the entire stack size for the given function, including all sub scopes
@@ -1522,6 +1572,9 @@ int compute_sum_padding_for_body(struct node *node);
  */
 int padding(int val, int to);
 
+
+bool datatype_is_primitive(const char* type);
+
 /**
  * Returns true if the given variable node is a primative variable
  */
@@ -1550,7 +1603,7 @@ struct node *union_node_for_name(struct compile_process *current_process, const 
  */
 struct node *variable_struct_node(struct node *var_node);
 
-struct node* variable_struct_or_union_body_node(struct node* var_node);
+struct node *variable_struct_or_union_body_node(struct node *var_node);
 
 /**
  * Returns true if the given node is a variable node that is a structure variable and
@@ -1558,8 +1611,7 @@ struct node* variable_struct_or_union_body_node(struct node* var_node);
  */
 bool variable_struct_padded(struct node *var_node);
 
-
-bool variable_padded(struct node* var_node);
+bool variable_padded(struct node *var_node);
 
 /**
  * Returns the largest variable node for the given structure, otherwise NULL.
@@ -1567,7 +1619,6 @@ bool variable_padded(struct node* var_node);
 struct node *variable_struct_largest_variable_node(struct node *var_node);
 
 struct node *variable_struct_or_union_largest_variable_node(struct node *var_node);
-
 
 /**
  * Returns the largest variable declaration inside the provided body.
@@ -1925,7 +1976,7 @@ bool is_compile_computable(struct node *node);
 /**
  * Computes the provided expression into a long
  */
-long arithmetic(struct compile_process* compiler, long left_operand, long right_operand, const char* op, bool* success);
+long arithmetic(struct compile_process *compiler, long left_operand, long right_operand, const char *op, bool *success);
 
 /**
  * Returns true if the given character is one of the provided delims
@@ -1937,25 +1988,25 @@ bool char_is_delim(char c, const char *delims);
 /**
  * Returns true if the given node is a structure or a union
  */
-bool node_is_struct_or_union(struct node* node);
+bool node_is_struct_or_union(struct node *node);
 
 /**
  * Returns true if the given datatype is a structure or union datatype
  */
-bool datatype_is_struct_or_union(struct datatype* dtype);
+bool datatype_is_struct_or_union(struct datatype *dtype);
 
 /**
  * Returns true if this type is a pointer
  */
-bool is_pointer_datatype(struct datatype* dtype);
+bool is_pointer_datatype(struct datatype *dtype);
 /**
  * Returns true if this type is a structure and not a pointer
  */
-bool datatype_is_non_pointer_struct(struct datatype* dtype);
+bool datatype_is_non_pointer_struct(struct datatype *dtype);
 /**
  * Returns true if this given variable node's data type is a structure or union
  */
-bool node_is_struct_or_union_variable(struct node* node);
+bool node_is_struct_or_union_variable(struct node *node);
 
 bool node_is_expression_or_parentheses(struct node *node);
 
@@ -1969,7 +2020,7 @@ bool node_is_value_type(struct node *node);
  * NULL is returned. If this is a structure or union declaration node, declared
  * with a variable then it will return the variable
  */
-struct node* variable_node(struct node* node);
+struct node *variable_node(struct node *node);
 
 /**
  * Returns true if the given character is a hexadecimal character

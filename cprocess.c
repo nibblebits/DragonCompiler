@@ -60,6 +60,7 @@ struct compile_process *compile_process_create(const char *filename, const char 
     char* path = malloc(PATH_MAX);
     realpath(filename, path);
     process->cfile.abs_path = path;
+    node_set_vector(process->node_vec);
     return process;
 }
 

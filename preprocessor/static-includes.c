@@ -101,7 +101,7 @@ struct vector *preprocessor_stddef_include_offsetof_value(struct preprocessor_de
 
 void preprocessor_stddef_include(struct preprocessor *preprocessor, struct preprocessor_included_file *file)
 {
-    preprocessor_definition_create("NULL", lex_process_tokens(tokens_build_for_string(preprocessor->compiler, 0)), NULL, preprocessor);
+    preprocessor_definition_create("NULL", lex_process_tokens(tokens_build_for_string(preprocessor->compiler, "0")), NULL, preprocessor);
     preprocessor_definition_create("size_t", lex_process_tokens(tokens_build_for_string(preprocessor->compiler, "int")), NULL, preprocessor);
     preprocessor_definition_create("wchar_t", lex_process_tokens(tokens_build_for_string(preprocessor->compiler, "short")), NULL, preprocessor);
     preprocessor_definition_create("ptrdiff_t", lex_process_tokens(tokens_build_for_string(preprocessor->compiler, "int")), NULL, preprocessor);
@@ -113,7 +113,7 @@ void preprocessor_stddef_include(struct preprocessor *preprocessor, struct prepr
 
 void preprocessor_stdarg_include(struct preprocessor *preprocessor, struct preprocessor_included_file *file)
 {
-
+   
 }
 
 PREPROCESSOR_STATIC_INCLUDE_HANDLER_POST_CREATION preprocessor_static_include_handler_for(const char *filename)

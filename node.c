@@ -2,6 +2,165 @@
 #include <assert.h>
 #include "helpers/vector.h"
 
+// The current body that the parser is in
+// Note: The set body may be uninitialized and should be used as reference only
+// don't use functionality
+struct node *parser_current_body = NULL;
+
+// The current function we are in.
+struct node *parser_current_function = NULL;
+
+// The last token parsed by the parser, may be NULL
+struct token* parser_last_token = NULL;
+
+struct vector* node_vector = NULL;
+
+void node_set_vector(struct vector* vec)
+{
+    node_vector = vec;
+}
+
+void node_push(struct node *node)
+{
+    vector_push(node_vector, &node);
+}
+
+
+struct node *node_create(struct node *_node)
+{
+    struct node *node = malloc(sizeof(struct node));
+    memcpy(node, _node, sizeof(struct node));
+    node->binded.owner = parser_current_body;
+    node->binded.function = parser_current_function;
+    if (parser_last_token)
+    {
+        node->pos = parser_last_token->pos;
+    }
+    node_push(node);
+    return node;
+}
+
+
+void make_for_node(struct node *init_node, struct node *cond_node, struct node *loop_node, struct node *body_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_FOR, .stmt._for.init = init_node, .stmt._for.cond = cond_node, .stmt._for.loop = loop_node, .stmt._for.body = body_node});
+}
+
+void make_case_node(struct node *exp_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_CASE, .stmt._case.exp = exp_node});
+}
+
+void make_default_node()
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_DEFAULT});
+}
+
+void make_switch_node(struct node *exp_node, struct node *body_node, struct vector *cases, bool has_default_case)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_SWITCH, .stmt._switch.exp = exp_node, .stmt._switch.body = body_node, .stmt._switch.cases = cases, .stmt._switch.has_default_case = has_default_case});
+}
+
+void make_label_node(struct node *label_name_node)
+{
+    node_create(&(struct node){NODE_TYPE_LABEL, .label.name = label_name_node});
+}
+void make_goto_node(struct node *label_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_GOTO, .stmt._goto.label = label_node});
+}
+
+void make_tenary_node(struct node *true_result_node, struct node *false_result_node)
+{
+    node_create(&(struct node){NODE_TYPE_TENARY, .tenary.true_node = true_result_node, .tenary.false_node = false_result_node});
+}
+
+void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
+{
+    node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
+}
+
+void make_exp_parentheses_node(struct node *exp_node)
+{
+    node_create(&(struct node){NODE_TYPE_EXPRESSION_PARENTHESIS, .parenthesis.exp = exp_node});
+}
+
+void make_break_node()
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_BREAK});
+}
+
+void make_continue_node()
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_CONTINUE});
+}
+
+void make_if_node(struct node *cond_node, struct node *body_node, struct node *next_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_IF, .stmt._if.cond_node = cond_node, .stmt._if.body_node = body_node, .stmt._if.next = next_node});
+}
+
+void make_while_node(struct node *cond_node, struct node *body_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_WHILE, .stmt._while.cond = cond_node, .stmt._while.body = body_node});
+}
+
+void make_do_while_node(struct node *body_node, struct node *cond_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_DO_WHILE, .stmt._do_while.cond = cond_node, .stmt._do_while.body = body_node});
+}
+
+void make_else_node(struct node *body_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_ELSE, .stmt._else.body_node = body_node});
+}
+
+void make_union_node(const char *struct_name, struct node *body_node)
+{
+    int flags = 0;
+    if (!body_node)
+    {
+        // No body then we have forward declared.
+        flags = NODE_FLAG_IS_FORWARD_DECLARATION;
+    }
+
+    node_create(&(struct node){NODE_TYPE_UNION, .flags = flags, ._union.name = struct_name, ._union.body_n = body_node});
+}
+
+void make_struct_node(const char *struct_name, struct node *body_node)
+{
+    int flags = 0;
+    if (!body_node)
+    {
+        // No body then we have forward declared.
+        flags = NODE_FLAG_IS_FORWARD_DECLARATION;
+    }
+
+    node_create(&(struct node){NODE_TYPE_STRUCT, .flags = flags, ._struct.name = struct_name, ._struct.body_n = body_node});
+}
+
+
+void make_unary_node(const char *unary_op, struct node *operand_node)
+{
+    node_create(&(struct node){NODE_TYPE_UNARY, .unary.op = unary_op, .unary.operand = operand_node});
+}
+
+void make_return_node(struct node *exp_node)
+{
+    node_create(&(struct node){NODE_TYPE_STATEMENT_RETURN, .stmt.ret.exp = exp_node});
+}
+
+void make_function_node(struct datatype *ret_type, const char *name, struct vector *arguments, struct node *body)
+{
+    node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body_n = body});
+}
+
+void make_body_node(struct vector *body_vec, size_t size, bool padded, struct node *largest_var_node)
+{
+    node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.size = size, .body.padded = padded, .body.largest_var_node = largest_var_node});
+}
+
+
 bool node_is_struct_or_union_variable(struct node *node)
 {
     if (node->type != NODE_TYPE_VARIABLE)

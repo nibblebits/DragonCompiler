@@ -1577,7 +1577,6 @@ static void codegen_generate_global_variable_for_union(struct node *node)
     char tmp_buf[256];
     asm_push("%s: %s 0", node->var.name, asm_keyword_for_size(variable_size(node), tmp_buf));
 }
-
 void codegen_generate_global_variable(struct node *node)
 {
     asm_push("; %s %s", node->var.type.type_str, node->var.name);
@@ -1612,6 +1611,7 @@ void codegen_generate_global_variable(struct node *node)
     case DATA_TYPE_UNION:
         codegen_generate_global_variable_for_union(node);
         break;
+
     default:
         codegen_err("Not sure how to generate value for global variable.. Problem!");
     }

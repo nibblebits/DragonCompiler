@@ -619,13 +619,16 @@ int compute_sum_padding_for_body(struct node *node)
     assert(node->type == NODE_TYPE_BODY);
     return compute_sum_padding(node->body.statements);
 }
-
+bool datatype_is_primitive(const char* type)
+{
+    return S_EQ(type, "void") || S_EQ(type, "char") || S_EQ(type, "short") || S_EQ(type, "int") || S_EQ(type, "long") || S_EQ(type, "float") || S_EQ(type, "double");
+}
 bool variable_node_is_primative(struct node *node)
 {
     // It is possible that you can declare structures as well as defining
     // a variable for them, therefore this has to be allowed.
     assert(node->type == NODE_TYPE_VARIABLE);
-    return !node_is_struct_or_union_variable(node);
+    return datatype_is_primitive(node->var.type.type_str);
 }
 
 size_t datatype_size(struct datatype *datatype)
@@ -654,6 +657,7 @@ struct node *struct_node_for_name(struct compile_process *current_process, const
 
     return node;
 }
+
 
 struct node *union_node_for_name(struct compile_process *current_process, const char *struct_name)
 {

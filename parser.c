@@ -30,13 +30,13 @@
 // The current body that the parser is in
 // Note: The set body may be uninitialized and should be used as reference only
 // don't use functionality
-struct node *parser_current_body = NULL;
+extern struct node *parser_current_body;
 
 // The current function we are in.
-struct node *parser_current_function = NULL;
+extern struct node *parser_current_function;
 
 // The last token parsed by the parser, may be NULL
-struct token* parser_last_token = NULL;
+extern struct token *parser_last_token;
 
 // First in the array = higher priority
 // This array is special, its essentially a group of arrays
@@ -155,6 +155,8 @@ static struct history *history_begin(struct history *history_out, int flags)
     scope_current(current_process)
 
 int size_of_struct(const char *struct_name);
+void parse_variable(struct datatype *dtype, struct token *name_token, struct history *history);
+
 struct parser_history_switch parser_new_switch_statement(struct history *history)
 {
     memset(&history->_switch, 0x00, sizeof(history->_switch));
@@ -266,7 +268,7 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
     // If this is a structure variable then we must align the padding to a 4-byte boundary so long
     // as their was any padding in the original structure scope
     // \attention Maybe make a new function for second operand, a bit long...
-    if (!variable_node_is_primative(node) && variable_struct_or_union_body_node(node)->body.padded)
+    if (node_is_struct_or_union_variable(node) && variable_struct_or_union_body_node(node)->body.padded)
     {
         variable_node(node)->var.padding = padding(upward_stack ? offset : -offset, DATA_SIZE_DWORD);
     }
@@ -533,30 +535,11 @@ static struct node **node_next()
     return vector_peek(current_process->node_tree_vec);
 }
 
-static void node_push(struct node *node)
-{
-    vector_push(current_process->node_vec, &node);
-}
-
 static void node_swap(struct node **f_node, struct node **s_node)
 {
     struct node *tmp_node = *f_node;
     *f_node = *s_node;
     *s_node = tmp_node;
-}
-
-static struct node *node_create(struct node *_node)
-{
-    struct node *node = malloc(sizeof(struct node));
-    memcpy(node, _node, sizeof(struct node));
-    node->binded.owner = parser_current_body;
-    node->binded.function = parser_current_function;
-    if (parser_last_token)
-    {
-        node->pos = parser_last_token->pos;
-    }
-    node_push(node);
-    return node;
 }
 
 static bool is_keyword_variable_modifier(const char *val)
@@ -591,124 +574,6 @@ void parse_single_token_to_node()
     }
 }
 
-void make_for_node(struct node *init_node, struct node *cond_node, struct node *loop_node, struct node *body_node)
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_FOR, .stmt._for.init = init_node, .stmt._for.cond = cond_node, .stmt._for.loop = loop_node, .stmt._for.body = body_node});
-}
-
-void make_case_node(struct node *exp_node)
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_CASE, .stmt._case.exp = exp_node});
-}
-
-void make_default_node()
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_DEFAULT});
-}
-
-void make_switch_node(struct node *exp_node, struct node *body_node, struct vector *cases, bool has_default_case)
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_SWITCH, .stmt._switch.exp = exp_node, .stmt._switch.body = body_node, .stmt._switch.cases = cases, .stmt._switch.has_default_case = has_default_case});
-}
-
-void make_label_node(struct node *label_name_node)
-{
-    node_create(&(struct node){NODE_TYPE_LABEL, .label.name = label_name_node});
-}
-void make_goto_node(struct node *label_node)
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_GOTO, .stmt._goto.label = label_node});
-}
-
-void make_tenary_node(struct node *true_result_node, struct node *false_result_node)
-{
-    node_create(&(struct node){NODE_TYPE_TENARY, .tenary.true_node = true_result_node, .tenary.false_node = false_result_node});
-}
-
-void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
-{
-    node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
-}
-
-void make_exp_parentheses_node(struct node *exp_node)
-{
-    node_create(&(struct node){NODE_TYPE_EXPRESSION_PARENTHESIS, .parenthesis.exp = exp_node});
-}
-
-void make_break_node()
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_BREAK});
-}
-
-void make_continue_node()
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_CONTINUE});
-}
-
-void make_if_node(struct node *cond_node, struct node *body_node, struct node *next_node)
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_IF, .stmt._if.cond_node = cond_node, .stmt._if.body_node = body_node, .stmt._if.next = next_node});
-}
-
-void make_while_node(struct node *cond_node, struct node *body_node)
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_WHILE, .stmt._while.cond = cond_node, .stmt._while.body = body_node});
-}
-
-void make_do_while_node(struct node *body_node, struct node *cond_node)
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_DO_WHILE, .stmt._do_while.cond = cond_node, .stmt._do_while.body = body_node});
-}
-
-void make_else_node(struct node *body_node)
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_ELSE, .stmt._else.body_node = body_node});
-}
-
-void make_union_node(const char *struct_name, struct node *body_node)
-{
-    int flags = 0;
-    if (!body_node)
-    {
-        // No body then we have forward declared.
-        flags = NODE_FLAG_IS_FORWARD_DECLARATION;
-    }
-
-    node_create(&(struct node){NODE_TYPE_UNION, .flags = flags, ._union.name = struct_name, ._union.body_n = body_node});
-}
-
-void make_struct_node(const char *struct_name, struct node *body_node)
-{
-    int flags = 0;
-    if (!body_node)
-    {
-        // No body then we have forward declared.
-        flags = NODE_FLAG_IS_FORWARD_DECLARATION;
-    }
-
-    node_create(&(struct node){NODE_TYPE_STRUCT, .flags = flags, ._struct.name = struct_name, ._struct.body_n = body_node});
-}
-
-void make_unary_node(const char *unary_op, struct node *operand_node)
-{
-    node_create(&(struct node){NODE_TYPE_UNARY, .unary.op = unary_op, .unary.operand = operand_node});
-}
-
-void make_return_node(struct node *exp_node)
-{
-    node_create(&(struct node){NODE_TYPE_STATEMENT_RETURN, .stmt.ret.exp = exp_node});
-}
-
-void make_function_node(struct datatype *ret_type, const char *name, struct vector *arguments, struct node *body)
-{
-    node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body_n = body});
-}
-
-void make_body_node(struct vector *body_vec, size_t size, bool padded, struct node *largest_var_node)
-{
-    node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.size = size, .body.padded = padded, .body.largest_var_node = largest_var_node});
-}
-
 struct datatype_struct_node_fix_private
 {
     // The variable node whose data type must be fixed as the structure is now present.
@@ -741,12 +606,12 @@ void datatype_struct_node_fix_end(struct fixup *fixup)
 
 void make_variable_node(struct datatype *datatype, struct token *name_token, struct node *value_node)
 {
-    const char* name_str = NULL;
+    const char *name_str = NULL;
     if (name_token)
     {
         name_str = name_token->sval;
     }
-    node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type = *datatype, .var.name = name_str,.var.val = value_node});
+    node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type = *datatype, .var.name = name_str, .var.val = value_node});
     struct node *var_node = node_peek_or_null();
     // Is our struct node NULL? Then a fixup is required a forward declaration was present
     // Could argue that this is not the most sensible place to put it
@@ -1265,6 +1130,8 @@ void parse_datatype(struct datatype *datatype);
 
 void parse_identifier(struct history *history)
 {
+    assert(token_peek_next()->type == TOKEN_TYPE_IDENTIFIER);
+    // Its just a single token.
     parse_single_token_to_node();
 }
 
@@ -1999,7 +1866,7 @@ int size_of_union(const char *union_name)
     return node->_union.body_n->body.size;
 }
 
-void parser_datatype_init_type_and_size(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth, bool is_union)
+void parser_datatype_init_type_and_size_for_primitive(struct token *datatype_token, struct datatype *datatype_out)
 {
     if (S_EQ(datatype_token->sval, "void"))
     {
@@ -2039,18 +1906,31 @@ void parser_datatype_init_type_and_size(struct token *datatype_token, struct dat
     }
     else
     {
-        if (is_union)
-        {
-            datatype_out->type = DATA_TYPE_UNION;
-            datatype_out->size = size_of_union(datatype_token->sval);
-            datatype_out->union_node = union_node_for_name(current_process, datatype_token->sval);
-        }
-        else
-        {
-            datatype_out->type = DATA_TYPE_STRUCT;
-            datatype_out->size = size_of_struct(datatype_token->sval);
-            datatype_out->struct_node = struct_node_for_name(current_process, datatype_token->sval);
-        }
+        parse_err("Bug unexpected primitive variable\n");
+    }
+}
+void parser_datatype_init_type_and_size(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth, int expected_type)
+{
+    switch (expected_type)
+    {
+    case DATA_TYPE_EXPECT_PRIMITIVE:
+        parser_datatype_init_type_and_size_for_primitive(datatype_token, datatype_out);
+        break;
+
+    case DATA_TYPE_EXPECT_UNION:
+        datatype_out->type = DATA_TYPE_UNION;
+        datatype_out->size = size_of_union(datatype_token->sval);
+        datatype_out->union_node = union_node_for_name(current_process, datatype_token->sval);
+        break;
+
+    case DATA_TYPE_EXPECT_STRUCT:
+        datatype_out->type = DATA_TYPE_STRUCT;
+        datatype_out->size = size_of_struct(datatype_token->sval);
+        datatype_out->struct_node = struct_node_for_name(current_process, datatype_token->sval);
+        break;
+
+    default:
+        parser_err("Compiler bug unexpected data type expectation");
     }
 
     if (pointer_depth > 0)
@@ -2059,18 +1939,30 @@ void parser_datatype_init_type_and_size(struct token *datatype_token, struct dat
         datatype_out->pointer_depth = pointer_depth;
     }
 }
-void parser_datatype_init(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth, bool is_union)
+
+void parser_datatype_init(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth, int expected_type)
 {
-    if (datatype_token)
-    {
-        parser_datatype_init_type_and_size(datatype_token, datatype_out, pointer_depth, is_union);
-        datatype_out->type_str = datatype_token->sval;
-    }
+    parser_datatype_init_type_and_size(datatype_token, datatype_out, pointer_depth, expected_type);
+    datatype_out->type_str = datatype_token->sval;
 }
 
 static bool datatype_is_struct_or_union_for_name(const char *name)
 {
     return S_EQ(name, "struct") || S_EQ(name, "union");
+}
+
+int parser_datatype_expected_for_type_string(const char *s)
+{
+    int type = DATA_TYPE_EXPECT_PRIMITIVE;
+    if (S_EQ(s, "union"))
+    {
+        type = DATA_TYPE_EXPECT_UNION;
+    }
+    else if (S_EQ(s, "struct"))
+    {
+        type = DATA_TYPE_EXPECT_STRUCT;
+    }
+    return type;
 }
 
 /**
@@ -2082,11 +1974,9 @@ static bool datatype_is_struct_or_union_for_name(const char *name)
 void parse_datatype_type(struct datatype *datatype)
 {
     struct token *datatype_token = token_next();
-    bool is_union = false;
+    int expected_type = parser_datatype_expected_for_type_string(datatype_token->sval);
     if (datatype_is_struct_or_union_for_name(datatype_token->sval))
     {
-        is_union = S_EQ(datatype_token->sval, "union");
-        datatype_token = NULL;
         // Since we parased a "struct" keyword the actual data type will be the next token.
         if (token_peek_next()->type == TOKEN_TYPE_IDENTIFIER)
         {
@@ -2104,7 +1994,7 @@ void parse_datatype_type(struct datatype *datatype)
     // If this is a normal variable i.e "int abc" then pointer_depth will equal zero
     int pointer_depth = parser_get_pointer_depth();
 
-    parser_datatype_init(datatype_token, datatype, pointer_depth, is_union);
+    parser_datatype_init(datatype_token, datatype, pointer_depth, expected_type);
 }
 
 void parse_datatype(struct datatype *datatype)

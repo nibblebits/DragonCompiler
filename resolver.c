@@ -534,9 +534,9 @@ static struct resolver_entity *resolver_follow_exp(struct resolver_process *reso
     return entity;
 }
 
-struct resolver_entity *resolver_follow_identifier(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+struct resolver_entity* resolver_follow_for_name(struct resolver_process* resolver, const char* name, struct resolver_result* result)
 {
-    struct resolver_entity *entity = resolver_entity_clone(resolver_get_entity(result, resolver, node->sval));
+     struct resolver_entity *entity = resolver_entity_clone(resolver_get_entity(result, resolver, name));
     if (!entity)
     {
         return NULL;
@@ -556,6 +556,15 @@ struct resolver_entity *resolver_follow_identifier(struct resolver_process *reso
         result->last_struct_union_entity = entity;
     }
     return entity;
+}
+struct resolver_entity *resolver_follow_identifier(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+{
+   return resolver_follow_for_name(resolver, node->sval, result);
+}
+
+struct resolver_entity* resolver_follow_variable(struct resolver_process* resolver, struct node* var_node, struct resolver_result *result)
+{
+    return resolver_follow_for_name(resolver, var_node->var.name, result);
 }
 
 static struct resolver_entity *resolver_follow_part_return_entity(struct resolver_process *resolver, struct node *node, struct resolver_result *result);
@@ -579,6 +588,9 @@ static struct resolver_entity *resolver_follow_part_return_entity(struct resolve
         entity = resolver_follow_identifier(resolver, node, result);
         break;
 
+    case NODE_TYPE_VARIABLE:
+        entity = resolver_follow_variable(resolver, node, result);
+        break;
     case NODE_TYPE_EXPRESSION:
         entity = resolver_follow_exp(resolver, node, result);
         break;

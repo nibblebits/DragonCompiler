@@ -92,6 +92,7 @@ bool is_keyword(const char *str)
            S_EQ(str, "struct") ||
            S_EQ(str, "union") ||
            S_EQ(str, "static") ||
+           S_EQ(str, "__ignore_typecheck__") ||
            S_EQ(str, "return") ||
            S_EQ(str, "include") ||
            S_EQ(str, "sizeof") ||
@@ -682,7 +683,7 @@ int lex(struct lex_process *process)
     lex_process = process;
     // Copy filename to the lex process
     lex_process->pos.filename = process->compiler->cfile.abs_path;
-    
+
     
     struct token *token = read_next_token();
     while (token)

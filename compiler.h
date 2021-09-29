@@ -504,7 +504,6 @@ struct datatype
     {
         struct node *struct_node;
         struct node *union_node;
-        struct native_variable_type* native;
     };
 
     struct array
@@ -798,7 +797,7 @@ struct sizeable_node
 enum
 {
     SYMBOL_TYPE_NODE,
-    SYMBOL_TYPE_NATIVE_DATATYPE,
+    SYMBOL_TYPE_NATIVE_FUNCTION,
     SYMBOL_TYPE_UNKNOWN
 };
 
@@ -809,6 +808,54 @@ struct symbol
     void *data;
 };
 
+
+struct native_function;
+struct generator;
+
+
+struct generator_entity_address
+{
+    bool is_stack;
+    long offset;
+    const char* address;
+    const char* base_address;
+};
+
+
+#define GENERATOR_BEGIN_EXPRESSION(gen) 
+#define GENERATOR_END_EXPRESSION(gen) gen->end_exp(gen)
+
+typedef void(*ASM_PUSH_PROTOTYPE)(const char* ins, ...);
+
+// orinating_function is the function this function call originated from
+typedef void(*NATIVE_FUNCTION_CALL)(struct generator* generator, struct node* orinating_function, struct native_function* func, struct vector* arguments);
+typedef void(*GENERATOR_GENERATE_EXPRESSION)(struct generator* generator, struct node* node, int flags);
+typedef void(*GENERATOR_ENTITY_ADDRESS)(struct generator* generator, struct resolver_entity* entity, struct generator_entity_address* address_out);
+typedef void(*GENERATOR_END_EXPRESSION)(struct generator* generator);
+
+struct generator
+{
+    ASM_PUSH_PROTOTYPE asm_push;
+    GENERATOR_GENERATE_EXPRESSION gen_exp;
+    GENERATOR_END_EXPRESSION end_exp;
+    GENERATOR_ENTITY_ADDRESS entity_address;
+    struct compile_process* compiler;
+
+    // Private data for the generator.
+    void* private;
+};
+
+struct native_function_callbacks
+{
+    NATIVE_FUNCTION_CALL call;
+};
+struct native_function
+{
+    const char* name;
+    struct native_function_callbacks callbacks;
+};
+
+struct symbol* native_create_function(struct compile_process* compiler, const char* name, struct native_function_callbacks* callbacks);
 enum
 {
     PARSE_ALL_OK,
@@ -830,6 +877,7 @@ enum
     DATATYPE_FLAG_IS_ARRAY = 0b00010000,
     DATATYPE_FLAG_IS_EXTERN = 0b00100000,
     DATATYPE_FLAG_IS_RESTRICT = 0b01000000,
+    DATATYPE_FLAG_IGNORE_TYPE_CHECKING = 0b10000000
 
 };
 
@@ -952,6 +1000,14 @@ enum
     NODE_FLAG_HAS_VARIABLE_COMBINED = 0b00001000
 };
 
+
+enum
+{
+    // Bit is set if this is a native function who has a routine
+    // that should be called. Rather than generating a function call.
+    FUNCTION_NODE_FLAG_IS_NATIVE = 0b00000001
+};
+
 struct node
 {
     int type;
@@ -1042,6 +1098,9 @@ struct node
 
         struct function
         {
+            // Special flags for this function
+            int flags;
+
             // The return type of this function.. I.e long, double, int
             struct datatype rtype;
 
@@ -1225,17 +1284,6 @@ enum
     COMPILER_FAILED_WITH_ERRORS,
 };
 
-struct native_variable_callbacks
-{
-};
-
-/**
- * Native only variables can exist such as valist
- */
-struct native_variable_type
-{
-    const char *name;
-};
 
 /**
  * Returns true if this node can be used in an expression
@@ -1374,6 +1422,11 @@ struct symbol *symresolver_register_symbol(struct compile_process *process, cons
  */
 struct symbol *symresolver_get_symbol(struct compile_process *process, const char *name);
 
+
+/**
+ * Gets the symbol for the given function name. If not a native function NULL is returned.
+ */
+struct symbol* symresolver_get_symbol_for_native_function(struct compile_process* process, const char* name);
 
 /**
  * Gets the node from the symbol data
@@ -1739,11 +1792,17 @@ struct resolver_entity *resolver_result_entity_next(struct resolver_entity *enti
  */
 struct datatype *resolver_get_datatype(struct node *node);
 
+// Code gen
+
+
+
+
 // Node
 
 struct node *node_clone(struct node *node);
 const char *node_var_type_str(struct node *var_node);
 const char *node_var_name(struct node *var_node);
+
 
 /**
  * Returns true if this is a variable node and it is a pointer, or returns true
@@ -2015,6 +2074,13 @@ bool node_is_expression_or_parentheses(struct node *node);
  */
 bool node_is_value_type(struct node *node);
 
+
+/**
+ * Gets the final function argument from the given function node.
+ * Assertion error if you pass anything other than a function node.
+ */
+struct node* node_function_get_final_argument(struct node* func_node);
+
 /**
  * Returns the variable node of this node, if its not a variable node then
  * NULL is returned. If this is a structure or union declaration node, declared
@@ -2086,5 +2152,10 @@ struct fixup *fixup_register(struct fixup_system *system, struct fixup_config *c
 bool fixup_resolve(struct fixup *fixup);
 void *fixup_private(struct fixup *fixup);
 bool fixups_resolve(struct fixup_system *system);
+
+
+// codegen
+void register_set_flag(int flag);
+void register_unset_flag(int flag);
 
 #endif

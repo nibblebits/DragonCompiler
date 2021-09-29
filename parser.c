@@ -548,7 +548,8 @@ static bool is_keyword_variable_modifier(const char *val)
            S_EQ(val, "signed") ||
            S_EQ(val, "static") ||
            S_EQ(val, "const") ||
-           S_EQ(val, "extern");
+           S_EQ(val, "extern") ||
+           S_EQ(val, "__ignore_typecheck__");
 }
 
 void parse_single_token_to_node()
@@ -1822,6 +1823,10 @@ void parse_datatype_modifiers(struct datatype *datatype)
         {
             datatype->flags |= DATATYPE_FLAG_IS_EXTERN;
         }
+        else if(S_EQ(token->sval, "__ignore_typecheck__"))
+        {
+            datatype->flags |= DATATYPE_FLAG_IGNORE_TYPE_CHECKING;
+        }
 
         // We dealt with this modifier token, move along.
         token_next();
@@ -2088,6 +2093,7 @@ struct vector *parse_function_arguments(struct history *history)
             token_read_dots(3);
             // Okay since we have infinite arguments we can't have any more arguments
             // after this, so just return
+            parser_scope_finish();
             return arguments_vec;
         }
 
@@ -2134,6 +2140,13 @@ void parse_function(struct datatype *dtype, struct token *name_token, struct his
     // Create the function node
     make_function_node(dtype, name_token->sval, arguments_vector, NULL);
     struct node *function_node = node_peek();
+
+    if (symresolver_get_symbol_for_native_function(current_process, name_token->sval))
+    {
+        // This is a native function, lets apply that flag
+        function_node->func.flags |= FUNCTION_NODE_FLAG_IS_NATIVE;
+    }
+
     parser_current_function = function_node;
 
     // Do we have a function body or is this a declaration?

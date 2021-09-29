@@ -83,12 +83,12 @@ int preprocessor_stddef_include_offsetof(struct preprocessor_definition *definit
     assert(sym->type == SYMBOL_TYPE_NODE);
     struct node *s_node = sym->data;
     assert(s_node->type == NODE_TYPE_STRUCT);
-    
+
     return 0;
 }
 int preprocessor_stddef_include_offsetof_evaluate(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments)
 {
-        struct preprocessor *preprocessor = definition->preprocessor;
+    struct preprocessor *preprocessor = definition->preprocessor;
     struct compile_process *compiler = preprocessor->compiler;
     compiler_error(compiler, "Sorry you may not use offsetof in this way");
 }
@@ -111,9 +111,94 @@ void preprocessor_stddef_include(struct preprocessor *preprocessor, struct prepr
     preprocessor_definition_create_native("offsetof", preprocessor_stddef_include_offsetof_evaluate, preprocessor_stddef_include_offsetof_value, preprocessor);
 }
 
+/**
+ * va_start(__builtin_va_list list, void* last_stack_var)
+ */
+void native_va_start(struct generator *generator, struct node *orinating_function, struct native_function *func, struct vector *arguments)
+{
+    struct compile_process *compiler = generator->compiler;
+    if (vector_count(arguments) != 2)
+    {
+        compiler_error(compiler, "va_start expects two arguments %i provided", vector_count(arguments));
+    }
+
+    struct node *list_arg = vector_peek_ptr(arguments);
+    struct node *stack_arg = vector_peek_ptr(arguments);
+    if (stack_arg->type != NODE_TYPE_IDENTIFIER)
+    {
+        compiler_error(compiler, "Expecting a valid stack argument for va_start");
+    }
+    generator->asm_push("; va_start on variable %s", stack_arg->sval);
+    vector_set_peek_pointer(arguments, 0);
+
+    generator->gen_exp(generator, stack_arg, EXPRESSION_GET_ADDRESS);
+    register_unset_flag(REGISTER_EBX_IS_USED);
+
+    struct resolver_result *result = resolver_follow(compiler->resolver, list_arg);
+    assert(resolver_result_ok(result));
+    struct resolver_entity *list_arg_entity = resolver_result_entity_root(result);
+    struct generator_entity_address address_out;
+    generator->entity_address(generator, list_arg_entity, &address_out);
+    // we got the final argument node, lets now load the address into list_arg.
+    generator->asm_push("mov dword [%s], ebx", address_out.address);
+    generator->asm_push("; va_start end for variable %s", stack_arg->sval);
+}
+
+/**
+ * 
+ * void* __builtin_va_arg(__builtin_va_list list, int type)
+ */
+void native___builtin_va_arg(struct generator *generator, struct node *orinating_function, struct native_function *func, struct vector *arguments)
+{
+
+    struct compile_process *compiler = generator->compiler;
+    if (vector_count(arguments) != 2)
+    {
+        compiler_error(compiler, "va_start expects two arguments %i provided", vector_count(arguments));
+    }
+    generator->asm_push("; va_arg start");
+    vector_set_peek_pointer(arguments, 0);
+    // We must generate the left argument which will resolve the va_list
+    struct node *list_arg = vector_peek_ptr(arguments);
+    generator->gen_exp(generator, list_arg, EXPRESSION_GET_ADDRESS);
+    register_unset_flag(REGISTER_EBX_IS_USED);
+    struct node *size_argument = vector_peek_ptr(arguments);
+    if (size_argument->type != NODE_TYPE_NUMBER)
+    {
+        compiler_error(compiler, "va_arg expects second argument to be numeric size of variable argument. Use macros for automation");
+    }
+    generator->asm_push("add dword [ebx], %i", size_argument->llnum);
+    generator->gen_exp(generator, list_arg, 0);
+    register_unset_flag(REGISTER_EAX_IS_USED);
+    asm_push("mov dword eax, [eax]");
+    generator->asm_push("; va_arg end");
+}
+
+void native_va_end(struct generator *generator, struct node *orinating_function, struct native_function *func, struct vector *arguments)
+{
+    // Nothing to do really..
+}
+
 void preprocessor_stdarg_include(struct preprocessor *preprocessor, struct preprocessor_included_file *file)
 {
-   
+    preprocessor_definition_create("__builtin_va_list", lex_process_tokens(tokens_build_for_string(preprocessor->compiler, "int")), NULL, preprocessor);
+    struct symbol *sym = native_create_function(preprocessor->compiler, "va_start", &(struct native_function_callbacks){.call = native_va_start});
+    if (!sym)
+    {
+        compiler_error(preprocessor->compiler, "The function va_start cannot be declared as a symbol with the same name already is present");
+    }
+
+    sym = native_create_function(preprocessor->compiler, "__builtin_va_arg", &(struct native_function_callbacks){.call = native___builtin_va_arg});
+    if (!sym)
+    {
+        compiler_error(preprocessor->compiler, "The function native___builtin_va_arg cannot be declared as a symbol with the same name already is present");
+    }
+
+    sym = native_create_function(preprocessor->compiler, "va_end", &(struct native_function_callbacks){.call = native_va_end});
+    if (!sym)
+    {
+        compiler_error(preprocessor->compiler, "The function va_end cannot be declared as a symbol with the same name already is present");
+    }
 }
 
 PREPROCESSOR_STATIC_INCLUDE_HANDLER_POST_CREATION preprocessor_static_include_handler_for(const char *filename)
@@ -122,7 +207,7 @@ PREPROCESSOR_STATIC_INCLUDE_HANDLER_POST_CREATION preprocessor_static_include_ha
     {
         return preprocessor_stddef_include;
     }
-    else if(S_EQ(filename, "stdarg.h"))
+    else if (S_EQ(filename, "stdarg.h"))
     {
         return preprocessor_stdarg_include;
     }

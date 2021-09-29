@@ -12,6 +12,35 @@ static struct expression_state blank_state = {};
 #define codegen_err(...) \
     compiler_error(current_process, __VA_ARGS__)
 
+struct history;
+void asm_push(const char *ins, ...);
+void codegen_gen_exp(struct generator *generator, struct node *node, int flags);
+void codegen_entity_address(struct generator *generator, struct resolver_entity *entity, struct generator_entity_address *address_out);
+void codegen_end_exp(struct generator* generator);
+
+struct _x86_generator_private
+{
+    // The data that has been saved as we transferred control
+    // to a resource that doesnt understand our codegenerator internals.
+    // Saved so we can access it later.
+    struct x86_generator_remembered
+    {
+        struct history *history;
+    } remembered;
+} _x86_generator_private;
+
+struct generator x86_codegen = {
+    .asm_push = asm_push,
+    .gen_exp = codegen_gen_exp,
+    .end_exp = codegen_end_exp,
+    .entity_address = codegen_entity_address,
+    .private = &_x86_generator_private};
+
+struct _x86_generator_private *x86_generator_private(struct generator *gen)
+{
+    return gen->private;
+}
+
 struct codegen_exit_point
 {
     // The ID of this exit point.
@@ -96,7 +125,7 @@ void codegen_response_expect()
     vector_push(current_process->generator->responses, &res);
 }
 
-struct response_data* codegen_response_data(struct response* response)
+struct response_data *codegen_response_data(struct response *response)
 {
     return &response->data;
 }
@@ -534,6 +563,26 @@ void codegen_generate_new_expressionable(struct node *node, struct history *hist
     codegen_generate_expressionable(node, history);
 }
 
+void codegen_gen_exp(struct generator *generator, struct node *node, int flags)
+{
+    codegen_generate_expressionable(node, history_down(x86_generator_private(generator)->remembered.history, flags));
+}
+
+
+void codegen_end_exp(struct generator* generator)
+{
+
+}
+
+void codegen_entity_address(struct generator *generator, struct resolver_entity *entity, struct generator_entity_address *address_out)
+{
+    struct resolver_default_entity_data *data = codegen_entity_private(entity);
+    address_out->address = data->address;
+    address_out->base_address = data->base_address;
+    address_out->is_stack = data->flags & RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK;
+    address_out->offset = data->offset;
+}
+
 // Rename this function... terrible name
 // Return result should be used immedeitly and not stored
 // copy only! Temp result!
@@ -788,10 +837,17 @@ static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, in
 
 static void codegen_gen_mem_access_get_address(struct node *value_node, int flags, struct resolver_entity *entity)
 {
-    codegen_use_register("ebx");
-    // We have indirection, therefore we should load the address into EBX.
-    // rather than mov instruction
-    asm_push("mov ebx, [%s]", codegen_entity_private(entity)->address);
+    if (flags & EXPRESSION_INDIRECTION)
+    {
+        codegen_use_register("ebx");
+        // We have indirection, therefore we should load the address into EBX.
+        // rather than mov instruction
+        asm_push("mov ebx, [%s]", codegen_entity_private(entity)->address);
+        return;
+    }
+
+    asm_push("lea ebx, [%s]", codegen_entity_private(entity)->address);
+
 }
 
 static void codegen_gen_mem_access_first_for_expression(struct node *value_node, int flags, struct resolver_entity *entity)
@@ -932,7 +988,7 @@ void codegen_generate_structure_push(struct node *node, struct resolver_entity *
     }
     asm_push("; END STRUCTURE PUSH");
 
-    codegen_response_acknowledge(RESPONSE_SET(.flags=RESPONSE_FLAG_PUSHED_STRUCTURE));
+    codegen_response_acknowledge(RESPONSE_SET(.flags = RESPONSE_FLAG_PUSHED_STRUCTURE));
 }
 
 void codegen_generate_variable_access_for_non_array(struct node *node, struct resolver_entity *entity, struct history *history)
@@ -1242,8 +1298,25 @@ bool codegen_should_push_function_call_argument(struct response *res)
 {
     return !codegen_response_acknowledged(res) || !(res->flags & RESPONSE_FLAG_PUSHED_STRUCTURE);
 }
+
+void codegen_generate_function_call_for_native(struct symbol *native_func_sym, struct node *node, struct resolver_entity *entity, struct history *history)
+{
+    // Okay lets call the function
+    struct native_function *func = native_func_sym->data;
+    x86_generator_private(&x86_codegen)->remembered.history = history;
+    func->callbacks.call(&x86_codegen, node->binded.function, func, entity->func_call_data.arguments);
+}
+
 void codegen_generate_function_call(struct node *node, struct resolver_entity *entity, struct history *history)
 {
+    // Is this function call a native one? If so this is a different game
+    struct symbol *native_func_sym = symresolver_get_symbol_for_native_function(current_process, entity->name);
+    if (native_func_sym)
+    {
+        codegen_generate_function_call_for_native(native_func_sym, node, entity, history);
+        return;
+    }
+
     // Ok we have a function call entity lets generate it. First we must
     // process all function arguments before we can call the function
     // We must also process them backwards because of the stack
@@ -1384,16 +1457,6 @@ void codegen_generate_unary_indirection(struct node *node, struct history *histo
 
     codegen_gen_mov_or_math_for_value("eax", "ebx", history->flags);
     // EBX register now has the address of the variable for indirection
-}
-
-void codegen_generate_indirection_for_unary(struct node *node, struct history *history)
-{
-    // Firstly generate the expressionable of the unary
-    codegen_generate_expressionable(node, history);
-    int depth = node->unary.indirection.depth;
-    for (int i = 0; i < depth; i++)
-    {
-    }
 }
 
 void codegen_generate_normal_unary(struct node *node, struct history *history)
@@ -2134,6 +2197,8 @@ void codegen_generate_root()
 int codegen(struct compile_process *process)
 {
     current_process = process;
+    x86_codegen.compiler = current_process;
+
     // Create the root scope for this process
     scope_create_root(process);
 

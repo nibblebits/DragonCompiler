@@ -27,6 +27,19 @@ struct symbol* symresolver_get_symbol(struct compile_process* process, const cha
     return symbol;
 }
 
+
+struct symbol* symresolver_get_symbol_for_native_function(struct compile_process* process, const char* name)
+{
+    struct symbol* sym = symresolver_get_symbol(process, name);
+    if (!sym)
+        return NULL;
+
+    if (sym->type != SYMBOL_TYPE_NATIVE_FUNCTION)
+        return NULL;
+
+    return sym;
+}
+
 struct symbol* symresolver_register_symbol(struct compile_process* process, const char* sym_name, int type, void* data)
 {
     // Already registered then return NULL.

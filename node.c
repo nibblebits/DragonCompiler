@@ -464,3 +464,19 @@ struct node *variable_node(struct node *node)
 
     return var_node;
 }
+
+
+struct node* node_function_get_final_argument(struct node* func_node)
+{
+    assert(func_node->type == NODE_TYPE_FUNCTION);
+    vector_set_peek_pointer(func_node->func.argument_vector, 0);
+    struct node* node = vector_peek_ptr(func_node->func.argument_vector);
+    struct node* last_node = node;
+    while(node)
+    {
+        last_node = node;
+        node = vector_peek_ptr(func_node->func.argument_vector);
+    }
+
+    return last_node;
+}

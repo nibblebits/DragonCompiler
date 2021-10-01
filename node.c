@@ -12,12 +12,13 @@ struct node *parser_current_function = NULL;
 
 // The last token parsed by the parser, may be NULL
 struct token* parser_last_token = NULL;
-
 struct vector* node_vector = NULL;
+struct vector* node_vector_root = NULL;
 
-void node_set_vector(struct vector* vec)
+void node_set_vector(struct vector* vec, struct vector* root_vec)
 {
     node_vector = vec;
+    node_vector_root = root_vec;
 }
 
 void node_push(struct node *node)
@@ -25,6 +26,65 @@ void node_push(struct node *node)
     vector_push(node_vector, &node);
 }
 
+struct node *node_peek_or_null()
+{
+    return vector_back_ptr_or_null(node_vector);
+}
+
+/**
+ * Peeks at the last node and if it can be used in an expression, 
+ * then this function will return that node otherwise NULL.
+ * 
+ * Expressionable node types are: NODE_TYPE_NUMERIC, NODE_TYPE_EXPRESSION, NODE_TYPE_PARENTHESES, NODE_TYPE_IDENTIFIER
+ */
+struct node *node_peek_expressionable_or_null()
+{
+    struct node *last_node = node_peek_or_null();
+    return node_is_expressionable(last_node) ? last_node : NULL;
+}
+
+/**
+ * Peeks at the last node pushed to the stack
+ */
+struct node *node_peek()
+{
+    return *((struct node **)(vector_back(node_vector)));
+}
+
+/**
+ * Pops the last node we pushed to the vector
+ */
+struct node *node_pop()
+{
+    struct node *last_node = vector_back_ptr(node_vector);
+    struct node *last_node_root = vector_empty(node_vector_root) ? NULL : vector_back_ptr(node_vector_root);
+
+    vector_pop(node_vector);
+
+    if (last_node == last_node_root)
+    {
+        // We also have pushed this node to the tree root so we need to pop from here too
+        vector_pop(node_vector_root);
+    }
+
+    return last_node;
+}
+
+/**
+ * Peeks at the node on the node_tree_vec, root of the tree basically.
+ * returns the next node the peek pointer is at then moves to the next node
+ */
+struct node **node_next()
+{
+    return vector_peek(node_vector_root);
+}
+
+void node_swap(struct node **f_node, struct node **s_node)
+{
+    struct node *tmp_node = *f_node;
+    *f_node = *s_node;
+    *s_node = tmp_node;
+}
 
 struct node *node_create(struct node *_node)
 {

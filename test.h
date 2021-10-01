@@ -1,3 +1,1 @@
-#ifdef ABC
-#define ABC 200
-#endif
+int test(int x);

@@ -7,7 +7,6 @@ struct lex_process_functions compiler_lex_functions = {
     .peek_char = compile_process_peek_char,
     .push_char = compile_process_push_char};
 
-
 void compiler_error(struct compile_process *compiler, const char *msg, ...)
 {
     va_list args;
@@ -84,17 +83,10 @@ void test(struct node *node)
     }
 }
 
-/**
- * Includes a file to be compiled, returns a new compile process that represents the file
- * to be compiled.
- * 
- * Only lexical analysis, and preprocessing are done for compiler includes
- * Parsing and code generation is excluded.
- */
-struct compile_process *compile_include(const char *filename, struct compile_process *parent_process)
+struct compile_process *compile_include_for_include_dir(const char *include_dir, const char *filename, struct compile_process *parent_process)
 {
     char tmp_filename[512];
-    sprintf(tmp_filename, "/usr/include/%s", filename);
+    sprintf(tmp_filename, "%s/%s", include_dir, filename);
     if (file_exists(tmp_filename))
     {
         filename = tmp_filename;
@@ -121,6 +113,26 @@ struct compile_process *compile_include(const char *filename, struct compile_pro
     }
 
     return process;
+}
+
+/**
+ * Includes a file to be compiled, returns a new compile process that represents the file
+ * to be compiled.
+ * 
+ * Only lexical analysis, and preprocessing are done for compiler includes
+ * Parsing and code generation is excluded.
+ */
+struct compile_process *compile_include(const char *filename, struct compile_process *parent_process)
+{
+    struct compile_process* new_process = NULL;
+    const char* include_dir = compiler_include_dir_begin(parent_process);
+    while(include_dir && !new_process)
+    {
+        new_process = compile_include_for_include_dir(include_dir, filename, parent_process);
+        include_dir = compiler_include_dir_next(parent_process);
+    }
+
+    return new_process;
 }
 
 int compile_file(const char *filename, const char *out_filename, int flags)

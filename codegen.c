@@ -526,7 +526,7 @@ static const char *asm_keyword_for_size(size_t size, char *tmp_buf)
     return tmp_buf;
 }
 
-static struct node *node_next()
+static struct node *codegen_node_next()
 {
     return vector_peek_ptr(current_process->node_tree_vec);
 }
@@ -2163,7 +2163,7 @@ void codegen_generate_data_section()
 {
     asm_push("section .data");
     struct node *node = NULL;
-    while ((node = node_next()) != NULL)
+    while ((node = codegen_node_next()) != NULL)
     {
         codegen_generate_data_section_part(node);
     }
@@ -2188,7 +2188,7 @@ void codegen_generate_root()
     asm_push("section .text");
 
     struct node *node = NULL;
-    while ((node = node_next()) != NULL)
+    while ((node = codegen_node_next()) != NULL)
     {
         codegen_generate_root_node(node);
     }

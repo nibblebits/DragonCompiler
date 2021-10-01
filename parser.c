@@ -482,65 +482,6 @@ void token_read_dots(size_t total)
     }
 }
 
-static struct node *node_peek_or_null()
-{
-    return vector_back_ptr_or_null(current_process->node_vec);
-}
-
-/**
- * Peeks at the last node and if it can be used in an expression, 
- * then this function will return that node otherwise NULL.
- * 
- * Expressionable node types are: NODE_TYPE_NUMERIC, NODE_TYPE_EXPRESSION, NODE_TYPE_PARENTHESES, NODE_TYPE_IDENTIFIER
- */
-static struct node *node_peek_expressionable_or_null()
-{
-    struct node *last_node = node_peek_or_null();
-    return node_is_expressionable(last_node) ? last_node : NULL;
-}
-
-/**
- * Peeks at the last node pushed to the stack
- */
-static struct node *node_peek()
-{
-    return *((struct node **)(vector_back(current_process->node_vec)));
-}
-
-/**
- * Pops the last node we pushed to the vector
- */
-static struct node *node_pop()
-{
-    struct node *last_node = vector_back_ptr(current_process->node_vec);
-    struct node *last_node_root = vector_empty(current_process->node_tree_vec) ? NULL : vector_back_ptr(current_process->node_tree_vec);
-
-    vector_pop(current_process->node_vec);
-
-    if (last_node == last_node_root)
-    {
-        // We also have pushed this node to the tree root so we need to pop from here too
-        vector_pop(current_process->node_tree_vec);
-    }
-
-    return last_node;
-}
-
-/**
- * Peeks at the node on the node_tree_vec, root of the tree basically.
- * returns the next node the peek pointer is at then moves to the next node
- */
-static struct node **node_next()
-{
-    return vector_peek(current_process->node_tree_vec);
-}
-
-static void node_swap(struct node **f_node, struct node **s_node)
-{
-    struct node *tmp_node = *f_node;
-    *f_node = *s_node;
-    *s_node = tmp_node;
-}
 
 static bool is_keyword_variable_modifier(const char *val)
 {
@@ -614,6 +555,7 @@ void make_variable_node(struct datatype *datatype, struct token *name_token, str
     }
     node_create(&(struct node){NODE_TYPE_VARIABLE, .var.type = *datatype, .var.name = name_str, .var.val = value_node});
     struct node *var_node = node_peek_or_null();
+    assert(var_node);
     // Is our struct node NULL? Then a fixup is required a forward declaration was present
     // Could argue that this is not the most sensible place to put it
     // but this is a gauranteed way that a fixup will be registered.

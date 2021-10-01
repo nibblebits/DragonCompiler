@@ -3,6 +3,8 @@
 
 #include <memory.h>
 
+const char* default_include_dirs[] = {"/usr/include", "/usr/include/dragon-compiler", "./dc_includes"};
+
 void compile_process_destroy(struct compile_process *process)
 {
     fclose(process->cfile.fp);
@@ -11,6 +13,29 @@ void compile_process_destroy(struct compile_process *process)
         fclose(process->ofile);
     }
 }
+
+const char *compiler_include_dir_begin(struct compile_process *process)
+{
+    vector_set_peek_pointer(process->include_dirs, 0);
+    const char *dir = vector_peek_ptr(process->include_dirs);
+    return dir;
+}
+
+const char *compiler_include_dir_next(struct compile_process *process)
+{
+    const char *dir = vector_peek_ptr(process->include_dirs);
+    return dir;
+}
+
+void compiler_setup_default_include_directories(struct vector *include_vec)
+{
+    size_t total = sizeof(default_include_dirs) / sizeof(const char*);
+    for (int i = 0; i < total; i++)
+    {
+        vector_push(include_vec, &default_include_dirs[i]);
+    }
+}
+
 struct compile_process *compile_process_create(const char *filename, const char *out_filename, int flags, struct compile_process *parent_process)
 {
     FILE *file = fopen(filename, "r");
@@ -44,23 +69,29 @@ struct compile_process *compile_process_create(const char *filename, const char 
     process->resolver = resolver_default_new_process(process);
     process->generator = codegenerator_new(process);
 
+
     // We have a parent processor? THen they should share the same preprocessor
     // instance, so they share all macro definitions
     if (parent_process)
     {
         process->preprocessor = parent_process->preprocessor;
+        process->include_dirs = parent_process->include_dirs;
     }
     else
     {
         // Dislike else optomize this.
         process->preprocessor = preprocessor_create(process);
+        // Vector of include directories
+        process->include_dirs = vector_create(sizeof(const char *));
+        // Setup default include directories
+        compiler_setup_default_include_directories(process->include_dirs);
     }
 
     // Load the absolute file path into the file.
-    char* path = malloc(PATH_MAX);
+    char *path = malloc(PATH_MAX);
     realpath(filename, path);
     process->cfile.abs_path = path;
-    node_set_vector(process->node_vec);
+    node_set_vector(process->node_vec, process->node_tree_vec);
     return process;
 }
 

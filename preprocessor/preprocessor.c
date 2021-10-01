@@ -1025,9 +1025,10 @@ void preprocessor_handle_include_token(struct compile_process *compiler)
     // We have the path here
     struct token *file_path_token = preprocessor_next_token(compiler);
 
-    char tmp_filename[512];
-    sprintf(tmp_filename, "/usr/include/%s", file_path_token->sval);
-    if (!file_exists(file_path_token->sval) && !file_exists(tmp_filename))
+    // Theirs a chance no string provided, check for this later i.e include <abc.h> no quotes ""
+    // Alright lets load and compile the given file
+    struct compile_process *new_compile_process = compile_include(file_path_token->sval, compiler);
+    if (!new_compile_process)
     {
         // File does not exist? Do we have a static handler for this
 
@@ -1042,12 +1043,6 @@ void preprocessor_handle_include_token(struct compile_process *compiler)
 
         compiler_error(compiler, "The file does not exist %s unable to include", file_path_token->sval);
     }
-
-    // Theirs a chance no string provided, check for this later i.e include <abc.h> no quotes ""
-    // Alright lets load and compile the given file
-    struct compile_process *new_compile_process = compile_include(file_path_token->sval, compiler);
-    assert(new_compile_process);
-
     // Now that we have the new compile process we must merge the tokens with our own
     preprocessor_token_vec_push_src(compiler, new_compile_process->token_vec);
 }

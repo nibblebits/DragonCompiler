@@ -467,6 +467,8 @@ struct compile_process
     // data can point to the node in question, along with other relevant information
     struct vector *symbol_tbl;
 
+    // Vector of const char* represents include directories.
+    struct vector* include_dirs;
     struct
     {
         struct scope *root;
@@ -481,6 +483,8 @@ struct compile_process
 
     // The code generator
     struct code_generator *generator;
+
+
 };
 
 struct datatype
@@ -1300,6 +1304,13 @@ void compiler_error(struct compile_process *compiler, const char *msg, ...);
  */
 void compiler_warning(struct compile_process *compiler, const char *msg, ...);
 
+
+/**
+ * Iterates through the include directories
+ */
+const char* compiler_include_dir_begin(struct compile_process* process);
+const char* compiler_include_dir_next(struct compile_process* process);
+
 /**
  * Compiles the file
  */
@@ -1511,10 +1522,35 @@ struct node *first_node_of_type(struct node *node, int type);
  */
 struct node *first_node_of_type_from_left(struct node *node, int type, int depth);
 
-void node_set_vector(struct vector *vec);
+void node_set_vector(struct vector* vec, struct vector* secondary_vec);
 void node_push(struct node *node);
 struct node *node_create(struct node *_node);
 
+struct node *node_peek_or_null();
+
+/**
+ * Peeks at the last node and if it can be used in an expression, 
+ * then this function will return that node otherwise NULL.
+ * 
+ * Expressionable node types are: NODE_TYPE_NUMERIC, NODE_TYPE_EXPRESSION, NODE_TYPE_PARENTHESES, NODE_TYPE_IDENTIFIER
+ */
+struct node *node_peek_expressionable_or_null();
+
+/**
+ * Peeks at the last node pushed to the stack
+ */
+struct node *node_peek();
+
+/**
+ * Pops the last node we pushed to the vector
+ */
+struct node *node_pop();
+/**
+ * Peeks at the node on the node_tree_vec, root of the tree basically.
+ * returns the next node the peek pointer is at then moves to the next node
+ */
+struct node **node_next();
+void node_swap(struct node **f_node, struct node **s_node);
 /**
  * Returns true if the given node is apart of an expression
  */

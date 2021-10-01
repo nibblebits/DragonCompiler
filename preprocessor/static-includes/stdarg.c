@@ -96,7 +96,7 @@ void native_va_end(struct generator *generator, struct node *orinating_function,
 
 void preprocessor_stdarg_internal_include(struct preprocessor *preprocessor, struct preprocessor_included_file *file)
 {
-    preprocessor_definition_create("__builtin_va_list", lex_process_tokens(tokens_build_for_string(preprocessor->compiler, "int")), NULL, preprocessor);
+    
     struct symbol *sym = native_create_function(preprocessor->compiler, "va_start", &(struct native_function_callbacks){.call = native_va_start});
     if (!sym)
     {

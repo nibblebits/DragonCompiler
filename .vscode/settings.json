@@ -16,6 +16,8 @@
         "time64.h": "c",
         "stdio-ldbl.h": "c",
         "struct_file.h": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "cstdarg": "c",
+        "cookie_io_functions_t.h": "c"
     }
 }

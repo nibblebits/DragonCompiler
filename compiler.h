@@ -27,7 +27,7 @@
 
 // Macro's make life cleaner..
 #define S_EQ(str, str2) \
-    (strcmp(str, str2) == 0)
+    str && str2 && (strcmp(str, str2) == 0)
 
 /**
  * Note: we do not include ")" as an operator only "(". ")" is classed as a symbol.
@@ -2089,6 +2089,8 @@ bool node_is_struct_or_union(struct node *node);
  * Returns true if the given datatype is a structure or union datatype
  */
 bool datatype_is_struct_or_union(struct datatype *dtype);
+
+bool datatype_is_struct_or_union_for_name(const char* name);
 
 /**
  * Returns true if this type is a pointer

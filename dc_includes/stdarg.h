@@ -1,6 +1,9 @@
 #ifndef STDARG_H
 #define STDARG_H
+
+typedef int __builtin_va_list;
 #include <stdarg-internal.h>
+
 
 int va_start(__builtin_va_list list, void *x);
 void va_copy(__builtin_va_list list, __builtin_va_list list2);

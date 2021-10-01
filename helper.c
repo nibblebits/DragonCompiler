@@ -84,6 +84,12 @@ bool datatype_is_struct_or_union(struct datatype *dtype)
     return dtype->type == DATA_TYPE_STRUCT || dtype->type == DATA_TYPE_UNION;
 }
 
+bool datatype_is_struct_or_union_for_name(const char *name)
+{
+    return S_EQ(name, "struct") || S_EQ(name, "union");
+}
+
+
 bool is_pointer_datatype(struct datatype* dtype)
 {
     return dtype->pointer_depth > 0;

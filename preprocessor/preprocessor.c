@@ -108,6 +108,8 @@ void preprocessor_handle_elif_token(struct compile_process *compiler, bool previ
 bool preprocessor_token_is_typedef(struct token *token);
 void preprocessor_handle_typedef_token(struct compile_process *compiler, struct vector *src_vec, bool overflow_use_token_vec);
 struct token *preprocessor_next_token_skip_nl(struct compile_process *compiler);
+struct preprocessor_definition *preprocessor_get_definition(struct preprocessor *preprocessor, const char *name);
+struct vector *preprocessor_definition_value(struct preprocessor_definition *definition);
 
 void preprocessor_execute_warning(struct compile_process *compiler, const char *msg)
 {
@@ -670,9 +672,43 @@ struct vector *preprocessor_definition_value_for_native(struct preprocessor_defi
     return definition->native.value(definition, arguments);
 }
 
+struct vector *preprocessor_definition_value_for_typedef_recursive(struct preprocessor_definition *definition, const char *last_type_str)
+{
+    assert(definition->type == PREPROCESSOR_DEFINITION_TYPEDEF);
+    vector_set_peek_pointer(definition->_typedef.value, 0);
+    struct token *token = vector_peek(definition->_typedef.value);
+    while (token)
+    {
+        if (datatype_is_struct_or_union_for_name(token->sval))
+        {
+            token = vector_peek(definition->_typedef.value);
+            continue;
+        }
+
+        // Okay we have an actual data type lets check if its another definition or not
+        struct preprocessor_definition *new_definition = preprocessor_get_definition(definition->preprocessor, token->sval);
+        if (new_definition)
+        {
+            if (S_EQ(last_type_str, token->sval))
+            {
+                // We have the same type here for the typedef i.e typedef struct Point Point;
+                // To avoid a recursion issue we will return the vector as we cant go down further
+                // A better design would be if we check for modifiers but the preprocessor is not
+                // aware of this type of stuff.
+                // Break so we can return
+                break;
+            }
+            // Alright we have another definition
+            return preprocessor_definition_value_for_typedef_recursive(new_definition, token->sval);
+        }
+
+        token = vector_peek(definition->_typedef.value);
+    }
+    return definition->_typedef.value;
+}
 struct vector *preprocessor_definition_value_for_typedef(struct preprocessor_definition *definition)
 {
-    return definition->_typedef.value;
+    return preprocessor_definition_value_for_typedef_recursive(definition, NULL);
 }
 
 struct vector *preprocessor_definition_value_with_arguments(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments)

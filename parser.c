@@ -1893,10 +1893,6 @@ void parser_datatype_init(struct token *datatype_token, struct datatype *datatyp
     datatype_out->type_str = datatype_token->sval;
 }
 
-static bool datatype_is_struct_or_union_for_name(const char *name)
-{
-    return S_EQ(name, "struct") || S_EQ(name, "union");
-}
 
 int parser_datatype_expected_for_type_string(const char *s)
 {

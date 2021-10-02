@@ -509,6 +509,11 @@ void preprocessor_token_vec_push_src(struct compile_process *compiler, struct ve
     }
 }
 
+void preprocessor_token_vec_push_src_token(struct compile_process* compiler, struct token* token)
+{
+    vector_push(compiler->token_vec, token);
+}
+
 void preprocessor_token_vec_push_src_resolve_definition(struct compile_process *compiler, struct vector *src_vec, struct token *token)
 {
     // I am pretty sure typedef is the only other thing we need to care for in this situation
@@ -523,8 +528,9 @@ void preprocessor_token_vec_push_src_resolve_definition(struct compile_process *
         return;
     }
 
-    vector_push(compiler->token_vec, token);
+    preprocessor_token_vec_push_src_token(compiler, token);
 }
+
 void preprocessor_token_vec_push_src_resolve_definitions(struct compile_process *compiler, struct vector *src_vec)
 {
     assert(src_vec != compiler->token_vec);
@@ -672,9 +678,13 @@ struct vector *preprocessor_definition_value_for_native(struct preprocessor_defi
     return definition->native.value(definition, arguments);
 }
 
-struct vector *preprocessor_definition_value_for_typedef_recursive(struct preprocessor_definition *definition, const char *last_type_str)
+struct vector *preprocessor_definition_value_recursive_for_typedef_or_other(struct preprocessor_definition *definition, const char *last_type_str)
 {
-    assert(definition->type == PREPROCESSOR_DEFINITION_TYPEDEF);
+    if (definition->type != PREPROCESSOR_DEFINITION_TYPEDEF)
+    {
+        // Not a typedef then what are we doing here?
+        return preprocessor_definition_value(definition);
+    }
     vector_set_peek_pointer(definition->_typedef.value, 0);
     struct token *token = vector_peek(definition->_typedef.value);
     while (token)
@@ -699,7 +709,7 @@ struct vector *preprocessor_definition_value_for_typedef_recursive(struct prepro
                 break;
             }
             // Alright we have another definition
-            return preprocessor_definition_value_for_typedef_recursive(new_definition, token->sval);
+            return preprocessor_definition_value_recursive_for_typedef_or_other(new_definition, token->sval);
         }
 
         token = vector_peek(definition->_typedef.value);
@@ -708,7 +718,7 @@ struct vector *preprocessor_definition_value_for_typedef_recursive(struct prepro
 }
 struct vector *preprocessor_definition_value_for_typedef(struct preprocessor_definition *definition)
 {
-    return preprocessor_definition_value_for_typedef_recursive(definition, NULL);
+    return preprocessor_definition_value_recursive_for_typedef_or_other(definition, NULL);
 }
 
 struct vector *preprocessor_definition_value_with_arguments(struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments)
@@ -1531,7 +1541,7 @@ void preprocessor_handle_identifier_macro_call_argument(struct preprocessor_func
     preprocessor_function_argument_push(arguments, token_vec);
 }
 
-struct token *preprocessor_handle_identifier_macro_call_argument_parse(struct compile_process *compiler, struct vector *value_vec, struct preprocessor_function_arguments *arguments, struct token *token)
+struct token *preprocessor_handle_identifier_macro_call_argument_parse(struct compile_process *compiler, struct vector* src_vec, struct vector *value_vec, struct preprocessor_function_arguments *arguments, struct token *token)
 {
     if (token_is_symbol(token, ')'))
     {
@@ -1545,14 +1555,14 @@ struct token *preprocessor_handle_identifier_macro_call_argument_parse(struct co
         preprocessor_handle_identifier_macro_call_argument(arguments, value_vec);
         // Clear the value vector ready for the next argument
         vector_clear(value_vec);
-        token = preprocessor_next_token(compiler);
+        token = vector_peek(src_vec);
         return token;
     }
 
     // OK this token is important push it to the value vector
     vector_push(value_vec, token);
 
-    token = preprocessor_next_token(compiler);
+    token = vector_peek(src_vec);
     return token;
 }
 
@@ -1619,20 +1629,20 @@ int preprocessor_macro_function_execute(struct compile_process *compiler, const 
 
     return 0;
 }
-struct preprocessor_function_arguments *preprocessor_handle_identifier_macro_call_arguments(struct compile_process *compiler)
+struct preprocessor_function_arguments *preprocessor_handle_identifier_macro_call_arguments(struct compile_process *compiler, struct vector* src_vec)
 {
     // Skip the left bracket
-    preprocessor_next_token(compiler);
+    vector_peek(src_vec);
 
     // We need room to store these arguments
     struct preprocessor_function_arguments *arguments = preprocessor_function_arguments_create();
 
     // Ok lets loop through all the values to form a function call argument vector
-    struct token *token = preprocessor_next_token(compiler);
+    struct token *token = vector_peek(src_vec);
     struct vector *value_vec = vector_create(sizeof(struct token));
     while (token)
     {
-        token = preprocessor_handle_identifier_macro_call_argument_parse(compiler, value_vec, arguments, token);
+        token = preprocessor_handle_identifier_macro_call_argument_parse(compiler, src_vec, value_vec, arguments, token);
     }
 
     // Free the now unused value vector
@@ -1664,7 +1674,7 @@ int preprocessor_handle_identifier_for_token_vector(struct compile_process *comp
     if (token_is_operator(vector_peek_no_increment(src_vec), "("))
     {
         // Let's create a vector for these arguments
-        struct preprocessor_function_arguments *arguments = preprocessor_handle_identifier_macro_call_arguments(compiler);
+        struct preprocessor_function_arguments *arguments = preprocessor_handle_identifier_macro_call_arguments(compiler, src_vec);
         const char *function_name = token->sval;
         // Let's execute the macro function
         preprocessor_macro_function_execute(compiler, function_name, arguments, 0);

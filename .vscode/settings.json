@@ -18,6 +18,7 @@
         "struct_file.h": "c",
         "stdint.h": "c",
         "cstdarg": "c",
-        "cookie_io_functions_t.h": "c"
+        "cookie_io_functions_t.h": "c",
+        "types.h": "c"
     }
 }

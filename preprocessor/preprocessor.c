@@ -361,6 +361,11 @@ bool preprocessor_expecting_additional_node(struct expressionable *expressionabl
     return node->type == PREPROCESSOR_KEYWORD_NODE && S_EQ(node->sval, "defined");
 }
 
+bool preprocessor_is_custom_operator(struct expressionable *expressionable, struct token *token)
+{
+    return false;
+}
+
 bool preprocessor_should_join_nodes(struct expressionable *expressionable, void *previous_node_ptr, void *node_ptr)
 {
     return true;
@@ -398,7 +403,8 @@ struct expressionable_config preprocessor_expressionable_config =
         .callbacks.set_exp_node = preprocessor_set_expression_node,
         .callbacks.should_join_nodes = preprocessor_should_join_nodes,
         .callbacks.join_nodes = preprocessor_join_nodes,
-        .callbacks.expecting_additional_node = preprocessor_expecting_additional_node};
+        .callbacks.expecting_additional_node = preprocessor_expecting_additional_node,
+        .callbacks.is_custom_operator = preprocessor_is_custom_operator};
 
 void preprocessor_handle_token(struct compile_process *compiler, struct token *token);
 
@@ -509,11 +515,64 @@ void preprocessor_token_vec_push_src(struct compile_process *compiler, struct ve
     }
 }
 
-void preprocessor_token_vec_push_src_token(struct compile_process* compiler, struct token* token)
+void preprocessor_token_vec_push_src_token(struct compile_process *compiler, struct token *token)
 {
     vector_push(compiler->token_vec, token);
 }
 
+void preprocessor_handle_concat(struct compile_process *compiler, struct vector *src_vec)
+{
+    compiler_error(compiler, "Not implemented..");
+}
+
+void preprocessor_handle_function_argument_to_string(struct compile_process *compiler, struct vector *src_vec, struct vector* value_vec_target, struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments)
+{
+    // Next token is the identifier that must become a string
+    struct token *next_token = vector_peek(src_vec);
+
+    if (!next_token || next_token->type != TOKEN_TYPE_IDENTIFIER)
+    {
+        compiler_error(compiler, "No macro function argument was provided to convert to a string");
+    }
+
+    int argument_index = preprocessor_definition_argument_exists(definition, next_token->sval);
+    if (argument_index == -1)
+    {
+        compiler_error(compiler, "Unexpected macro function argument %s", next_token->sval);
+    }
+
+    struct preprocessor_function_argument* argument = preprocessor_function_argument_at(arguments, argument_index);
+    if (!argument)
+    {
+        FAIL_ERR("BUG: Argument exists but failed to pull");
+    }
+
+    
+    // Okay let's convert the argument into a string
+    // Get the first token
+    
+    struct token* first_token_for_argument = vector_peek_at(argument->tokens, 0);
+    // Let's create a string token
+    struct token str_token = {};
+    str_token.type = TOKEN_TYPE_STRING;
+    str_token.sval = first_token_for_argument->between_brackets;
+    vector_push(value_vec_target, &str_token);
+
+}
+
+void preprocessor_handle_string_escape_or_concat(struct compile_process *compiler,struct preprocessor_definition* definition, struct vector *value_vec_target, struct vector *src_vec, struct preprocessor_function_arguments *arguments, struct token *token)
+{
+    // We have a hash tag then this may be a string escape.
+    // Is the next token also a hash tag if so its a preprocessor concat
+    struct token *next_token = vector_peek_no_increment(src_vec);
+    if (token_is_symbol(next_token, '#'))
+    {
+        preprocessor_handle_concat(compiler, src_vec);
+        return;
+    }
+
+    preprocessor_handle_function_argument_to_string(compiler, src_vec, value_vec_target, definition, arguments);
+}
 void preprocessor_token_vec_push_src_resolve_definition(struct compile_process *compiler, struct vector *src_vec, struct token *token)
 {
     // I am pretty sure typedef is the only other thing we need to care for in this situation
@@ -1541,7 +1600,7 @@ void preprocessor_handle_identifier_macro_call_argument(struct preprocessor_func
     preprocessor_function_argument_push(arguments, token_vec);
 }
 
-struct token *preprocessor_handle_identifier_macro_call_argument_parse(struct compile_process *compiler, struct vector* src_vec, struct vector *value_vec, struct preprocessor_function_arguments *arguments, struct token *token)
+struct token *preprocessor_handle_identifier_macro_call_argument_parse(struct compile_process *compiler, struct vector *src_vec, struct vector *value_vec, struct preprocessor_function_arguments *arguments, struct token *token)
 {
     if (token_is_symbol(token, ')'))
     {
@@ -1571,6 +1630,19 @@ static bool preprocessor_is_macro_function(struct preprocessor_definition *defin
     return definition->type == PREPROCESSOR_DEFINITION_MACRO_FUNCTION || definition->type == PREPROCESSOR_DEFINITION_NATIVE_CALLBACK;
 }
 
+int preprocessor_macro_function_push_argument(struct compile_process *compiler, struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments, const char *arg_name, struct vector *definition_token_vec, struct vector *value_vec_target)
+{
+    // Let's check if we have a function argument in the definition
+    // if so this needs replacing
+    int argument_index = preprocessor_definition_argument_exists(definition, arg_name);
+    if (argument_index != -1)
+    {
+        // Ok we have an argument, we need to populate the output vector
+        // a little differently.
+        preprocessor_function_argument_push_to_vec(preprocessor_function_argument_at(arguments, argument_index), value_vec_target);
+    }
+    return argument_index;
+}
 int preprocessor_macro_function_execute(struct compile_process *compiler, const char *function_name, struct preprocessor_function_arguments *arguments, int flags)
 {
     struct preprocessor *preprocessor = compiler_preprocessor(compiler);
@@ -1597,19 +1669,24 @@ int preprocessor_macro_function_execute(struct compile_process *compiler, const 
     struct token *token = vector_peek(definition_token_vec);
     while (token)
     {
+        if (token_is_symbol(token, '#'))
+        {
+            // We have argument to string or concatination going on here..
+            // Deal with it
+            preprocessor_handle_string_escape_or_concat(compiler, definition, value_vec_target, definition_token_vec, arguments, token);
+            token = vector_peek(definition_token_vec);
+            continue;
+        }
         if (token->type == TOKEN_TYPE_IDENTIFIER)
         {
-            // Let's check if we have a function argument in the definition
-            // if so this needs replacing
-            int argument_index = preprocessor_definition_argument_exists(definition, token->sval);
-            if (argument_index != -1)
+            int res = preprocessor_macro_function_push_argument(compiler, definition, arguments, token->sval, definition_token_vec, value_vec_target);
+            if (res == -1)
             {
-                // Ok we have an argument, we need to populate the output vector
-                // a little differently.
-                preprocessor_function_argument_push_to_vec(preprocessor_function_argument_at(arguments, argument_index), value_vec_target);
-                token = vector_peek(definition_token_vec);
-                continue;
+                compiler_error(compiler, "The given function argument could not be found for macro function %s", function_name);
             }
+
+            token = vector_peek(definition_token_vec);
+            continue;
         }
         // Push the token it does not need modfiying
         vector_push(value_vec_target, token);
@@ -1629,7 +1706,7 @@ int preprocessor_macro_function_execute(struct compile_process *compiler, const 
 
     return 0;
 }
-struct preprocessor_function_arguments *preprocessor_handle_identifier_macro_call_arguments(struct compile_process *compiler, struct vector* src_vec)
+struct preprocessor_function_arguments *preprocessor_handle_identifier_macro_call_arguments(struct compile_process *compiler, struct vector *src_vec)
 {
     // Skip the left bracket
     vector_peek(src_vec);
@@ -1738,6 +1815,7 @@ int preprocessor_handle_hashtag_token(struct compile_process *compiler, struct t
         preprocessor_handle_include_token(compiler);
         is_preprocessed = true;
     }
+
     return is_preprocessed;
 }
 

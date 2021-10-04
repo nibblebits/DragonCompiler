@@ -19,6 +19,7 @@
         "stdint.h": "c",
         "cstdarg": "c",
         "cookie_io_functions_t.h": "c",
-        "types.h": "c"
+        "types.h": "c",
+        "bitset": "c"
     }
 }

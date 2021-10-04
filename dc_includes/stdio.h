@@ -332,7 +332,7 @@ extern int fprintf (FILE *__restrict __stream,
 extern int printf (const char *__restrict __format, ...);
 /* Write formatted output to S.  */
 extern int sprintf (char *__restrict __s,
-		    const char *__restrict __format, ...) __THROWNL;
+		    const char *__restrict __format, ...);
 
 /* Write formatted output to S from argument list ARG.
 
@@ -347,20 +347,12 @@ extern int vfprintf (FILE *__restrict __s, const char *__restrict __format,
 extern int vprintf (const char *__restrict __format, __gnuc_va_list __arg);
 /* Write formatted output to S from argument list ARG.  */
 extern int vsprintf (char *__restrict __s, const char *__restrict __format,
-		     __gnuc_va_list __arg) __THROWNL;
+		     __gnuc_va_list __arg);
 
-#if defined __USE_ISOC99 || defined __USE_UNIX98
-/* Maximum chars of output to write in MAXLEN.  */
-extern int snprintf (char *__restrict __s, size_t __maxlen,
-		     const char *__restrict __format, ...)
-     __THROWNL __attribute__ ((__format__ (__printf__, 3, 4)));
 
-extern int vsnprintf (char *__restrict __s, size_t __maxlen,
-		      const char *__restrict __format, __gnuc_va_list __arg)
-     __THROWNL __attribute__ ((__format__ (__printf__, 3, 0)));
-#endif
 
 #if __GLIBC_USE (LIB_EXT2)
+
 /* Write formatted output to a string dynamically allocated with `malloc'.
    Store the address of the string in *PTR.  */
 extern int vasprintf (char **__restrict __ptr, const char *__restrict __f,
@@ -373,8 +365,6 @@ extern int asprintf (char **__restrict __ptr,
 		     const char *__restrict __fmt, ...)
      __THROWNL __attribute__ ((__format__ (__printf__, 2, 3))) __wur;
 #endif
-#define __attribute__(x) 0
-#define __format__(x,y,z) x+y+z
 
 #ifdef __USE_XOPEN2K8
 /* Write formatted output to a file descriptor.  */

@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define BUFFER_REALLOC_AMOUNT 32
+#define BUFFER_REALLOC_AMOUNT 2000
 struct buffer
 {
     char* data;

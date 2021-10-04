@@ -27,7 +27,7 @@
 
 // Macro's make life cleaner..
 #define S_EQ(str, str2) \
-    str && str2 && (strcmp(str, str2) == 0)
+    str &&str2 && (strcmp(str, str2) == 0)
 
 /**
  * Note: we do not include ")" as an operator only "(". ")" is classed as a symbol.
@@ -415,6 +415,15 @@ struct lex_process
     struct vector *token_vec;
     struct compile_process *compiler;
 
+    /**
+ * The current expression count we are in. I.e
+ * 
+ * ((50)) during the parse of numerical value 50 current_expression_count will be two.
+ * If current expression count is zero then we are not in an expression
+ */
+    int current_expression_count;
+    struct buffer *parentheses_buffer;
+
     struct lex_process_functions *function;
 
     // Private data that the creator of the lex process can use to store.
@@ -468,7 +477,7 @@ struct compile_process
     struct vector *symbol_tbl;
 
     // Vector of const char* represents include directories.
-    struct vector* include_dirs;
+    struct vector *include_dirs;
     struct
     {
         struct scope *root;
@@ -483,8 +492,6 @@ struct compile_process
 
     // The code generator
     struct code_generator *generator;
-
-
 };
 
 struct datatype
@@ -767,9 +774,15 @@ enum
     NUMBER_TYPE_DOUBLE
 };
 
+enum
+{
+    TOKEN_FLAG_IS_CUSTOM_OPERATOR = 0b00000001
+};
+
 struct token
 {
     int type;
+    int flags;
     struct pos pos;
     union
     {
@@ -790,6 +803,12 @@ struct token
     // i.e * a for token * whitespace would be true as the token "a" has a space
     // between this token
     bool whitespace;
+
+    // If this token is between the brackets ( ) then it will have
+    // a pointer for the data between the brackets.
+    // I.e if we have abc(50+20+40) then for numerical token 20 between_brackets
+    // will point to the string 50+20+40
+    const char *between_brackets;
 };
 
 struct sizeable_node
@@ -812,30 +831,27 @@ struct symbol
     void *data;
 };
 
-
 struct native_function;
 struct generator;
-
 
 struct generator_entity_address
 {
     bool is_stack;
     long offset;
-    const char* address;
-    const char* base_address;
+    const char *address;
+    const char *base_address;
 };
 
-
-#define GENERATOR_BEGIN_EXPRESSION(gen) 
+#define GENERATOR_BEGIN_EXPRESSION(gen)
 #define GENERATOR_END_EXPRESSION(gen) gen->end_exp(gen)
 
-typedef void(*ASM_PUSH_PROTOTYPE)(const char* ins, ...);
+typedef void (*ASM_PUSH_PROTOTYPE)(const char *ins, ...);
 
 // orinating_function is the function this function call originated from
-typedef void(*NATIVE_FUNCTION_CALL)(struct generator* generator, struct node* orinating_function, struct native_function* func, struct vector* arguments);
-typedef void(*GENERATOR_GENERATE_EXPRESSION)(struct generator* generator, struct node* node, int flags);
-typedef void(*GENERATOR_ENTITY_ADDRESS)(struct generator* generator, struct resolver_entity* entity, struct generator_entity_address* address_out);
-typedef void(*GENERATOR_END_EXPRESSION)(struct generator* generator);
+typedef void (*NATIVE_FUNCTION_CALL)(struct generator *generator, struct node *orinating_function, struct native_function *func, struct vector *arguments);
+typedef void (*GENERATOR_GENERATE_EXPRESSION)(struct generator *generator, struct node *node, int flags);
+typedef void (*GENERATOR_ENTITY_ADDRESS)(struct generator *generator, struct resolver_entity *entity, struct generator_entity_address *address_out);
+typedef void (*GENERATOR_END_EXPRESSION)(struct generator *generator);
 
 struct generator
 {
@@ -843,10 +859,10 @@ struct generator
     GENERATOR_GENERATE_EXPRESSION gen_exp;
     GENERATOR_END_EXPRESSION end_exp;
     GENERATOR_ENTITY_ADDRESS entity_address;
-    struct compile_process* compiler;
+    struct compile_process *compiler;
 
     // Private data for the generator.
-    void* private;
+    void *private;
 };
 
 struct native_function_callbacks
@@ -855,11 +871,11 @@ struct native_function_callbacks
 };
 struct native_function
 {
-    const char* name;
+    const char *name;
     struct native_function_callbacks callbacks;
 };
 
-struct symbol* native_create_function(struct compile_process* compiler, const char* name, struct native_function_callbacks* callbacks);
+struct symbol *native_create_function(struct compile_process *compiler, const char *name, struct native_function_callbacks *callbacks);
 enum
 {
     PARSE_ALL_OK,
@@ -1003,7 +1019,6 @@ enum
      */
     NODE_FLAG_HAS_VARIABLE_COMBINED = 0b00001000
 };
-
 
 enum
 {
@@ -1288,7 +1303,6 @@ enum
     COMPILER_FAILED_WITH_ERRORS,
 };
 
-
 /**
  * Returns true if this node can be used in an expression
  */
@@ -1304,12 +1318,11 @@ void compiler_error(struct compile_process *compiler, const char *msg, ...);
  */
 void compiler_warning(struct compile_process *compiler, const char *msg, ...);
 
-
 /**
  * Iterates through the include directories
  */
-const char* compiler_include_dir_begin(struct compile_process* process);
-const char* compiler_include_dir_next(struct compile_process* process);
+const char *compiler_include_dir_begin(struct compile_process *process);
+const char *compiler_include_dir_next(struct compile_process *process);
 
 /**
  * Compiles the file
@@ -1433,11 +1446,10 @@ struct symbol *symresolver_register_symbol(struct compile_process *process, cons
  */
 struct symbol *symresolver_get_symbol(struct compile_process *process, const char *name);
 
-
 /**
  * Gets the symbol for the given function name. If not a native function NULL is returned.
  */
-struct symbol* symresolver_get_symbol_for_native_function(struct compile_process* process, const char* name);
+struct symbol *symresolver_get_symbol_for_native_function(struct compile_process *process, const char *name);
 
 /**
  * Gets the node from the symbol data
@@ -1522,7 +1534,7 @@ struct node *first_node_of_type(struct node *node, int type);
  */
 struct node *first_node_of_type_from_left(struct node *node, int type, int depth);
 
-void node_set_vector(struct vector* vec, struct vector* secondary_vec);
+void node_set_vector(struct vector *vec, struct vector *secondary_vec);
 void node_push(struct node *node);
 struct node *node_create(struct node *_node);
 
@@ -1661,8 +1673,7 @@ int compute_sum_padding_for_body(struct node *node);
  */
 int padding(int val, int to);
 
-
-bool datatype_is_primitive(const char* type);
+bool datatype_is_primitive(const char *type);
 
 /**
  * Returns true if the given variable node is a primative variable
@@ -1830,15 +1841,11 @@ struct datatype *resolver_get_datatype(struct node *node);
 
 // Code gen
 
-
-
-
 // Node
 
 struct node *node_clone(struct node *node);
 const char *node_var_type_str(struct node *var_node);
 const char *node_var_name(struct node *var_node);
-
 
 /**
  * Returns true if this is a variable node and it is a pointer, or returns true
@@ -1923,7 +1930,7 @@ typedef void (*EXPPRESIONABLE_SET_EXPRESSION_NODE)(struct expressionable *expres
 typedef bool (*EXPRESSIONABLE_SHOULD_JOIN_NODES)(struct expressionable *expressionable, void *previous_node, void *node);
 typedef void *(*EXPRESSIONABLE_JOIN_NODES)(struct expressionable *expressionable, void *previous_node, void *node);
 typedef bool (*EXPRESSIONABLE_EXPECTING_ADDITIONAL_NODE)(struct expressionable *expressionable, void *node);
-
+typedef bool (*EXPRESSIONABLE_IS_CUSTOM_OPERATOR)(struct expressionable *expressionable, struct token *token);
 struct expressionable_config
 {
     struct expressionable_callbacks
@@ -1969,6 +1976,11 @@ struct expressionable_config
          * node
          */
         EXPRESSIONABLE_EXPECTING_ADDITIONAL_NODE expecting_additional_node;
+
+        // Some systems have special operators that may not be in the norm
+        // for example the preprocessor in C can have the operators
+        // "#" and "##" but these operators do not work outside of the preprocessor
+        EXPRESSIONABLE_IS_CUSTOM_OPERATOR is_custom_operator;
 
     } callbacks;
 };
@@ -2090,7 +2102,7 @@ bool node_is_struct_or_union(struct node *node);
  */
 bool datatype_is_struct_or_union(struct datatype *dtype);
 
-bool datatype_is_struct_or_union_for_name(const char* name);
+bool datatype_is_struct_or_union_for_name(const char *name);
 
 /**
  * Returns true if this type is a pointer
@@ -2112,12 +2124,11 @@ bool node_is_expression_or_parentheses(struct node *node);
  */
 bool node_is_value_type(struct node *node);
 
-
 /**
  * Gets the final function argument from the given function node.
  * Assertion error if you pass anything other than a function node.
  */
-struct node* node_function_get_final_argument(struct node* func_node);
+struct node *node_function_get_final_argument(struct node *func_node);
 
 /**
  * Returns the variable node of this node, if its not a variable node then
@@ -2190,7 +2201,6 @@ struct fixup *fixup_register(struct fixup_system *system, struct fixup_config *c
 bool fixup_resolve(struct fixup *fixup);
 void *fixup_private(struct fixup *fixup);
 bool fixups_resolve(struct fixup_system *system);
-
 
 // codegen
 void register_set_flag(int flag);

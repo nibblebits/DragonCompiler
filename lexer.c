@@ -28,6 +28,38 @@
 static struct token tmp_token;
 static struct lex_process *lex_process;
 
+void error(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    compiler_error(lex_process->compiler, fmt, args);
+    va_end(args);
+}
+
+void lex_new_expression()
+{
+    lex_process->current_expression_count++;
+    if (lex_process->current_expression_count == 1)
+    {
+        // This is the first expression in series? Then we must initialize the buffer
+        lex_process->parentheses_buffer = buffer_create();
+    }
+}
+
+void lex_finish_expression()
+{
+    lex_process->current_expression_count--;
+    if (lex_process->current_expression_count < 0)
+    {
+        error("You closed an expression before opening one");
+    }
+}
+
+bool lex_is_in_expression()
+{
+    return lex_process->current_expression_count > 0;
+}
+
 char lexer_string_buffer_next_char(struct lex_process *process)
 {
     struct buffer *buf = lex_process_private(process);
@@ -50,17 +82,13 @@ struct lex_process_functions lexer_string_buffer_functions = {
     .peek_char = lexer_string_buffer_peek_char,
     .push_char = lexer_string_buffer_push_char};
 
-void error(const char *fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    compiler_error(lex_process->compiler, fmt, args);
-    va_end(args);
-}
-
 static char nextc()
 {
     char c = lex_process->function->next_char(lex_process);
+    if (lex_is_in_expression())
+    {
+        buffer_write(lex_process->parentheses_buffer, c);
+    }
     lex_process->pos.col++;
     if (c == '\n')
     {
@@ -121,7 +149,7 @@ bool keyword_is_datatype(const char *str)
            S_EQ(str, "float") ||
            S_EQ(str, "double") ||
            S_EQ(str, "long") ||
-           S_EQ(str, "struct") || 
+           S_EQ(str, "struct") ||
            S_EQ(str, "union");
 }
 
@@ -228,6 +256,10 @@ static struct token *token_create(struct token *_token)
     // Once its pushed to the token stack then its safe to call this function again
     memcpy(&tmp_token, _token, sizeof(tmp_token));
     tmp_token.pos = lex_file_position();
+    if (lex_is_in_expression())
+    {
+        tmp_token.between_brackets = buffer_ptr(lex_process->parentheses_buffer);
+    }
     return &tmp_token;
 }
 
@@ -348,7 +380,13 @@ static struct token *token_make_operator_or_string()
         }
     }
 
-    return token_create(&(struct token){TOKEN_TYPE_OPERATOR, .sval = read_op()});
+    struct token *token = token_create(&(struct token){TOKEN_TYPE_OPERATOR, .sval = read_op()});
+    if (op == '(')
+    {
+        lex_new_expression();
+    }
+
+    return token;
 }
 
 const char *read_hex_number_str()
@@ -432,8 +470,15 @@ static struct token *token_make_identifier_or_keyword()
 
 static struct token *token_make_symbol()
 {
-    char c = nextc();
-    return token_create(&(struct token){TOKEN_TYPE_SYMBOL, .cval = c});
+    char c = peekc();
+    if (c == ')')
+    {
+        lex_finish_expression();
+    }
+
+    c = nextc();
+    struct token* token = token_create(&(struct token){TOKEN_TYPE_SYMBOL, .cval = c});
+    return token;
 }
 static struct token *read_token_special()
 {
@@ -476,7 +521,7 @@ static struct token *token_make_multiline_comment()
         {
             // End of file.. but this comment is not closed.
             // Something bad here, it should not be allowed
-            error("EOF reached whilst in a multi-line comment. The comment was not terminated! \"%s\" \n", buffer_ptr(buffer));
+            error("EOF reached whilst in a multi-line comment. The comment was not terminated! \"%s\" \n", (const char *)buffer_ptr(buffer));
         }
         if (c == '*')
         {
@@ -680,11 +725,13 @@ static struct token *read_next_token()
 
 int lex(struct lex_process *process)
 {
+    process->current_expression_count = 0;
+    process->parentheses_buffer = NULL;
+
     lex_process = process;
     // Copy filename to the lex process
     lex_process->pos.filename = process->compiler->cfile.abs_path;
 
-    
     struct token *token = read_next_token();
     while (token)
     {

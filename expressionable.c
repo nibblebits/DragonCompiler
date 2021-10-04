@@ -321,13 +321,8 @@ int expressionable_parse_exp(struct expressionable *expressionable, struct token
     return 0;
 }
 
-int expressionable_parse_single(struct expressionable *expressionable)
+int expressionable_parse_token(struct expressionable *expressionable, struct token *token)
 {
-    struct token *token = expressionable_peek_next(expressionable);
-    if (!token)
-        return -1;
-
-    void *previous_node = expressionable_node_peek_or_null(expressionable);
     int res = -1;
     switch (token->type)
     {
@@ -344,6 +339,25 @@ int expressionable_parse_single(struct expressionable *expressionable)
         break;
     }
 
+    return res;
+}
+int expressionable_parse_single(struct expressionable *expressionable)
+{
+    int res = -1;
+    struct token *token = expressionable_peek_next(expressionable);
+    if (!token)
+        return -1;
+
+    void *previous_node = expressionable_node_peek_or_null(expressionable);
+    if (expressionable_callbacks(expressionable)->is_custom_operator(expressionable, token))
+    {
+        token->flags |= TOKEN_FLAG_IS_CUSTOM_OPERATOR;
+        expressionable_parse_exp(expressionable, token);
+    }
+    else
+    {
+        res = expressionable_parse_token(expressionable, token);
+    }
     previous_node = expressionable_node_peek_or_null(expressionable);
     if (expressionable_callbacks(expressionable)->expecting_additional_node(expressionable, previous_node))
     {

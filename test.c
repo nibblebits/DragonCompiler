@@ -1,7 +1,13 @@
-#define mkstr(S) #S
 
+#define ABC(A, F) ABCC + F
+int printf(const char* s, ...);
+
+int abc(int x, int y)
+{
+    return x+y;
+}
 int main()
 {
-    char* abc;
-    abc = mkstr(testing abc);
+    int x;
+    x = ABC(50, 20);
 }

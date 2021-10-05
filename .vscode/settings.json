@@ -20,6 +20,7 @@
         "cstdarg": "c",
         "cookie_io_functions_t.h": "c",
         "types.h": "c",
-        "bitset": "c"
+        "bitset": "c",
+        "stdbool.h": "c"
     }
 }

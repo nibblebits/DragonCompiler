@@ -791,6 +791,7 @@ struct token
         unsigned int inum;
         unsigned long lnum;
         unsigned long long llnum;
+        void* any;
     };
 
     // Information for the given number token, if this token is of type TOKEN_TYPE_NUMBER
@@ -1853,6 +1854,7 @@ const char *node_var_name(struct node *var_node);
  */
 bool is_pointer_node(struct node *node);
 // Token
+struct vector *tokens_join_vector(struct compile_process *compiler, struct vector *token_vec);
 
 bool token_is_operator(struct token *token, const char *op);
 bool token_is_keyword(struct token *token, const char *keyword);

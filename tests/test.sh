@@ -470,5 +470,14 @@ if [ $? -ne 22 ]; then
 else
     echo -e "printf test passed"
 fi
+
+echo -e "Preprocessor concat test"
+./build/preprocessor_concat_test
+if [ $? -ne 0 ]; then
+    echo -e "Preprocessor concat failed"
+    res_code=1
+else
+    echo -e "Preprocessor concat passed"
+fi
 echo -e "All tests finished"
 exit $res_code

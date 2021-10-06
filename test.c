@@ -1,7 +1,7 @@
-#define __STD_TYPE typedef
-# define __SWORD_TYPE		int
-#define __SSIZE_T_TYPE		__SWORD_TYPE
+long long x = 50;
 
-typedef __SSIZE_T_TYPE __ssize_t; /* Type of a byte count, or error.  */
-
-__ssize_t abc;
+int printf(const char* s, ...);
+int main()
+{
+    x = 40;
+}

@@ -2,6 +2,11 @@
 #include "helpers/buffer.h"
 #include <stdbool.h>
 
+#define PRIMITIVE_TYPES_TOTAL 7
+const char* primitive_types[PRIMITIVE_TYPES_TOTAL] = {
+    "void", "char", "short", "int", "long", "float", "double"
+};
+
 void tokens_join_buffer_write_token(struct buffer *fmt_buf, struct token *token)
 {
 
@@ -59,6 +64,20 @@ bool token_is_operator(struct token *token, const char *op)
 bool token_is_keyword(struct token *token, const char *keyword)
 {
     return token && token->type == TOKEN_TYPE_KEYWORD && S_EQ(token->sval, keyword);
+}
+
+bool token_is_primitive_keyword(struct token* token)
+{
+    if (token->type != TOKEN_TYPE_KEYWORD)
+        return false;
+    
+    for (int i = 0; i < PRIMITIVE_TYPES_TOTAL; i++)
+    {
+        if (S_EQ(primitive_types[i], token->sval))
+            return true;
+    }
+
+    return false;
 }
 
 bool token_is_symbol(struct token *token, char sym)

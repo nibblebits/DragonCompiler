@@ -260,6 +260,12 @@ const char *codegen_sub_register(const char *original_register, size_t size)
         {
             reg = "eax";
         }
+        else if(size == DATA_SIZE_DDWORD)
+        {
+            // Bit of an issue... If we use RAX
+            // we will have trouble with 32 bit processor..
+            reg = "rax";
+        }
     }
     else if (S_EQ(original_register, "ebx"))
     {
@@ -274,6 +280,10 @@ const char *codegen_sub_register(const char *original_register, size_t size)
         else if (size == DATA_SIZE_DWORD)
         {
             reg = "ebx";
+        }
+        else if(size == DATA_SIZE_DDWORD)
+        {
+            reg = "rbx";
         }
     }
     else if (S_EQ(original_register, "ecx"))
@@ -290,6 +300,10 @@ const char *codegen_sub_register(const char *original_register, size_t size)
         {
             reg = "ecx";
         }
+        else if(size == DATA_SIZE_DDWORD)
+        {
+            reg = "rcx";
+        }
     }
     else if (S_EQ(original_register, "edx"))
     {
@@ -305,6 +319,10 @@ const char *codegen_sub_register(const char *original_register, size_t size)
         {
             reg = "edx";
         }
+        else if(size == DATA_SIZE_DDWORD)
+        {
+            reg = "rdx";
+        }
     }
     return reg;
 }
@@ -317,24 +335,29 @@ const char *codegen_sub_register(const char *original_register, size_t size)
  * \param size The size of the data you are accessing
  * \param reg_to_use pointer to a const char pointer, this will be set to the register you should use for this operation. 32 bit register, 16 bit register or 8 bit register for full register eax, ebx, ecx, edx will be returned 
  */
-const char *codegen_byte_word_or_dword(size_t size, const char **reg_to_use)
+const char *codegen_byte_word_or_dword_or_ddword(size_t size, const char **reg_to_use)
 {
     const char *type = NULL;
     const char *new_register = *reg_to_use;
     if (size == DATA_SIZE_BYTE)
     {
         type = "byte";
-        new_register = codegen_sub_register(*reg_to_use, 1);
+        new_register = codegen_sub_register(*reg_to_use, DATA_SIZE_BYTE);
     }
     else if (size == DATA_SIZE_WORD)
     {
         type = "word";
-        new_register = codegen_sub_register(*reg_to_use, 2);
+        new_register = codegen_sub_register(*reg_to_use, DATA_SIZE_WORD);
     }
     else if (size == DATA_SIZE_DWORD)
     {
         type = "dword";
-        new_register = codegen_sub_register(*reg_to_use, 4);
+        new_register = codegen_sub_register(*reg_to_use, DATA_SIZE_DWORD);
+    }
+    else if(size == DATA_SIZE_DDWORD)
+    {
+        type = "ddword";
+        new_register = codegen_sub_register(*reg_to_use, DATA_SIZE_DDWORD);
     }
 
     *reg_to_use = new_register;
@@ -1042,7 +1065,7 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     register_unset_flag(REGISTER_EAX_IS_USED);
 
     const char *reg_to_use = "eax";
-    const char *mov_type_keyword = codegen_byte_word_or_dword(datatype_size(&variable_node(left_entity->node)->var.type), &reg_to_use);
+    const char *mov_type_keyword = codegen_byte_word_or_dword_or_ddword(datatype_size(&variable_node(left_entity->node)->var.type), &reg_to_use);
 
     asm_push("mov %s [%s], %s", mov_type_keyword, codegen_entity_private(left_entity)->address, reg_to_use);
 }

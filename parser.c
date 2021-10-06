@@ -1813,8 +1813,36 @@ int size_of_union(const char *union_name)
     return node->_union.body_n->body.size;
 }
 
-void parser_datatype_init_type_and_size_for_primitive(struct token *datatype_token, struct datatype *datatype_out)
+
+bool parser_datatype_is_secondary_allowed_for_type(const char* type)
 {
+    return S_EQ(type, "long");
+}
+
+void parser_datatype_init_type_and_size_for_primitive(struct token *datatype_token, struct token* datatype_secondary_token, struct datatype *datatype_out);
+
+void parser_datatype_adjust_size_for_secondary(struct datatype* datatype, struct token* datatype_secondary_token)
+{
+    if (!datatype_secondary_token)
+    {
+        return;
+    }
+
+    struct datatype* secondary_data_type = calloc(sizeof(struct datatype), 1);
+    parser_datatype_init_type_and_size_for_primitive(datatype_secondary_token, NULL, secondary_data_type);
+    datatype->size += secondary_data_type->size;
+    datatype->secondary = secondary_data_type;
+    datatype->flags |= DATATYPE_FLAG_SECONDARY;
+}
+
+void parser_datatype_init_type_and_size_for_primitive(struct token *datatype_token, struct token* datatype_secondary_token, struct datatype *datatype_out)
+{
+    if (!parser_datatype_is_secondary_allowed_for_type(datatype_token->sval) && datatype_secondary_token)
+    {
+        // no secondary is allowed
+        compiler_error(current_process, "Your not allowed a secondary datatype here for the given datatype %s", datatype_token->sval);
+    }
+
     if (S_EQ(datatype_token->sval, "void"))
     {
         datatype_out->type = DATA_TYPE_VOID;
@@ -1855,13 +1883,27 @@ void parser_datatype_init_type_and_size_for_primitive(struct token *datatype_tok
     {
         parse_err("Bug unexpected primitive variable\n");
     }
+
+    parser_datatype_adjust_size_for_secondary(datatype_out, datatype_secondary_token);
 }
-void parser_datatype_init_type_and_size(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth, int expected_type)
+
+bool parser_datatype_is_secondary_allowed(int expected_type)
 {
+    return expected_type == DATA_TYPE_EXPECT_PRIMITIVE;
+}
+
+void parser_datatype_init_type_and_size(struct token *datatype_token, struct token* datatype_secondary_token, struct datatype *datatype_out, int pointer_depth, int expected_type)
+{
+
+    if (!parser_datatype_is_secondary_allowed(expected_type) && datatype_secondary_token)
+    {
+        compiler_error(current_process, "You provided an extra datatype yet this is not a primitive variable");
+    }
+
     switch (expected_type)
     {
     case DATA_TYPE_EXPECT_PRIMITIVE:
-        parser_datatype_init_type_and_size_for_primitive(datatype_token, datatype_out);
+        parser_datatype_init_type_and_size_for_primitive(datatype_token, datatype_secondary_token, datatype_out);
         break;
 
     case DATA_TYPE_EXPECT_UNION:
@@ -1887,9 +1929,9 @@ void parser_datatype_init_type_and_size(struct token *datatype_token, struct dat
     }
 }
 
-void parser_datatype_init(struct token *datatype_token, struct datatype *datatype_out, int pointer_depth, int expected_type)
+void parser_datatype_init(struct token *datatype_token, struct token* datatype_secondary_token, struct datatype *datatype_out, int pointer_depth, int expected_type)
 {
-    parser_datatype_init_type_and_size(datatype_token, datatype_out, pointer_depth, expected_type);
+    parser_datatype_init_type_and_size(datatype_token, datatype_secondary_token, datatype_out, pointer_depth, expected_type);
     datatype_out->type_str = datatype_token->sval;
 }
 
@@ -1908,6 +1950,19 @@ int parser_datatype_expected_for_type_string(const char *s)
     return type;
 }
 
+
+void parser_get_datatype_tokens(struct token** datatype_token_out, struct token** datatype_secondary_token_out)
+{
+    *datatype_token_out = token_next();
+    // Let's check if we have a secondary datatype.
+    struct token* next_token = token_peek_next();
+    if (token_is_primitive_keyword(next_token))
+    {
+        // Okay we have a secondary datatype token
+        *datatype_secondary_token_out = next_token;
+        token_next();
+    }
+}
 /**
  * Parses the type part of the datatype. I.e "int", "long"
  * 
@@ -1916,7 +1971,9 @@ int parser_datatype_expected_for_type_string(const char *s)
  */
 void parse_datatype_type(struct datatype *datatype)
 {
-    struct token *datatype_token = token_next();
+    struct token *datatype_token = NULL;
+    struct token* datatype_secondary_token = NULL;
+    parser_get_datatype_tokens(&datatype_token, &datatype_secondary_token);
     int expected_type = parser_datatype_expected_for_type_string(datatype_token->sval);
     if (datatype_is_struct_or_union_for_name(datatype_token->sval))
     {
@@ -1937,7 +1994,7 @@ void parse_datatype_type(struct datatype *datatype)
     // If this is a normal variable i.e "int abc" then pointer_depth will equal zero
     int pointer_depth = parser_get_pointer_depth();
 
-    parser_datatype_init(datatype_token, datatype, pointer_depth, expected_type);
+    parser_datatype_init(datatype_token, datatype_secondary_token, datatype, pointer_depth, expected_type);
 }
 
 void parse_datatype(struct datatype *datatype)
@@ -2125,6 +2182,35 @@ void parse_forward_declaration(struct datatype *dtype)
     FAIL_ERR("BUG with forward declaration");
 }
 
+
+bool parser_is_int_valid_after_datatype(struct datatype* dtype)
+{
+    return dtype->type == DATA_TYPE_LONG || dtype->type == DATA_TYPE_FLOAT || dtype->type == DATA_TYPE_DOUBLE;
+}
+
+/**
+ * C allows you to abbrevative a datatype.
+ * 
+ * i.e long and long int are the same
+ * Let's ignore the int if present
+ */
+void parser_ignore_int(struct datatype* dtype)
+{
+    if (!token_is_keyword(token_peek_next(), "int"))
+    {
+        // no "int" to ignore
+        return;
+    }
+
+    if (!parser_is_int_valid_after_datatype(dtype))
+    {
+        compiler_error(current_process, "You provided an int abbrevation however this datatype does not support such action");
+    }
+
+    // Let's ignore it
+    token_next();
+}
+
 /**
  * Parses a variable or function, at this point the parser should be certain
  * that the tokens coming up will form a variable or a function
@@ -2163,6 +2249,10 @@ void parse_variable_function_or_struct_union(struct history *history)
         // Build forward declaration will handle the semicolon.
         return;
     }
+
+    // Ignore the protential int keyword after the data type
+    // i.e long int
+    parser_ignore_int(&dtype);
 
     // Ok great we have a datatype at this point, next comes the variable name
     // or the function name.. we don't know which one yet ;)

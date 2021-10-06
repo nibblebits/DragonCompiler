@@ -499,6 +499,10 @@ struct datatype
     int flags;
     // The type this is i.e float, double, long
     int type;
+
+    // The secondary datatype, only present if the DATATYPE_FLAG_SECONDARY is set.
+    struct datatype* secondary;
+
     // The string equivilant for this type. Does not include unsigned or signed keywords.
     // if the type is "unsigned int" here will be written only "int"
     const char *type_str;
@@ -898,8 +902,8 @@ enum
     DATATYPE_FLAG_IS_ARRAY = 0b00010000,
     DATATYPE_FLAG_IS_EXTERN = 0b00100000,
     DATATYPE_FLAG_IS_RESTRICT = 0b01000000,
-    DATATYPE_FLAG_IGNORE_TYPE_CHECKING = 0b10000000
-
+    DATATYPE_FLAG_IGNORE_TYPE_CHECKING = 0b10000000,
+    DATATYPE_FLAG_SECONDARY = 0b100000000,
 };
 
 enum
@@ -1860,6 +1864,8 @@ bool token_is_operator(struct token *token, const char *op);
 bool token_is_keyword(struct token *token, const char *keyword);
 bool token_is_symbol(struct token *token, char sym);
 bool token_is_identifier(struct token *token, const char *iden);
+bool token_is_primitive_keyword(struct token* token);
+
 
 // Preprocessor
 int preprocessor_run(struct compile_process *compiler);

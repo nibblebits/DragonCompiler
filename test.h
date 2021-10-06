@@ -1,1 +1,1 @@
-int test(int x);
+#define __SSIZE_T_TYPE		__SWORD_TYPE

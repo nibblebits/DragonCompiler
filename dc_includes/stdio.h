@@ -351,28 +351,11 @@ extern int vsprintf (char *__restrict __s, const char *__restrict __format,
 
 
 
-#if __GLIBC_USE (LIB_EXT2)
-
-/* Write formatted output to a string dynamically allocated with `malloc'.
-   Store the address of the string in *PTR.  */
-extern int vasprintf (char **__restrict __ptr, const char *__restrict __f,
-		      __gnuc_va_list __arg)
-     __THROWNL __attribute__ ((__format__ (__printf__, 2, 0))) __wur;
-extern int __asprintf (char **__restrict __ptr,
-		       const char *__restrict __fmt, ...)
-     __THROWNL __attribute__ ((__format__ (__printf__, 2, 3))) __wur;
-extern int asprintf (char **__restrict __ptr,
-		     const char *__restrict __fmt, ...)
-     __THROWNL __attribute__ ((__format__ (__printf__, 2, 3))) __wur;
-#endif
-
 #ifdef __USE_XOPEN2K8
 /* Write formatted output to a file descriptor.  */
 extern int vdprintf (int __fd, const char *__restrict __fmt,
-		     __gnuc_va_list __arg)
-     __attribute__ ((__format__ (__printf__, 2, 0)));
-extern int dprintf (int __fd, const char *__restrict __fmt, ...)
-     __attribute__ ((__format__ (__printf__, 2, 3)));
+		     __gnuc_va_list __arg);
+extern int dprintf (int __fd, const char *__restrict __fmt, ...);
 #endif
 
 
@@ -422,20 +405,17 @@ extern int __isoc99_sscanf (const char *__restrict __s,
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
 extern int vfscanf (FILE *__restrict __s, const char *__restrict __format,
-		    __gnuc_va_list __arg)
-     __attribute__ ((__format__ (__scanf__, 2, 0))) __wur;
+		    __gnuc_va_list __arg);
 
 /* Read formatted input from stdin into argument list ARG.
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int vscanf (const char *__restrict __format, __gnuc_va_list __arg)
-     __attribute__ ((__format__ (__scanf__, 1, 0))) __wur;
+extern int vscanf (const char *__restrict __format, __gnuc_va_list __arg);
 
 /* Read formatted input from S into argument list ARG.  */
 extern int vsscanf (const char *__restrict __s,
-		    const char *__restrict __format, __gnuc_va_list __arg)
-     __THROW __attribute__ ((__format__ (__scanf__, 2, 0)));
+		    const char *__restrict __format, __gnuc_va_list __arg);
 
 /* Same redirection as above for the v*scanf family.  */
 # if !__GLIBC_USE (DEPRECATED_SCANF)

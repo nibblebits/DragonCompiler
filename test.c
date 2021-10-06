@@ -1,13 +1,7 @@
+#define __STD_TYPE typedef
+# define __SWORD_TYPE		int
+#define __SSIZE_T_TYPE		__SWORD_TYPE
 
+typedef __SSIZE_T_TYPE __ssize_t; /* Type of a byte count, or error.  */
 
-#define ABC(A, F) A ## F
-int abc(int x, int y)
-{
-    return x+y;
-}
-int main()
-{
-   int ABC(ABC, 55);
-   ABC55 = 10;
-   return 0;
-}
+__ssize_t abc;

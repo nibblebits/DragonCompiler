@@ -100,7 +100,7 @@ struct preprocessor_node
 };
 
 int preprocessor_handle_identifier(struct compile_process *compiler, struct token *token);
-int preprocessor_handle_identifier_for_token_vector(struct compile_process *compiler, struct vector *src_vec, struct token *token);
+int preprocessor_handle_identifier_for_token_vector(struct compile_process *compiler, struct vector *src_vec, struct vector *dst_vec, struct token *token);
 int preprocessor_macro_function_execute(struct compile_process *compiler, const char *function_name, struct preprocessor_function_arguments *arguments, int flags);
 int preprocessor_evaluate(struct compile_process *compiler, struct preprocessor_node *root_node);
 int preprocessor_parse_evaluate_token(struct compile_process *compiler, struct token *token);
@@ -506,15 +506,26 @@ void preprocessor_token_push_dst(struct compile_process *compiler, struct token 
     preprocessor_token_push_to_dst(compiler->token_vec, token);
 }
 
-void preprocessor_token_vec_push_src(struct compile_process *compiler, struct vector *src_vec)
+void preprocessor_token_vec_push_src_to_dst(struct compile_process *compiler, struct vector *src_vec, struct vector *dst_vec)
 {
     vector_set_peek_pointer(src_vec, 0);
     struct token *token = vector_peek(src_vec);
     while (token)
     {
-        vector_push(compiler->token_vec, token);
+        vector_push(dst_vec, token);
         token = vector_peek(src_vec);
     }
+}
+void preprocessor_token_vec_push_src(struct compile_process *compiler, struct vector *src_vec)
+{
+    preprocessor_token_vec_push_src_to_dst(compiler, src_vec, compiler->token_vec);
+}
+
+
+
+void preprocessor_token_vec_push_src_token_to_dst(struct compile_process *compiler, struct token *token, struct vector* dst_vec)
+{
+    vector_push(dst_vec, token);
 }
 
 void preprocessor_token_vec_push_src_token(struct compile_process *compiler, struct token *token)
@@ -522,17 +533,15 @@ void preprocessor_token_vec_push_src_token(struct compile_process *compiler, str
     vector_push(compiler->token_vec, token);
 }
 
-
-
 void preprocessor_handle_concat_part(struct compile_process *compiler, struct preprocessor_definition *definition, struct preprocessor_function_arguments *arguments, struct token *token, struct vector *definition_token_vec, struct vector *value_vec_target)
 {
     preprocessor_macro_function_push_something(compiler, definition, arguments, token, definition_token_vec, value_vec_target);
 }
 
-void preprocessor_handle_concat_finalize(struct compile_process *compiler, struct vector* tmp_vec, struct vector* value_vec_target)
+void preprocessor_handle_concat_finalize(struct compile_process *compiler, struct vector *tmp_vec, struct vector *value_vec_target)
 {
     // Join our vector as we have the arguments resolved
-    struct vector* joined_vec = tokens_join_vector(compiler, tmp_vec);
+    struct vector *joined_vec = tokens_join_vector(compiler, tmp_vec);
 
     // Now write it out
     vector_insert(value_vec_target, joined_vec, 0);
@@ -551,7 +560,7 @@ void preprocessor_handle_concat(struct compile_process *compiler, struct preproc
         compiler_error(compiler, "No right operand provided for concat preprocessor operator ##");
     }
 
-    struct vector* tmp_vec = vector_create(sizeof(struct token));
+    struct vector *tmp_vec = vector_create(sizeof(struct token));
     preprocessor_handle_concat_part(compiler, definition, arguments, arg_token, definition_token_vec, tmp_vec);
     preprocessor_handle_concat_part(compiler, definition, arguments, right_token, definition_token_vec, tmp_vec);
     preprocessor_handle_concat_finalize(compiler, tmp_vec, value_vec_target);
@@ -590,7 +599,7 @@ void preprocessor_handle_function_argument_to_string(struct compile_process *com
     vector_push(value_vec_target, &str_token);
 }
 
-void preprocessor_token_vec_push_src_resolve_definition(struct compile_process *compiler, struct vector *src_vec, struct token *token)
+void preprocessor_token_vec_push_src_resolve_definition(struct compile_process *compiler, struct vector *src_vec, struct vector *dst_vec, struct token *token)
 {
     // I am pretty sure typedef is the only other thing we need to care for in this situation
     if (preprocessor_token_is_typedef(token))
@@ -600,21 +609,21 @@ void preprocessor_token_vec_push_src_resolve_definition(struct compile_process *
     }
     else if (token->type == TOKEN_TYPE_IDENTIFIER)
     {
-        preprocessor_handle_identifier_for_token_vector(compiler, src_vec, token);
+        preprocessor_handle_identifier_for_token_vector(compiler, src_vec, dst_vec, token);
         return;
     }
 
-    preprocessor_token_vec_push_src_token(compiler, token);
+    preprocessor_token_vec_push_src_token_to_dst(compiler, token, dst_vec);
 }
 
-void preprocessor_token_vec_push_src_resolve_definitions(struct compile_process *compiler, struct vector *src_vec)
+void preprocessor_token_vec_push_src_resolve_definitions(struct compile_process *compiler, struct vector *src_vec, struct vector *dst_vec)
 {
     assert(src_vec != compiler->token_vec);
     vector_set_peek_pointer(src_vec, 0);
     struct token *token = vector_peek(src_vec);
     while (token)
     {
-        preprocessor_token_vec_push_src_resolve_definition(compiler, src_vec, token);
+        preprocessor_token_vec_push_src_resolve_definition(compiler, src_vec, dst_vec, token);
         token = vector_peek(src_vec);
     }
 }
@@ -1190,6 +1199,7 @@ void preprocessor_handle_typedef_body_for_brackets(struct compile_process *compi
         token = preprocessor_next_token_with_vector(compiler, src_vec, overflow_use_token_vec);
     }
 }
+
 void preprocessor_handle_typedef_body(struct compile_process *compiler, struct vector *token_vec, struct typedef_type *td, struct vector *src_vec, bool overflow_use_token_vec)
 {
     memset(td, 0, sizeof(struct typedef_type));
@@ -1218,7 +1228,8 @@ void preprocessor_handle_typedef_body(struct compile_process *compiler, struct v
             break;
         }
 
-        vector_push(token_vec, token);
+
+        preprocessor_token_vec_push_src_resolve_definition(compiler, src_vec, token_vec, token);
         token = preprocessor_next_token_with_vector(compiler, src_vec, overflow_use_token_vec);
 
         if (next_is_struct_name)
@@ -1263,6 +1274,7 @@ void preprocessor_handle_typedef_token(struct compile_process *compiler, struct 
         preprocessor_token_vec_push_keyword_and_identifier(token_vec, "struct", td.structure.sname);
     }
     struct preprocessor *preprocessor = compiler->preprocessor;
+    
     preprocessor_definition_create_typedef(td.definition_name, token_vec, preprocessor);
 }
 
@@ -1703,7 +1715,7 @@ int preprocessor_macro_function_push_something_definition(struct compile_process
     struct preprocessor_definition *arg_definition = preprocessor_get_definition(compiler->preprocessor, arg_name);
     if (arg_definition)
     {
-        preprocessor_token_vec_push_src_resolve_definitions(compiler, preprocessor_definition_value(arg_definition));
+        preprocessor_token_vec_push_src_resolve_definitions(compiler, preprocessor_definition_value(arg_definition), compiler->token_vec);
         return 0;
     }
 
@@ -1799,7 +1811,7 @@ struct preprocessor_function_arguments *preprocessor_handle_identifier_macro_cal
     return arguments;
 }
 
-int preprocessor_handle_identifier_for_token_vector(struct compile_process *compiler, struct vector *src_vec, struct token *token)
+int preprocessor_handle_identifier_for_token_vector(struct compile_process *compiler, struct vector *src_vec, struct vector *dst_vec, struct token *token)
 {
     // We have an identifier, it could represent a variable or a definition
     // lets check if its a definition if so we have to handle it.
@@ -1808,14 +1820,14 @@ int preprocessor_handle_identifier_for_token_vector(struct compile_process *comp
     if (!definition)
     {
         // Not our token then it belongs on the destination token vector.
-        preprocessor_token_push_to_dst(compiler->token_vec, token);
+        preprocessor_token_push_to_dst(dst_vec, token);
         return -1;
     }
 
     // This is a typedef definition? Then just push the entire thing.
     if (definition->type == PREPROCESSOR_DEFINITION_TYPEDEF)
     {
-        preprocessor_token_vec_push_src(compiler, preprocessor_definition_value(definition));
+        preprocessor_token_vec_push_src_to_dst(compiler, preprocessor_definition_value(definition), dst_vec);
         return 0;
     }
 
@@ -1834,13 +1846,13 @@ int preprocessor_handle_identifier_for_token_vector(struct compile_process *comp
     struct vector *definition_val = preprocessor_definition_value(definition);
     // Before we can push the definition to the result vector, we must also preprocess it
 
-    preprocessor_token_vec_push_src_resolve_definitions(compiler, preprocessor_definition_value(definition));
+    preprocessor_token_vec_push_src_resolve_definitions(compiler, preprocessor_definition_value(definition), dst_vec);
     return 0;
 }
 
 int preprocessor_handle_identifier(struct compile_process *compiler, struct token *token)
 {
-    return preprocessor_handle_identifier_for_token_vector(compiler, compiler->token_vec_original, token);
+    return preprocessor_handle_identifier_for_token_vector(compiler, compiler->token_vec_original, compiler->token_vec, token);
 }
 
 int preprocessor_handle_hashtag_token(struct compile_process *compiler, struct token *token)

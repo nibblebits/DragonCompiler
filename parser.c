@@ -1739,10 +1739,9 @@ void parse_for_parentheses(struct history *history)
  */
 void parse_datatype_modifiers(struct datatype *datatype)
 {
-    memset(datatype, 0, sizeof(struct datatype));
     struct token *token = token_peek_next();
     // Datatypes can have many modifiers.
-    while (token)
+    while (token && token->type == TOKEN_TYPE_KEYWORD)
     {
         if (!is_keyword_variable_modifier(token->sval))
         {
@@ -2002,6 +2001,9 @@ void parse_datatype(struct datatype *datatype)
     memset(datatype, 0, sizeof(struct datatype));
     parse_datatype_modifiers(datatype);
     parse_datatype_type(datatype);
+    // We can have modifiers to the right too.
+    parse_datatype_modifiers(datatype);
+
 }
 
 struct array_brackets *parse_array_brackets(struct history *history)
@@ -2010,6 +2012,13 @@ struct array_brackets *parse_array_brackets(struct history *history)
     while (token_next_is_operator("["))
     {
         expect_op("[");
+        if (token_is_symbol(token_peek_next(), ']'))
+        {
+            // Nothing between the brackets?
+            // Okay
+            expect_sym(']');
+            break;
+        }
         parse_expressionable_root(history);
         expect_sym(']');
 

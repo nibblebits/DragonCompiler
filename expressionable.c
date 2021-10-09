@@ -46,7 +46,7 @@ struct expressionable_op_precedence_group op_precedence[TOTAL_OPERATOR_GROUPS] =
 
 void expressionable_parse(struct expressionable *expressionable);
 int expressionable_parse_single(struct expressionable *expressionable);
-
+void expressionable_parse_parentheses(struct expressionable *expressionable);
 void expressionable_error(struct expressionable *expressionable, const char *str, ...)
 {
     FAIL_ERR(str);
@@ -341,6 +341,22 @@ int expressionable_parse_token(struct expressionable *expressionable, struct tok
 
     return res;
 }
+
+
+int expressionable_parse_single_or_parentheses(struct expressionable* expressionable, int* type_out)
+{
+    struct token* token = expressionable_peek_next(expressionable);
+    if(token && token_is_operator(token, "("))
+    {
+        expressionable_parse_parentheses(expressionable);
+        *type_out = EXPRESSIONABLE_IS_PARENTHESES;
+        return 0;
+    }
+
+    *type_out = EXPRESSIONABLE_IS_SINGLE;
+    return expressionable_parse_single(expressionable);
+
+}
 int expressionable_parse_single(struct expressionable *expressionable)
 {
     int res = -1;
@@ -368,7 +384,8 @@ int expressionable_parse_single(struct expressionable *expressionable)
         // why expecting_additional_node would return true in this particular case.
         // We would have dealt with "defined" at this point in time, now comes the next
         // single.
-        expressionable_parse_single(expressionable);
+        int parsed_type = -1;
+        expressionable_parse_single_or_parentheses(expressionable, &parsed_type);
 
         // Okay now we have also parsed the additional node, lets see if they require joining
         void *additional_node = expressionable_node_peek_or_null(expressionable);
@@ -378,7 +395,12 @@ int expressionable_parse_single(struct expressionable *expressionable)
 
             // Pop off the current node and previous node as we now have them joined in the "new_node"
             expressionable_node_pop(expressionable);
-            expressionable_node_pop(expressionable);
+
+            // This solution is bad, change it.
+            if (parsed_type == EXPRESSIONABLE_IS_SINGLE)
+            {
+                expressionable_node_pop(expressionable);
+            }
 
             // Push the new node to the stack
             expressionable_node_push(expressionable, new_node);

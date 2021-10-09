@@ -1,1 +1,2 @@
-#include <stdio.h>
+#if defined(ABC)
+#endif

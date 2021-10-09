@@ -1915,6 +1915,12 @@ enum
     EXPRESSIONABLE_GENERIC_TYPE_NON_GENERIC
 };
 
+enum
+{
+    EXPRESSIONABLE_IS_SINGLE,
+    EXPRESSIONABLE_IS_PARENTHESES
+};
+
 // Temporary
 #define expressionable_parse_err(str, tmp) \
     FAIL_ERR(str)

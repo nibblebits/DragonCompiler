@@ -22,6 +22,8 @@
         "types.h": "c",
         "bitset": "c",
         "stdbool.h": "c",
-        "any": "c"
+        "any": "c",
+        "_g_config.h": "c",
+        "wchar.h": "c"
     }
 }

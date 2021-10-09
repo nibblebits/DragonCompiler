@@ -1544,15 +1544,42 @@ int preprocessor_evaluate_parentheses(struct compile_process *compiler, struct p
     return preprocessor_evaluate(compiler, node->parenthesis.exp);
 }
 
-int preprocessor_evaluate_joined_node_defined(struct compile_process *compiler, struct preprocessor_node *node)
+const char* preprocessor_pull_string_from(struct preprocessor_node* root_node)
 {
-    struct preprocessor_node *right_node = node->joined.right;
-    if (right_node->type != PREPROCESSOR_IDENTIFIER_NODE)
+    const char* result = NULL;
+    switch (root_node->type)
+    {
+        case PREPROCESSOR_PARENTHESES_NODE:
+            result = preprocessor_pull_string_from(root_node->parenthesis.exp);
+        break;
+        case PREPROCESSOR_KEYWORD_NODE:
+        case PREPROCESSOR_IDENTIFIER_NODE:
+            result = root_node->sval;
+        break;
+
+        case PREPROCESSOR_EXPRESSION_NODE:
+            result = preprocessor_pull_string_from(root_node->exp.left);
+        break;
+        
+    }
+
+    return result;
+}
+const char* preprocessor_pull_defined_value(struct compile_process* compiler, struct preprocessor_node* joined_node)
+{
+    const char* val = preprocessor_pull_string_from(joined_node->joined.right);
+    if (!val)
     {
         compiler_error(compiler, "Expecting an identifier node for defined keyword right operand");
     }
 
-    return preprocessor_get_definition(compiler_preprocessor(compiler), right_node->sval) != NULL;
+    return val;
+}
+
+int preprocessor_evaluate_joined_node_defined(struct compile_process *compiler, struct preprocessor_node *node)
+{
+    const char* right_val = preprocessor_pull_defined_value(compiler, node);
+    return preprocessor_get_definition(compiler_preprocessor(compiler), right_val) != NULL;
 }
 
 int preprocessor_evaluate_joined_node(struct compile_process *compiler, struct preprocessor_node *node)

@@ -1245,6 +1245,11 @@ void preprocessor_handle_typedef_body(struct compile_process *compiler, struct v
         compiler_error(compiler, "We expected a name token for your typedef");
     }
 
+    if (name_token->type != TOKEN_TYPE_IDENTIFIER)
+    {
+        compiler_error(compiler, "The name must be a valid identifier");
+    }
+
     td->definition_name = name_token->sval;
 }
 
@@ -1656,8 +1661,41 @@ void preprocessor_handle_identifier_macro_call_argument(struct preprocessor_func
     preprocessor_function_argument_push(arguments, token_vec);
 }
 
-struct token *preprocessor_handle_identifier_macro_call_argument_parse(struct compile_process *compiler, struct vector *src_vec, struct vector *value_vec, struct preprocessor_function_arguments *arguments, struct token *token)
+
+struct token *preprocessor_handle_identifier_macro_call_argument_parse_parentheses(struct compile_process *compiler, struct vector *src_vec, struct vector *value_vec, struct preprocessor_function_arguments *arguments, struct token* left_bracket_token)
 {
+    // We must push the left bracket token to the value stack
+    vector_push(value_vec, left_bracket_token);
+    // Now we need to push everything to the value vector until we find ")"
+    struct token* next_token = vector_peek(src_vec);
+    while(next_token && !token_is_symbol(next_token, ')'))
+    {
+        if (token_is_operator(next_token, "("))
+        {
+            next_token = preprocessor_handle_identifier_macro_call_argument_parse_parentheses(compiler, src_vec, value_vec, arguments, next_token);
+        }
+        vector_push(value_vec, next_token);
+        next_token = vector_peek(src_vec);
+    }
+
+    if (!next_token)
+    {
+        compiler_error(compiler, "You did not end your parentheses expecting a )");
+    }
+
+    // We must now push the right bracket token to the value vec
+    vector_push(value_vec, next_token);
+
+    // Let's now return the next token ready for next iteraton
+    return vector_peek(src_vec);
+}
+struct token *preprocessor_handle_identifier_macro_call_argument_parse(struct compile_process *compiler, struct vector *src_vec, struct vector *value_vec, struct preprocessor_function_arguments *arguments, struct token* token)
+{
+
+    if (token_is_operator(token, "("))
+    {
+        return preprocessor_handle_identifier_macro_call_argument_parse_parentheses(compiler, src_vec, value_vec, arguments, token);
+    }
     if (token_is_symbol(token, ')'))
     {
         // We are done handle the call argument

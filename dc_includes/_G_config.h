@@ -52,10 +52,10 @@ typedef union
 } _G_iconv_t;
 #endif
 
-typedef int _G_int16_t __attribute__ ((__mode__ (__HI__)));
-typedef int _G_int32_t __attribute__ ((__mode__ (__SI__)));
-typedef unsigned int _G_uint16_t __attribute__ ((__mode__ (__HI__)));
-typedef unsigned int _G_uint32_t __attribute__ ((__mode__ (__SI__)));
+typedef int _G_int16_t;
+typedef int _G_int32_t;
+typedef unsigned int _G_uint16_t;
+typedef unsigned int _G_uint32_t;
 
 #define _G_HAVE_BOOL 1
 

@@ -1,8 +1,9 @@
 #include <stdio.h>
 
-
-int strlen(const char* s);
 int main()
 {
-  printf("testing\10abc");
+  int i;
+
+  i = 5234;
+  i <<= 1;
 }

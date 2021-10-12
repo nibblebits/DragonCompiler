@@ -584,7 +584,6 @@ bool codegen_write_string_char_escaped(char c)
         c_out = "9";
         break;
     }
-
     };
 
     if (c_out)
@@ -1107,6 +1106,54 @@ void codegen_generate_variable_access(struct node *node, struct resolver_result 
     codegen_generate_variable_access_for_non_array(node, entity, history);
 }
 
+void codegen_generate_assignment_instruction_for_operator(const char *mov_type_keyword, const char *address, const char *reg_to_use, const char *op, bool is_signed)
+{
+    if (S_EQ(op, "="))
+    {
+        asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use);
+    }
+    else if (S_EQ(op, "+="))
+    {
+        asm_push("add %s [%s], %s", mov_type_keyword, address, reg_to_use);
+    }
+    else if (S_EQ(op, "*="))
+    {
+        if (is_signed)
+        {
+            asm_push("imul %s", reg_to_use);
+        }
+        else
+        {
+            asm_push("mul %s", reg_to_use);
+        }
+        asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use);
+    }
+    else if (S_EQ(op, "/="))
+    {
+        if (is_signed)
+        {
+            asm_push("idiv %s", reg_to_use);
+        }
+        else
+        {
+            asm_push("div %s", reg_to_use);
+        }
+
+        asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use);
+    }
+    else if(S_EQ(op, "<<="))
+    {
+        // not tested.
+        asm_push("shl eax, ", reg_to_use);
+        asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use); 
+    }
+    else if(S_EQ(op, ">>="))
+    {
+        // not tested.
+        asm_push("shr eax, ", reg_to_use);
+        asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use); 
+    }
+}
 void codegen_generate_assignment_expression(struct node *node, struct history *history)
 {
     // Left node = to assign
@@ -1124,7 +1171,7 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     const char *reg_to_use = "eax";
     const char *mov_type_keyword = codegen_byte_word_or_dword_or_ddword(datatype_size(&variable_node(left_entity->node)->var.type), &reg_to_use);
 
-    asm_push("mov %s [%s], %s", mov_type_keyword, codegen_entity_private(left_entity)->address, reg_to_use);
+    codegen_generate_assignment_instruction_for_operator(mov_type_keyword, codegen_entity_private(left_entity)->address, reg_to_use, node->exp.op, variable_node(left_entity->node)->var.type.flags & DATATYPE_FLAG_IS_SIGNED);
 }
 
 void codegen_generate_expressionable_function_arguments(struct node *func_call_args_exp_node, size_t *arguments_size)

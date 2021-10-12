@@ -100,11 +100,6 @@ struct vector *preprocessor_stddef_include_offsetof_value(struct preprocessor_de
 
 void preprocessor_stddef_include(struct preprocessor *preprocessor, struct preprocessor_included_file *file)
 {
-    preprocessor_definition_create("NULL", lex_process_tokens(tokens_build_for_string(preprocessor->compiler, "0")), NULL, preprocessor);
-    preprocessor_definition_create("size_t", lex_process_tokens(tokens_build_for_string(preprocessor->compiler, "int")), NULL, preprocessor);
-    preprocessor_definition_create("wchar_t", lex_process_tokens(tokens_build_for_string(preprocessor->compiler, "short")), NULL, preprocessor);
-    preprocessor_definition_create("ptrdiff_t", lex_process_tokens(tokens_build_for_string(preprocessor->compiler, "int")), NULL, preprocessor);
-
     // We must create some macro functions for stddef.h
     //offsetof(type, member-designator)
     preprocessor_definition_create_native("offsetof", preprocessor_stddef_include_offsetof_evaluate, preprocessor_stddef_include_offsetof_value, preprocessor);

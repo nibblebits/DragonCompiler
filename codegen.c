@@ -883,7 +883,7 @@ static void codegen_gen_mem_access_first_for_expression(struct node *value_node,
     // then we will also load the value of the other registers into the expression result
     // not something that we want at all
 
-    reg_to_use = codegen_sub_register("eax", entity->node->var.type.size);
+    reg_to_use = codegen_sub_register("eax", variable_size(entity->node));
     assert(reg_to_use);
     if (!S_EQ(reg_to_use, "eax"))
     {
@@ -897,7 +897,7 @@ static void codegen_gen_mem_access_first_for_expression(struct node *value_node,
 
 static void codegen_gen_mem_access_for_continueing_expression(struct node *value_node, int flags, struct resolver_entity *entity)
 {
-    const char *new_reg_to_use = codegen_sub_register("ecx", entity->node->var.type.size);
+    const char *new_reg_to_use = codegen_sub_register("ecx", variable_size(entity->node));
     if (!S_EQ(new_reg_to_use, "ecx"))
     {
         // Okay we are not using the full 32 bit, lets XOR this thing we need 0s.
@@ -1021,6 +1021,7 @@ void codegen_generate_variable_access_for_non_array(struct node *node, struct re
         codegen_generate_structure_push(node, entity, history);
         return;
     }
+
     codegen_gen_mem_access(node, history->flags, entity);
 
     entity = resolver_result_entity_next(entity);
@@ -1352,6 +1353,7 @@ void codegen_generate_function_call(struct node *node, struct resolver_entity *e
         codegen_response_expect();
         register_unset_flag(REGISTER_EAX_IS_USED);
         codegen_generate_expressionable(argument_node, history_down(history, history->flags | EXPRESSION_IN_FUNCTION_CALL));
+       
         struct response *res = codegen_response_pull();
         if (codegen_should_push_function_call_argument(res))
         {

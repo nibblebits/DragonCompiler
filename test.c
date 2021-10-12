@@ -1,9 +1,12 @@
-#define ABC typedef
-ABC int bbb; 
+#include <stdio.h>
 
-bbb a = 50;
 
+int strlen(const char* s);
 int main()
 {
-    return a;
+  FILE* file;
+  file =fopen("./test.txt", "w");
+  int len;
+  fwrite("hello", strlen("hello"), 1, file);
+
 }

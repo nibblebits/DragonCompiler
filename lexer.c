@@ -263,6 +263,19 @@ static struct token *token_create(struct token *_token)
     return &tmp_token;
 }
 
+static void lex_handle_escape(struct buffer* buf, char c)
+{
+    switch(c)
+    {
+        case 'n':
+        // New line escape?
+        buffer_write(buf, '\n');
+        break;
+
+        default:
+            error("Unknown escape token %c\n", c);
+    }
+}
 static struct token *token_make_string(char start_delim, char end_delim)
 {
     struct buffer *buf = buffer_create();
@@ -274,9 +287,8 @@ static struct token *token_make_string(char start_delim, char end_delim)
     {
         if (c == '\\')
         {
-            // Theirs an escape about to happen...
-            // Ignore for now, but we need to handle this in future
-            nextc();
+            lex_handle_escape(buf, nextc());
+            continue;
         }
         buffer_write(buf, c);
     }

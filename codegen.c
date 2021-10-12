@@ -16,7 +16,7 @@ struct history;
 void asm_push(const char *ins, ...);
 void codegen_gen_exp(struct generator *generator, struct node *node, int flags);
 void codegen_entity_address(struct generator *generator, struct resolver_entity *entity, struct generator_entity_address *address_out);
-void codegen_end_exp(struct generator* generator);
+void codegen_end_exp(struct generator *generator);
 
 struct _x86_generator_private
 {
@@ -260,7 +260,7 @@ const char *codegen_sub_register(const char *original_register, size_t size)
         {
             reg = "eax";
         }
-        else if(size == DATA_SIZE_DDWORD)
+        else if (size == DATA_SIZE_DDWORD)
         {
             // Bit of an issue... If we use RAX
             // we will have trouble with 32 bit processor..
@@ -281,7 +281,7 @@ const char *codegen_sub_register(const char *original_register, size_t size)
         {
             reg = "ebx";
         }
-        else if(size == DATA_SIZE_DDWORD)
+        else if (size == DATA_SIZE_DDWORD)
         {
             reg = "rbx";
         }
@@ -300,7 +300,7 @@ const char *codegen_sub_register(const char *original_register, size_t size)
         {
             reg = "ecx";
         }
-        else if(size == DATA_SIZE_DDWORD)
+        else if (size == DATA_SIZE_DDWORD)
         {
             reg = "rcx";
         }
@@ -319,7 +319,7 @@ const char *codegen_sub_register(const char *original_register, size_t size)
         {
             reg = "edx";
         }
-        else if(size == DATA_SIZE_DDWORD)
+        else if (size == DATA_SIZE_DDWORD)
         {
             reg = "rdx";
         }
@@ -354,7 +354,7 @@ const char *codegen_byte_word_or_dword_or_ddword(size_t size, const char **reg_t
         type = "dword";
         new_register = codegen_sub_register(*reg_to_use, DATA_SIZE_DWORD);
     }
-    else if(size == DATA_SIZE_DDWORD)
+    else if (size == DATA_SIZE_DDWORD)
     {
         type = "ddword";
         new_register = codegen_sub_register(*reg_to_use, DATA_SIZE_DDWORD);
@@ -483,6 +483,22 @@ void codegen_release_register(const char *reg)
     register_unset_flag(codegen_get_enum_for_register(reg));
 }
 
+void asm_push_no_nl(const char *ins, ...)
+{
+    va_list args;
+    va_start(args, ins);
+    vfprintf(stdout, ins, args);
+    va_end(args);
+
+    if (current_process->ofile)
+    {
+        va_list args;
+        va_start(args, ins);
+        vfprintf(current_process->ofile, ins, args);
+        va_end(args);
+    }
+}
+
 void asm_push(const char *ins, ...)
 {
     va_list args;
@@ -556,7 +572,27 @@ static struct node *codegen_node_next()
 
 void codegen_write_string(struct string_table_element *str_elem)
 {
-    asm_push("%s: db '%s', 0", str_elem->label, str_elem->str);
+
+    asm_push_no_nl("%s: db ", str_elem->label);
+
+    // We must loop through the string and output each character
+    // Some have special features
+    size_t len = strlen(str_elem->str);
+    for (int i = 0; i < len; i++)
+    {
+        char c = str_elem->str[i];
+        if (c == '\n')
+        {
+            // new line? Alright
+            asm_push_no_nl("10,");
+            continue;
+        }
+        asm_push_no_nl("'%c',", c);
+    }
+
+    // End this with a null terminator
+    asm_push_no_nl(" 0");
+    asm_push("");
 }
 
 void codegen_write_strings()
@@ -591,10 +627,8 @@ void codegen_gen_exp(struct generator *generator, struct node *node, int flags)
     codegen_generate_expressionable(node, history_down(x86_generator_private(generator)->remembered.history, flags));
 }
 
-
-void codegen_end_exp(struct generator* generator)
+void codegen_end_exp(struct generator *generator)
 {
-
 }
 
 void codegen_entity_address(struct generator *generator, struct resolver_entity *entity, struct generator_entity_address *address_out)
@@ -870,7 +904,6 @@ static void codegen_gen_mem_access_get_address(struct node *value_node, int flag
     }
 
     asm_push("lea ebx, [%s]", codegen_entity_private(entity)->address);
-
 }
 
 static void codegen_gen_mem_access_first_for_expression(struct node *value_node, int flags, struct resolver_entity *entity)
@@ -1353,7 +1386,7 @@ void codegen_generate_function_call(struct node *node, struct resolver_entity *e
         codegen_response_expect();
         register_unset_flag(REGISTER_EAX_IS_USED);
         codegen_generate_expressionable(argument_node, history_down(history, history->flags | EXPRESSION_IN_FUNCTION_CALL));
-       
+
         struct response *res = codegen_response_pull();
         if (codegen_should_push_function_call_argument(res))
         {

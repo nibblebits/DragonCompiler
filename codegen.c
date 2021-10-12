@@ -570,6 +570,30 @@ static struct node *codegen_node_next()
     return vector_peek_ptr(current_process->node_tree_vec);
 }
 
+bool codegen_write_string_char_escaped(char c)
+{
+    const char *c_out = NULL;
+    switch (c)
+    {
+    case '\n':
+        c_out = "10";
+        break;
+
+    case '\t':
+    {
+        c_out = "9";
+        break;
+    }
+
+    };
+
+    if (c_out)
+    {
+        asm_push_no_nl("%s, ", c_out);
+    }
+    return c_out != NULL;
+}
+
 void codegen_write_string(struct string_table_element *str_elem)
 {
 
@@ -581,10 +605,9 @@ void codegen_write_string(struct string_table_element *str_elem)
     for (int i = 0; i < len; i++)
     {
         char c = str_elem->str[i];
-        if (c == '\n')
+        bool handled = codegen_write_string_char_escaped(c);
+        if (handled)
         {
-            // new line? Alright
-            asm_push_no_nl("10,");
             continue;
         }
         asm_push_no_nl("'%c',", c);

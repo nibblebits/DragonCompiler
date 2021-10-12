@@ -28,6 +28,9 @@
 static struct token tmp_token;
 static struct lex_process *lex_process;
 
+const char *read_number_str();
+unsigned long long read_number();
+
 void error(const char *fmt, ...)
 {
     va_list args;
@@ -263,18 +266,46 @@ static struct token *token_create(struct token *_token)
     return &tmp_token;
 }
 
-static void lex_handle_escape(struct buffer* buf, char c)
+static void lex_handle_escape_number(struct buffer *buf)
 {
-    switch(c)
+    long long number = read_number();
+    if (number > 255)
     {
-        case 'n':
-        // New line escape?
-        buffer_write(buf, '\n');
-        break;
-
-        default:
-            error("Unknown escape token %c\n", c);
+        error("Characters must be betwene 0-255 wide chars are not yet supported");
     }
+    buffer_write(buf, number);
+}
+
+static void lex_handle_escape(struct buffer *buf)
+{
+    char c = peekc();
+    if (isdigit(c))
+    {
+        // We have a number?
+        lex_handle_escape_number(buf);
+        return;
+    }
+
+    char co = 0x00;
+    switch (c)
+    {
+    case 'n':
+        // New line escape?
+        co = '\n';
+        break;
+    case '\\':
+        co = '\\';
+
+    case 't':
+        co = '\t';
+    break;
+    default:
+        error("Unknown escape token %c\n", c);
+    }
+
+    buffer_write(buf, co);
+    // Pop off the char
+    nextc();
 }
 static struct token *token_make_string(char start_delim, char end_delim)
 {
@@ -287,7 +318,7 @@ static struct token *token_make_string(char start_delim, char end_delim)
     {
         if (c == '\\')
         {
-            lex_handle_escape(buf, nextc());
+            lex_handle_escape(buf);
             continue;
         }
         buffer_write(buf, c);
@@ -489,7 +520,7 @@ static struct token *token_make_symbol()
     }
 
     c = nextc();
-    struct token* token = token_create(&(struct token){TOKEN_TYPE_SYMBOL, .cval = c});
+    struct token *token = token_create(&(struct token){TOKEN_TYPE_SYMBOL, .cval = c});
     return token;
 }
 static struct token *read_token_special()

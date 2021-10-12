@@ -4,5 +4,5 @@
 int strlen(const char* s);
 int main()
 {
-  printf("testing\n");
+  printf("testing\10abc");
 }

@@ -89,3 +89,15 @@ bool token_is_identifier(struct token *token, const char *iden)
 {
     return token && token->type == TOKEN_TYPE_IDENTIFIER && S_EQ(token->sval, iden);
 }
+
+
+struct token* token_peek_no_nl(struct vector* token_vec)
+{
+    struct token* token = vector_peek(token_vec);
+    while(token && token->type == TOKEN_TYPE_NEWLINE)
+    {
+        token = vector_peek(token_vec);
+    }
+
+    return token;
+}

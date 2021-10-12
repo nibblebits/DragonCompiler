@@ -904,6 +904,7 @@ enum
     DATATYPE_FLAG_IS_RESTRICT = 0b01000000,
     DATATYPE_FLAG_IGNORE_TYPE_CHECKING = 0b10000000,
     DATATYPE_FLAG_SECONDARY = 0b100000000,
+    DATATYPE_FLAG_STRUCT_UNION_NO_NAME = 0b1000000000,
 };
 
 enum
@@ -1865,6 +1866,9 @@ bool token_is_keyword(struct token *token, const char *keyword);
 bool token_is_symbol(struct token *token, char sym);
 bool token_is_identifier(struct token *token, const char *iden);
 bool token_is_primitive_keyword(struct token* token);
+
+struct token* token_peek_no_nl(struct vector* token_vec);
+
 
 
 // Preprocessor

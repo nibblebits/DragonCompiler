@@ -962,6 +962,16 @@ void parse_struct_no_new_scope(struct datatype *dtype, bool is_forward_declarati
         struct token *var_name = token_next();
         struct_node->flags |= NODE_FLAG_HAS_VARIABLE_COMBINED;
 
+        if (dtype->flags & DATATYPE_FLAG_STRUCT_UNION_NO_NAME)
+        {
+            // No type name has been set yet, however as we have an identifier here
+            // this is the type
+            dtype->type_str = var_name->sval;
+            dtype->flags &= ~DATATYPE_FLAG_STRUCT_UNION_NO_NAME;
+            // Don't forget to update the structure name with the new one.
+            struct_node->_struct.name = var_name->sval;
+        }
+        
         // We must create a variable for this structure
         make_variable_node_and_register(history_begin(&history, 0), dtype, var_name, NULL);
         struct_node->_struct.var = node_pop();
@@ -1815,7 +1825,7 @@ int size_of_union(const char *union_name)
 
 bool parser_datatype_is_secondary_allowed_for_type(const char* type)
 {
-    return S_EQ(type, "long");
+    return S_EQ(type, "long") || S_EQ(type, "short") || S_EQ(type, "double") || S_EQ(type, "float");
 }
 
 void parser_datatype_init_type_and_size_for_primitive(struct token *datatype_token, struct token* datatype_secondary_token, struct datatype *datatype_out);
@@ -1986,6 +1996,7 @@ void parse_datatype_type(struct datatype *datatype)
             // We have no name for this structure? THen we must make one
             // as the compiler needs to be able to identify this structure
             datatype_token = parser_build_random_type_name();
+            datatype->flags |= DATATYPE_FLAG_STRUCT_UNION_NO_NAME;
         }
     }
 

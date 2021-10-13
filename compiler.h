@@ -1653,6 +1653,8 @@ bool is_access_operator_node(struct node *node);
 bool is_operator_token(struct token *token);
 
 bool op_is_indirection(const char *op);
+bool op_is_address(const char* op);
+
 
 int align_value(int val, int to);
 

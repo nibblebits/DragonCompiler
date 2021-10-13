@@ -550,6 +550,11 @@ bool op_is_indirection(const char *op)
     return S_EQ(op, "*");
 }
 
+bool op_is_address(const char* op)
+{
+    return S_EQ(op, "&");
+}
+
 int padding(int val, int to)
 {
     // We cannot deal with zero., therefore zero padding.

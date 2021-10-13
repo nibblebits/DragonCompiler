@@ -1585,6 +1585,17 @@ void codegen_generate_unary_indirection(struct node *node, struct history *histo
     // EBX register now has the address of the variable for indirection
 }
 
+void codegen_generate_unary_address(struct node *node, struct history *history)
+{
+    int flags = history->flags;
+    // Generate the operand while passing the indirection flag
+    codegen_generate_expressionable(node->unary.operand, history_down(history, flags | EXPRESSION_GET_ADDRESS));
+    register_unset_flag(REGISTER_EBX_IS_USED);
+
+    asm_push("mov eax, ebx");
+
+}
+
 void codegen_generate_normal_unary(struct node *node, struct history *history)
 {
     bool eax_is_used = register_is_used("eax");
@@ -1625,6 +1636,11 @@ void codegen_generate_unary(struct node *node, struct history *history)
     if (op_is_indirection(node->unary.op))
     {
         codegen_generate_unary_indirection(node, history);
+        return;
+    }
+    else if(op_is_address(node->unary.op))
+    {
+        codegen_generate_unary_address(node, history);
         return;
     }
 

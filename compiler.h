@@ -1314,6 +1314,9 @@ enum
  */
 bool node_is_expressionable(struct node *node);
 
+
+bool node_is_expression(struct node* node, const char* op);
+
 /**
  * Called to issue a compiler error and terminate the compiler
  */

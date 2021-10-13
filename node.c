@@ -297,6 +297,11 @@ long node_pull_literal(struct resolver_process *process, struct node *node)
     return -1;
 }
 
+bool node_is_expression(struct node* node, const char* op)
+{
+    return node->type == NODE_TYPE_EXPRESSION && S_EQ(node->exp.op, op);
+}
+
 /**
  * Returns true if this node can be used in an expression
  */

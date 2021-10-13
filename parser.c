@@ -816,6 +816,17 @@ void parser_node_shift_children_left(struct node *node)
     node->exp.op = right_op;
 }
 
+void parser_node_move_right_left_to_left(struct node* node)
+{
+    make_exp_node(node->exp.left, node->exp.right->exp.left, node->exp.op);
+    struct node* completed_node = node_pop();
+    
+    // Now we still have the right node to worry about 
+    const char* new_op = node->exp.right->exp.op;
+    node->exp.left = completed_node;
+    node->exp.right = node->exp.right->exp.right;
+    node->exp.op = new_op;
+}
 /**
  * Swaps the left node with the right node.
  */
@@ -865,6 +876,15 @@ void parser_reorder_expression(struct node **node_out)
             parser_reorder_expression(&node->exp.right);
         }
     }
+
+    if (node_is_expression(node->exp.left, "()") && node_is_expression(node->exp.right, ","))
+    {
+        // We have a comma here and an expression to the left, therefore left operand
+        // of right node must be moved
+        parser_node_move_right_left_to_left(node);
+    }
+
+
 }
 
 int parse_expressionable_single(struct history *history);
@@ -1469,6 +1489,7 @@ void parse_exp_normal(struct history *history)
     parser_reorder_expression(&exp_node);
 
     node_push(exp_node);
+
 }
 
 void parse_for_array(struct history *history)
@@ -1523,8 +1544,27 @@ void parse_for_tenary(struct history *history)
     make_exp_node(condition_operand, tenary_node, "?");
 }
 
+void parse_for_comma(struct history* history)
+{
+    // Skip comma
+    token_next();
+    struct node* node_left = node_pop();
+
+    // Parse next node as root.
+    parse_expressionable_root(history);
+
+    struct node* node_right = node_pop();
+    make_exp_node(node_left, node_right, ",");
+}
+
 void parse_exp(struct history *history)
 {
+     if (S_EQ(token_peek_next()->sval, ","))
+     {
+         parse_for_comma(history);
+         return;
+     }
+
     if (S_EQ(token_peek_next()->sval, "("))
     {
         parse_for_parentheses(history);
@@ -1542,6 +1582,7 @@ void parse_exp(struct history *history)
         parse_for_tenary(history);
         return;
     }
+
 
     parse_exp_normal(history);
 }
@@ -1727,7 +1768,7 @@ void parse_for_parentheses(struct history *history)
     expect_op("(");
     parse_expressionable_root(history_begin(history, 0));
     expect_sym(')');
-
+    
     struct node *exp_node = node_pop();
     make_exp_parentheses_node(exp_node);
 

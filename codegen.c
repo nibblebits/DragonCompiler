@@ -1141,17 +1141,17 @@ void codegen_generate_assignment_instruction_for_operator(const char *mov_type_k
 
         asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use);
     }
-    else if(S_EQ(op, "<<="))
+    else if (S_EQ(op, "<<="))
     {
         // not tested.
         asm_push("shl eax, ", reg_to_use);
-        asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use); 
+        asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use);
     }
-    else if(S_EQ(op, ">>="))
+    else if (S_EQ(op, ">>="))
     {
         // not tested.
         asm_push("shr eax, ", reg_to_use);
-        asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use); 
+        asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use);
     }
 }
 void codegen_generate_assignment_expression(struct node *node, struct history *history)
@@ -1455,7 +1455,7 @@ void codegen_generate_function_call(struct node *node, struct resolver_entity *e
     {
         codegen_response_expect();
         register_unset_flag(REGISTER_EAX_IS_USED);
-        codegen_generate_expressionable(argument_node, history_down(history, history->flags | EXPRESSION_IN_FUNCTION_CALL));
+        codegen_generate_expressionable(argument_node, history_down(history, codegen_remove_uninheritable_flags(history->flags) | EXPRESSION_IN_FUNCTION_CALL));
 
         struct response *res = codegen_response_pull();
         if (codegen_should_push_function_call_argument(res))
@@ -1473,8 +1473,6 @@ void codegen_generate_function_call(struct node *node, struct resolver_entity *e
 
     // Now to restore the stack
     codegen_stack_add(entity->func_call_data.stack_size);
-
-    register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
 void codegen_generate_for_entity(struct node *node, struct resolver_entity *entity, struct history *history)

@@ -266,7 +266,7 @@ struct resolver_entity *resolver_get_entity_in_scope_with_entity_type(struct res
         struct node *out_node = NULL;
         struct datatype *node_var_datatype = &variable_node(result->last_struct_union_entity->node)->var.type;
 
-        // Unions offset will always be zero ;) 
+        // Unions offset will always be zero ;)
         int offset = struct_offset(resolver_compiler(resolver), node_var_type_str(variable_node(result->last_struct_union_entity->node)), entity_name, &out_node, 0, 0);
         if (node_var_datatype->type == DATA_TYPE_UNION)
         {
@@ -314,6 +314,11 @@ struct resolver_entity *resolver_get_entity_for_type(struct resolver_result *res
         scope = scope->prev;
     }
 
+    if (entity)
+    {
+        // Clear the last resolve data as we resolved this node again.
+        memset(&entity->last_resolve, 0, sizeof(entity->last_resolve));
+    }
     return entity;
 }
 
@@ -534,9 +539,9 @@ static struct resolver_entity *resolver_follow_exp(struct resolver_process *reso
     return entity;
 }
 
-struct resolver_entity* resolver_follow_for_name(struct resolver_process* resolver, const char* name, struct resolver_result* result)
+struct resolver_entity *resolver_follow_for_name(struct resolver_process *resolver, const char *name, struct resolver_result *result)
 {
-     struct resolver_entity *entity = resolver_entity_clone(resolver_get_entity(result, resolver, name));
+    struct resolver_entity *entity = resolver_entity_clone(resolver_get_entity(result, resolver, name));
     if (!entity)
     {
         return NULL;
@@ -559,12 +564,18 @@ struct resolver_entity* resolver_follow_for_name(struct resolver_process* resolv
 }
 struct resolver_entity *resolver_follow_identifier(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
-   return resolver_follow_for_name(resolver, node->sval, result);
+    struct resolver_entity *entity = resolver_follow_for_name(resolver, node->sval, result);
+    if(entity)
+    {
+        entity->last_resolve.referencing_node = node;
+    }
+    return entity;
 }
 
-struct resolver_entity* resolver_follow_variable(struct resolver_process* resolver, struct node* var_node, struct resolver_result *result)
+struct resolver_entity *resolver_follow_variable(struct resolver_process *resolver, struct node *var_node, struct resolver_result *result)
 {
-    return resolver_follow_for_name(resolver, var_node->var.name, result);
+    struct resolver_entity *entity = resolver_follow_for_name(resolver, var_node->var.name, result);
+    return entity;
 }
 
 static struct resolver_entity *resolver_follow_part_return_entity(struct resolver_process *resolver, struct node *node, struct resolver_result *result);
@@ -576,7 +587,12 @@ static struct resolver_entity *resolver_follow_exp_parenthesis(struct resolver_p
 
 static struct resolver_entity *resolver_follow_unary_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
-    return resolver_follow_part_return_entity(resolver, node->unary.operand, result);
+    struct resolver_entity* entity = resolver_follow_part_return_entity(resolver, node->unary.operand, result);
+    if(entity)
+    {
+        entity->last_resolve.unary = &node->unary;
+    }
+    return entity;
 }
 
 static struct resolver_entity *resolver_follow_part_return_entity(struct resolver_process *resolver, struct node *node, struct resolver_result *result)

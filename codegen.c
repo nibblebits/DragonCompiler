@@ -1171,6 +1171,21 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     const char *reg_to_use = "eax";
     const char *mov_type_keyword = codegen_byte_word_or_dword_or_ddword(datatype_size(&variable_node(left_entity->node)->var.type), &reg_to_use);
 
+    if (left_entity->last_resolve.unary && op_is_indirection(left_entity->last_resolve.unary->op))
+    {
+
+       asm_push("lea ebx, [%s]", codegen_entity_private(left_entity)->address);
+
+        // We have indirection in regards to the last entity resolved
+        // I.e ***a = 50;
+        for (int i = 0; i < left_entity->last_resolve.unary->indirection.depth; i++)
+        {
+            asm_push("mov ebx, [ebx]");
+        }
+
+        codegen_generate_assignment_instruction_for_operator(mov_type_keyword, "ebx", reg_to_use, node->exp.op, variable_node(left_entity->node)->var.type.flags & DATATYPE_FLAG_IS_SIGNED);
+        return;
+    }
     codegen_generate_assignment_instruction_for_operator(mov_type_keyword, codegen_entity_private(left_entity)->address, reg_to_use, node->exp.op, variable_node(left_entity->node)->var.type.flags & DATATYPE_FLAG_IS_SIGNED);
 }
 

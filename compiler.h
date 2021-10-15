@@ -501,7 +501,7 @@ struct datatype
     int type;
 
     // The secondary datatype, only present if the DATATYPE_FLAG_SECONDARY is set.
-    struct datatype* secondary;
+    struct datatype *secondary;
 
     // The string equivilant for this type. Does not include unsigned or signed keywords.
     // if the type is "unsigned int" here will be written only "int"
@@ -608,6 +608,19 @@ struct resolver_entity
             size_t stack_size;
         } func_call_data;
     };
+
+    // Information regarding the last resolve of this entity
+    struct entity_last_resolve
+    {
+        // The unary that this entity is inside of. NULL if not existant
+        struct unary* unary;
+
+        // The node that referenced this entity leading to a successful resovle of this entity.
+        // I.e we are "int a;" and the referencing node was the identifier "a" i.e int b = a; "a" references int a
+        struct node* referencing_node;
+    } last_resolve;
+
+
     // The scope that this entity belongs too.
     struct resolver_scope *scope;
 
@@ -795,7 +808,7 @@ struct token
         unsigned int inum;
         unsigned long lnum;
         unsigned long long llnum;
-        void* any;
+        void *any;
     };
 
     // Information for the given number token, if this token is of type TOKEN_TYPE_NUMBER
@@ -1033,6 +1046,26 @@ enum
     FUNCTION_NODE_FLAG_IS_NATIVE = 0b00000001
 };
 
+struct node;
+struct unary
+{
+    // In the case of indirection the "op" variable will only equal to one "*"
+    // you can find the depth in the indirection structure within.
+    const char *op;
+    struct node *operand;
+
+    union
+    {
+        // Represents a pointer access unary. i.e "***dog"
+        struct indirection
+        {
+            // The depth of the "indrection" i.e "***dog" has a depth of 3
+            int depth;
+
+        } indirection;
+    };
+};
+
 struct node
 {
     int type;
@@ -1073,24 +1106,7 @@ struct node
         } parenthesis;
 
         // Represents unary expressions i.e "~abc", "-a", "-90"
-        struct unary
-        {
-            // In the case of indirection the "op" variable will only equal to one "*"
-            // you can find the depth in the indirection structure within.
-            const char *op;
-            struct node *operand;
-
-            union
-            {
-                // Represents a pointer access unary. i.e "***dog"
-                struct indirection
-                {
-                    // The depth of the "indrection" i.e "***dog" has a depth of 3
-                    int depth;
-
-                } indirection;
-            };
-        } unary;
+        struct unary unary;
 
         // Represents a C structure in the tree.
         struct _struct
@@ -1314,8 +1330,7 @@ enum
  */
 bool node_is_expressionable(struct node *node);
 
-
-bool node_is_expression(struct node* node, const char* op);
+bool node_is_expression(struct node *node, const char *op);
 
 /**
  * Called to issue a compiler error and terminate the compiler
@@ -1653,8 +1668,7 @@ bool is_access_operator_node(struct node *node);
 bool is_operator_token(struct token *token);
 
 bool op_is_indirection(const char *op);
-bool op_is_address(const char* op);
-
+bool op_is_address(const char *op);
 
 int align_value(int val, int to);
 
@@ -1870,11 +1884,9 @@ bool token_is_operator(struct token *token, const char *op);
 bool token_is_keyword(struct token *token, const char *keyword);
 bool token_is_symbol(struct token *token, char sym);
 bool token_is_identifier(struct token *token, const char *iden);
-bool token_is_primitive_keyword(struct token* token);
+bool token_is_primitive_keyword(struct token *token);
 
-struct token* token_peek_no_nl(struct vector* token_vec);
-
-
+struct token *token_peek_no_nl(struct vector *token_vec);
 
 // Preprocessor
 int preprocessor_run(struct compile_process *compiler);

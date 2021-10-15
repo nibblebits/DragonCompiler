@@ -1,15 +1,11 @@
-#include <stdio.h>
 
-int printf(const char* s, ...);
 int main()
 {
-  int i;
-  i = 50;
+  int x;
+  x = 20;
   int* ptr;
-  ptr = &i;
-
-  int b;
-  b = *ptr;
-  printf("%i\n", b);
-
+  ptr = &x;
+  *ptr = 30;
+  
+  return x;
 }

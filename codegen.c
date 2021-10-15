@@ -1174,7 +1174,7 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     if (left_entity->last_resolve.unary && op_is_indirection(left_entity->last_resolve.unary->op))
     {
 
-       asm_push("lea ebx, [%s]", codegen_entity_private(left_entity)->address);
+        asm_push("lea ebx, [%s]", codegen_entity_private(left_entity)->address);
 
         // We have indirection in regards to the last entity resolved
         // I.e ***a = 50;
@@ -1488,6 +1488,8 @@ void codegen_generate_function_call(struct node *node, struct resolver_entity *e
 
     // Now to restore the stack
     codegen_stack_add(entity->func_call_data.stack_size);
+
+    register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
 void codegen_generate_for_entity(struct node *node, struct resolver_entity *entity, struct history *history)
@@ -1608,7 +1610,6 @@ void codegen_generate_unary_address(struct node *node, struct history *history)
     register_unset_flag(REGISTER_EBX_IS_USED);
 
     asm_push("mov eax, ebx");
-
 }
 
 void codegen_generate_normal_unary(struct node *node, struct history *history)
@@ -1653,7 +1654,7 @@ void codegen_generate_unary(struct node *node, struct history *history)
         codegen_generate_unary_indirection(node, history);
         return;
     }
-    else if(op_is_address(node->unary.op))
+    else if (op_is_address(node->unary.op))
     {
         codegen_generate_unary_address(node, history);
         return;

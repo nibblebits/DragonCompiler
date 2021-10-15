@@ -1,11 +1,6 @@
-
+int printf(char* x, int xx);
 int main()
 {
-  int x;
-  x = 20;
-  int* ptr;
-  ptr = &x;
-  *ptr = 30;
-  
-  return x;
+   printf("testing %i", 50);
+   return 90;
 }

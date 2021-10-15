@@ -479,5 +479,16 @@ if [ $? -ne 0 ]; then
 else
     echo -e "Preprocessor concat passed"
 fi
+
+
+echo -e "Pointer assignment test"
+./build/pointer_assignment
+if [ $? -ne 30 ]; then
+    echo -e "Pointer assignment test failed"
+    res_code=1
+else
+    echo -e "Pointer assignment test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

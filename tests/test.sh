@@ -490,5 +490,16 @@ else
     echo -e "Pointer assignment test passed"
 fi
 
+echo -e "Multi-variable test"
+./build/multi-variable
+if [ $? -ne 14 ]; then
+    echo -e "Multi-variable test failed"
+    res_code=1
+else
+    echo -e "Multi-variable test passed"
+fi
+
+
+
 echo -e "All tests finished"
 exit $res_code

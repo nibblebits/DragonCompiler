@@ -986,6 +986,7 @@ enum
     NODE_TYPE_IDENTIFIER,
     NODE_TYPE_STRING,
     NODE_TYPE_VARIABLE,
+    NODE_TYPE_VARIABLE_LIST,
     NODE_TYPE_FUNCTION,
     NODE_TYPE_BODY,
     NODE_TYPE_STATEMENT_RETURN,
@@ -1306,6 +1307,12 @@ struct node
             struct node *true_node;
             struct node *false_node;
         } tenary;
+
+        struct var_list
+        {
+            // List of variable node pointers for this variable list.
+            struct vector* list;
+        } var_list;
     };
 
     // Literal values for nodes of generic types. I.e numbers and identifiers
@@ -1581,6 +1588,11 @@ struct node *node_peek();
  * Pops the last node we pushed to the vector
  */
 struct node *node_pop();
+
+/**
+ * Pops all remaining nodes from the standard vector and pushes them to the root vector aka the tree vector
+ */
+void node_pop_remaining_push_to_root_vec();
 /**
  * Peeks at the node on the node_tree_vec, root of the tree basically.
  * returns the next node the peek pointer is at then moves to the next node
@@ -1768,6 +1780,8 @@ size_t array_brackets_calculate_size(struct datatype *type, struct array_bracket
  * I.e short abc[8]; will return 8*2;
  */
 size_t variable_size(struct node *var_node);
+size_t variable_size_for_list(struct node *var_list_node);
+
 size_t datatype_size(struct datatype *datatype);
 
 bool is_array_operator(const char *op);

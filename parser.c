@@ -482,7 +482,6 @@ void token_read_dots(size_t total)
     }
 }
 
-
 static bool is_keyword_variable_modifier(const char *val)
 {
     return S_EQ(val, "unsigned") ||
@@ -580,6 +579,11 @@ void make_variable_node_and_register(struct history *history, struct datatype *d
     node_push(var_node);
 }
 
+void make_variable_list_node(struct vector* var_list)
+{
+    node_create(&(struct node){NODE_TYPE_VARIABLE_LIST, .var_list.list=var_list});
+
+}
 void make_bracket_node(struct node *inner_node)
 {
     node_create(&(struct node){NODE_TYPE_BRACKET, .bracket.inner = inner_node});
@@ -816,13 +820,13 @@ void parser_node_shift_children_left(struct node *node)
     node->exp.op = right_op;
 }
 
-void parser_node_move_right_left_to_left(struct node* node)
+void parser_node_move_right_left_to_left(struct node *node)
 {
     make_exp_node(node->exp.left, node->exp.right->exp.left, node->exp.op);
-    struct node* completed_node = node_pop();
-    
-    // Now we still have the right node to worry about 
-    const char* new_op = node->exp.right->exp.op;
+    struct node *completed_node = node_pop();
+
+    // Now we still have the right node to worry about
+    const char *new_op = node->exp.right->exp.op;
     node->exp.left = completed_node;
     node->exp.right = node->exp.right->exp.right;
     node->exp.op = new_op;
@@ -883,8 +887,6 @@ void parser_reorder_expression(struct node **node_out)
         // of right node must be moved
         parser_node_move_right_left_to_left(node);
     }
-
-
 }
 
 int parse_expressionable_single(struct history *history);
@@ -991,7 +993,7 @@ void parse_struct_no_new_scope(struct datatype *dtype, bool is_forward_declarati
             // Don't forget to update the structure name with the new one.
             struct_node->_struct.name = var_name->sval;
         }
-        
+
         // We must create a variable for this structure
         make_variable_node_and_register(history_begin(&history, 0), dtype, var_name, NULL);
         struct_node->_struct.var = node_pop();
@@ -1489,7 +1491,6 @@ void parse_exp_normal(struct history *history)
     parser_reorder_expression(&exp_node);
 
     node_push(exp_node);
-
 }
 
 void parse_for_array(struct history *history)
@@ -1544,26 +1545,26 @@ void parse_for_tenary(struct history *history)
     make_exp_node(condition_operand, tenary_node, "?");
 }
 
-void parse_for_comma(struct history* history)
+void parse_for_comma(struct history *history)
 {
     // Skip comma
     token_next();
-    struct node* node_left = node_pop();
+    struct node *node_left = node_pop();
 
     // Parse next node as root.
     parse_expressionable_root(history);
 
-    struct node* node_right = node_pop();
+    struct node *node_right = node_pop();
     make_exp_node(node_left, node_right, ",");
 }
 
 void parse_exp(struct history *history)
 {
-     if (S_EQ(token_peek_next()->sval, ","))
-     {
-         parse_for_comma(history);
-         return;
-     }
+    if (S_EQ(token_peek_next()->sval, ","))
+    {
+        parse_for_comma(history);
+        return;
+    }
 
     if (S_EQ(token_peek_next()->sval, "("))
     {
@@ -1582,7 +1583,6 @@ void parse_exp(struct history *history)
         parse_for_tenary(history);
         return;
     }
-
 
     parse_exp_normal(history);
 }
@@ -1768,7 +1768,7 @@ void parse_for_parentheses(struct history *history)
     expect_op("(");
     parse_expressionable_root(history_begin(history, 0));
     expect_sym(')');
-    
+
     struct node *exp_node = node_pop();
     make_exp_parentheses_node(exp_node);
 
@@ -1815,7 +1815,7 @@ void parse_datatype_modifiers(struct datatype *datatype)
         {
             datatype->flags |= DATATYPE_FLAG_IS_EXTERN;
         }
-        else if(S_EQ(token->sval, "__ignore_typecheck__"))
+        else if (S_EQ(token->sval, "__ignore_typecheck__"))
         {
             datatype->flags |= DATATYPE_FLAG_IGNORE_TYPE_CHECKING;
         }
@@ -1863,29 +1863,28 @@ int size_of_union(const char *union_name)
     return node->_union.body_n->body.size;
 }
 
-
-bool parser_datatype_is_secondary_allowed_for_type(const char* type)
+bool parser_datatype_is_secondary_allowed_for_type(const char *type)
 {
     return S_EQ(type, "long") || S_EQ(type, "short") || S_EQ(type, "double") || S_EQ(type, "float");
 }
 
-void parser_datatype_init_type_and_size_for_primitive(struct token *datatype_token, struct token* datatype_secondary_token, struct datatype *datatype_out);
+void parser_datatype_init_type_and_size_for_primitive(struct token *datatype_token, struct token *datatype_secondary_token, struct datatype *datatype_out);
 
-void parser_datatype_adjust_size_for_secondary(struct datatype* datatype, struct token* datatype_secondary_token)
+void parser_datatype_adjust_size_for_secondary(struct datatype *datatype, struct token *datatype_secondary_token)
 {
     if (!datatype_secondary_token)
     {
         return;
     }
 
-    struct datatype* secondary_data_type = calloc(sizeof(struct datatype), 1);
+    struct datatype *secondary_data_type = calloc(sizeof(struct datatype), 1);
     parser_datatype_init_type_and_size_for_primitive(datatype_secondary_token, NULL, secondary_data_type);
     datatype->size += secondary_data_type->size;
     datatype->secondary = secondary_data_type;
     datatype->flags |= DATATYPE_FLAG_SECONDARY;
 }
 
-void parser_datatype_init_type_and_size_for_primitive(struct token *datatype_token, struct token* datatype_secondary_token, struct datatype *datatype_out)
+void parser_datatype_init_type_and_size_for_primitive(struct token *datatype_token, struct token *datatype_secondary_token, struct datatype *datatype_out)
 {
     if (!parser_datatype_is_secondary_allowed_for_type(datatype_token->sval) && datatype_secondary_token)
     {
@@ -1942,7 +1941,7 @@ bool parser_datatype_is_secondary_allowed(int expected_type)
     return expected_type == DATA_TYPE_EXPECT_PRIMITIVE;
 }
 
-void parser_datatype_init_type_and_size(struct token *datatype_token, struct token* datatype_secondary_token, struct datatype *datatype_out, int pointer_depth, int expected_type)
+void parser_datatype_init_type_and_size(struct token *datatype_token, struct token *datatype_secondary_token, struct datatype *datatype_out, int pointer_depth, int expected_type)
 {
 
     if (!parser_datatype_is_secondary_allowed(expected_type) && datatype_secondary_token)
@@ -1979,12 +1978,11 @@ void parser_datatype_init_type_and_size(struct token *datatype_token, struct tok
     }
 }
 
-void parser_datatype_init(struct token *datatype_token, struct token* datatype_secondary_token, struct datatype *datatype_out, int pointer_depth, int expected_type)
+void parser_datatype_init(struct token *datatype_token, struct token *datatype_secondary_token, struct datatype *datatype_out, int pointer_depth, int expected_type)
 {
     parser_datatype_init_type_and_size(datatype_token, datatype_secondary_token, datatype_out, pointer_depth, expected_type);
     datatype_out->type_str = datatype_token->sval;
 }
-
 
 int parser_datatype_expected_for_type_string(const char *s)
 {
@@ -2000,12 +1998,11 @@ int parser_datatype_expected_for_type_string(const char *s)
     return type;
 }
 
-
-void parser_get_datatype_tokens(struct token** datatype_token_out, struct token** datatype_secondary_token_out)
+void parser_get_datatype_tokens(struct token **datatype_token_out, struct token **datatype_secondary_token_out)
 {
     *datatype_token_out = token_next();
     // Let's check if we have a secondary datatype.
-    struct token* next_token = token_peek_next();
+    struct token *next_token = token_peek_next();
     if (token_is_primitive_keyword(next_token))
     {
         // Okay we have a secondary datatype token
@@ -2022,7 +2019,7 @@ void parser_get_datatype_tokens(struct token** datatype_token_out, struct token*
 void parse_datatype_type(struct datatype *datatype)
 {
     struct token *datatype_token = NULL;
-    struct token* datatype_secondary_token = NULL;
+    struct token *datatype_secondary_token = NULL;
     parser_get_datatype_tokens(&datatype_token, &datatype_secondary_token);
     int expected_type = parser_datatype_expected_for_type_string(datatype_token->sval);
     if (datatype_is_struct_or_union_for_name(datatype_token->sval))
@@ -2055,7 +2052,6 @@ void parse_datatype(struct datatype *datatype)
     parse_datatype_type(datatype);
     // We can have modifiers to the right too.
     parse_datatype_modifiers(datatype);
-
 }
 
 struct array_brackets *parse_array_brackets(struct history *history)
@@ -2243,8 +2239,7 @@ void parse_forward_declaration(struct datatype *dtype)
     FAIL_ERR("BUG with forward declaration");
 }
 
-
-bool parser_is_int_valid_after_datatype(struct datatype* dtype)
+bool parser_is_int_valid_after_datatype(struct datatype *dtype)
 {
     return dtype->type == DATA_TYPE_LONG || dtype->type == DATA_TYPE_FLOAT || dtype->type == DATA_TYPE_DOUBLE;
 }
@@ -2255,7 +2250,7 @@ bool parser_is_int_valid_after_datatype(struct datatype* dtype)
  * i.e long and long int are the same
  * Let's ignore the int if present
  */
-void parser_ignore_int(struct datatype* dtype)
+void parser_ignore_int(struct datatype *dtype)
 {
     if (!token_is_keyword(token_peek_next(), "int"))
     {
@@ -2334,6 +2329,32 @@ void parse_variable_function_or_struct_union(struct history *history)
     // Since this is not a function it has to be a variable
     // Let's handle the variable
     parse_variable(&dtype, name_token, history);
+
+    // Anymore variables?
+    if (token_is_operator(token_peek_next(), ","))
+    {
+        // As we have more variables we want to create a variable list for this
+        struct vector* var_list = vector_create(sizeof(struct node*));
+        // Pop off original node that was parsed and add it to the list
+        struct node* var_node = node_pop();
+        vector_push(var_list, &var_node);
+        while(token_is_operator(token_peek_next(), ","))
+        {
+            // Get rid of the comma
+            token_next();
+
+            // We have another variable, we know its type.
+            // get the name
+            name_token = token_next();
+            parse_variable(&dtype, name_token, history);
+            var_node = node_pop();
+            vector_push(var_list, &var_node);
+        }
+
+        // Since we now have a variable list lets create a variable list node.
+        make_variable_list_node(var_list);
+    }
+
     // We expect variable declarations to end with ";"
     expect_sym(';');
 }
@@ -2540,13 +2561,9 @@ int parse(struct compile_process *process)
     struct node *node = NULL;
     while (parse_next() == 0)
     {
-        // Pop the node that was created on the stack so we can add it to the root of the tree
-        // This element we are popping came from parse_next
-        struct node *node = node_pop();
+        node = node_peek();
         // Push the root element to the tree
         vector_push(process->node_tree_vec, &node);
-        // Also push it back to the main node stack that we just popped from
-        node_push(node);
     }
 
     // Let's fix the fixups

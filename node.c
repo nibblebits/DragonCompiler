@@ -11,11 +11,11 @@ struct node *parser_current_body = NULL;
 struct node *parser_current_function = NULL;
 
 // The last token parsed by the parser, may be NULL
-struct token* parser_last_token = NULL;
-struct vector* node_vector = NULL;
-struct vector* node_vector_root = NULL;
+struct token *parser_last_token = NULL;
+struct vector *node_vector = NULL;
+struct vector *node_vector_root = NULL;
 
-void node_set_vector(struct vector* vec, struct vector* root_vec)
+void node_set_vector(struct vector *vec, struct vector *root_vec)
 {
     node_vector = vec;
     node_vector_root = root_vec;
@@ -70,6 +70,17 @@ struct node *node_pop()
     return last_node;
 }
 
+void node_pop_remaining_push_to_root_vec()
+{
+    vector_set_peek_pointer(node_vector, 0);
+    struct node *node = node_peek_or_null();
+    if (node)
+    {
+        // Push the root element to the tree
+        vector_push(node_vector_root, &node);
+    }
+}
+
 /**
  * Peeks at the node on the node_tree_vec, root of the tree basically.
  * returns the next node the peek pointer is at then moves to the next node
@@ -99,7 +110,6 @@ struct node *node_create(struct node *_node)
     node_push(node);
     return node;
 }
-
 
 void make_for_node(struct node *init_node, struct node *cond_node, struct node *loop_node, struct node *body_node)
 {
@@ -199,7 +209,6 @@ void make_struct_node(const char *struct_name, struct node *body_node)
     node_create(&(struct node){NODE_TYPE_STRUCT, .flags = flags, ._struct.name = struct_name, ._struct.body_n = body_node});
 }
 
-
 void make_unary_node(const char *unary_op, struct node *operand_node)
 {
     node_create(&(struct node){NODE_TYPE_UNARY, .unary.op = unary_op, .unary.operand = operand_node});
@@ -219,7 +228,6 @@ void make_body_node(struct vector *body_vec, size_t size, bool padded, struct no
 {
     node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.size = size, .body.padded = padded, .body.largest_var_node = largest_var_node});
 }
-
 
 bool node_is_struct_or_union_variable(struct node *node)
 {
@@ -297,7 +305,7 @@ long node_pull_literal(struct resolver_process *process, struct node *node)
     return -1;
 }
 
-bool node_is_expression(struct node* node, const char* op)
+bool node_is_expression(struct node *node, const char *op)
 {
     return node->type == NODE_TYPE_EXPRESSION && S_EQ(node->exp.op, op);
 }
@@ -530,14 +538,13 @@ struct node *variable_node(struct node *node)
     return var_node;
 }
 
-
-struct node* node_function_get_final_argument(struct node* func_node)
+struct node *node_function_get_final_argument(struct node *func_node)
 {
     assert(func_node->type == NODE_TYPE_FUNCTION);
     vector_set_peek_pointer(func_node->func.argument_vector, 0);
-    struct node* node = vector_peek_ptr(func_node->func.argument_vector);
-    struct node* last_node = node;
-    while(node)
+    struct node *node = vector_peek_ptr(func_node->func.argument_vector);
+    struct node *last_node = node;
+    while (node)
     {
         last_node = node;
         node = vector_peek_ptr(func_node->func.argument_vector);

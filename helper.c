@@ -89,13 +89,12 @@ bool datatype_is_struct_or_union_for_name(const char *name)
     return S_EQ(name, "struct") || S_EQ(name, "union");
 }
 
-
-bool is_pointer_datatype(struct datatype* dtype)
+bool is_pointer_datatype(struct datatype *dtype)
 {
     return dtype->pointer_depth > 0;
 }
 
-bool datatype_is_non_pointer_struct(struct datatype* dtype)
+bool datatype_is_non_pointer_struct(struct datatype *dtype)
 {
     return dtype->type == DATA_TYPE_STRUCT && !is_pointer_datatype(dtype);
 }
@@ -550,7 +549,7 @@ bool op_is_indirection(const char *op)
     return S_EQ(op, "*");
 }
 
-bool op_is_address(const char* op)
+bool op_is_address(const char *op)
 {
     return S_EQ(op, "&");
 }
@@ -630,7 +629,7 @@ int compute_sum_padding_for_body(struct node *node)
     assert(node->type == NODE_TYPE_BODY);
     return compute_sum_padding(node->body.statements);
 }
-bool datatype_is_primitive(const char* type)
+bool datatype_is_primitive(const char *type)
 {
     return S_EQ(type, "void") || S_EQ(type, "char") || S_EQ(type, "short") || S_EQ(type, "int") || S_EQ(type, "long") || S_EQ(type, "float") || S_EQ(type, "double");
 }
@@ -657,6 +656,21 @@ size_t variable_size(struct node *var_node)
     return datatype_size(&var_node->var.type);
 }
 
+size_t variable_size_for_list(struct node *var_list_node)
+{
+    size_t size = 0;
+    assert(var_list_node->type == NODE_TYPE_VARIABLE_LIST);
+    vector_set_peek_pointer(var_list_node->var_list.list, 0);
+    struct node *var_node = vector_peek_ptr(var_list_node->var_list.list);
+    while (var_node)
+    {
+        size += variable_size(var_node);
+        var_node = vector_peek_ptr(var_list_node->var_list.list);
+    }
+
+
+    return size;
+}
 struct node *struct_node_for_name(struct compile_process *current_process, const char *struct_name)
 {
     struct node *node = node_from_symbol(current_process, struct_name);
@@ -668,7 +682,6 @@ struct node *struct_node_for_name(struct compile_process *current_process, const
 
     return node;
 }
-
 
 struct node *union_node_for_name(struct compile_process *current_process, const char *struct_name)
 {

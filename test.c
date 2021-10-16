@@ -1,10 +1,8 @@
-int o, b;
+   int a[4];
+
+int printf(const char* s, ...);
 int main()
 {
-   int x, y;
-   x = 5;
-   y = 4;
-   o = 3;
-   b = 2;
-   return x+y+o+b;
+   int c;
+      c = a[1];
 }

@@ -668,7 +668,7 @@ typedef void *(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result *result, st
 *  \param index_val numerical value passed to this index.
  * \param index The numerical index in the array we are computing for, we need an array private that represents all you need for this given index
  */
-typedef void *(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_result *result, struct resolver_entity *array_var_entity, int index_val, int index);
+typedef void *(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_result *result, struct resolver_entity *array_var_entity, int index_val, int index, struct resolver_scope* scope);
 
 /**
  * Used for when you need to join a calculated result with a previous entity.
@@ -1781,6 +1781,7 @@ size_t array_brackets_calculate_size(struct datatype *type, struct array_bracket
  */
 size_t variable_size(struct node *var_node);
 size_t variable_size_for_list(struct node *var_list_node);
+size_t variable_size_for_move(struct node* var_node);
 
 size_t datatype_size(struct datatype *datatype);
 

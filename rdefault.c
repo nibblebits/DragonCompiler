@@ -148,11 +148,18 @@ void *resolver_default_merge_struct_entity(struct resolver_result *result, struc
     return resolver_default_new_entity_data_for_var_node(variable_node(result->first_entity_const->node), left_offset + right_offset, entity_flags);
 }
 
-void *resolver_default_new_array_entity(struct resolver_result *result, struct resolver_entity *array_entity, int index_val, int index)
+void *resolver_default_new_array_entity(struct resolver_result *result, struct resolver_entity *array_entity, int index_val, int index, struct resolver_scope* scope)
 {
     int index_offset = array_offset(&array_entity->var_data.dtype, index, index_val);
     int final_offset = resolver_default_entity_private(array_entity)->offset + index_offset;
-    return resolver_default_new_entity_data_for_var_node(variable_node(result->identifier->node), final_offset, 0);
+
+    int entity_flags = 0;
+    if (scope->flags & RESOLVER_SCOPE_FLAG_IS_STACK)
+    {
+        entity_flags |= RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK;
+    }
+
+    return resolver_default_new_entity_data_for_var_node(variable_node(result->identifier->node), final_offset, entity_flags);
 }
 
 void resolver_default_join_array_entity_index(struct resolver_result *result, struct resolver_entity *join_entity, int index_val, int index)
@@ -160,6 +167,9 @@ void resolver_default_join_array_entity_index(struct resolver_result *result, st
     struct resolver_default_entity_data *private = resolver_default_entity_private(join_entity);
     int index_offset = array_offset(&join_entity->var_data.dtype, index, index_val);
     int final_offset = resolver_default_entity_private(join_entity)->offset + index_offset;
+
+
+
     resolver_default_entity_data_set_address(resolver_default_entity_private(join_entity), variable_node(join_entity->node), final_offset, 0);
 }
 

@@ -938,7 +938,7 @@ static void codegen_gen_mem_access_first_for_expression(struct node *value_node,
     // then we will also load the value of the other registers into the expression result
     // not something that we want at all
 
-    reg_to_use = codegen_sub_register("eax", variable_size(entity->node));
+    reg_to_use = codegen_sub_register("eax", variable_size_for_move(entity->node));
     assert(reg_to_use);
     if (!S_EQ(reg_to_use, "eax"))
     {

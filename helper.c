@@ -656,6 +656,11 @@ size_t variable_size(struct node *var_node)
     return datatype_size(&var_node->var.type);
 }
 
+size_t variable_size_for_move(struct node* var_node)
+{
+    return var_node->var.type.size;
+}
+
 size_t variable_size_for_list(struct node *var_list_node)
 {
     size_t size = 0;

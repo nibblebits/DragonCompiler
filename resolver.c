@@ -479,9 +479,6 @@ static void resolver_build_function_call_arguments(struct resolver_process *reso
     }
     else if (argument_node->type == NODE_TYPE_EXPRESSION_PARENTHESIS)
     {
-// Every function call argument starts with an expression parenthesis node.
-// Probably should deprecate the parenthesis node, its a problem...
-#warning "This design could result in a bug take for example test((((55)))), 65) test this before release"
         resolver_build_function_call_arguments(resolver, argument_node->parenthesis.exp, root_func_call_entity, total_size_out);
     }
     else

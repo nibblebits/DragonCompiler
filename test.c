@@ -1,8 +1,11 @@
-   int a[4];
+
+  int a[10][5];
 
 int printf(const char* s, ...);
 int main()
 {
-   int c;
-      c = a[1];
+     int c;
+   int b;
+   int d;
+      c = a[b][d];
 }

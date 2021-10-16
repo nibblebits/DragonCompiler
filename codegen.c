@@ -1101,6 +1101,7 @@ void codegen_generate_variable_access(struct node *node, struct resolver_result 
     if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
     {
         codegen_generate_variable_access_for_array(entity, history);
+        return;
     }
 
     codegen_generate_variable_access_for_non_array(node, entity, history);

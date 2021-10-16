@@ -191,18 +191,23 @@ struct resolver_entity *resolver_create_new_entity(int type, void *private)
     return entity;
 }
 
-struct resolver_entity *resolver_create_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private)
+struct resolver_entity *resolver_create_new_entity_for_var_node_custom_scope(struct resolver_process *process, struct node *var_node, void *private, struct resolver_scope *scope)
 {
     struct resolver_entity *entity = resolver_create_new_entity(RESOLVER_ENTITY_TYPE_VARIABLE, private);
     if (!entity)
         return NULL;
 
-    entity->scope = resolver_scope_current(process);
+    entity->scope = scope;
     assert(entity->scope);
     entity->var_data.dtype = var_node->var.type;
     entity->node = var_node;
     entity->name = var_node->var.name;
     return entity;
+}
+
+struct resolver_entity *resolver_create_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private)
+{
+    return resolver_create_new_entity_for_var_node_custom_scope(process, var_node, private, resolver_scope_current(process));
 }
 
 struct resolver_entity *resolver_new_entity_for_var_node_no_push(struct resolver_process *process, struct node *var_node, void *private)
@@ -408,7 +413,7 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
     resolver_follow_part(resolver, node->exp.left, result);
     struct resolver_entity *left_entity = resolver_result_pop(result);
 
-   struct resolver_scope *scope = left_entity->scope;
+    struct resolver_scope *scope = left_entity->scope;
 
     struct resolver_entity *entity = NULL;
     int last_array_index = vector_count(resolver_array_data_vec(result));
@@ -448,7 +453,7 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
     }
     else if (right_operand->type == NODE_TYPE_NUMBER)
     {
-        entity = resolver_create_new_entity_for_var_node(resolver, variable_node(result->identifier->node), resolver->callbacks.new_array_entity(result, left_entity, right_operand->llnum, last_array_index, scope));
+        entity = resolver_create_new_entity_for_var_node_custom_scope(resolver, variable_node(result->identifier->node), resolver->callbacks.new_array_entity(result, left_entity, right_operand->llnum, last_array_index, scope), scope);
     }
 
     resolver_array_push(result, entity);
@@ -564,7 +569,7 @@ struct resolver_entity *resolver_follow_for_name(struct resolver_process *resolv
 struct resolver_entity *resolver_follow_identifier(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     struct resolver_entity *entity = resolver_follow_for_name(resolver, node->sval, result);
-    if(entity)
+    if (entity)
     {
         entity->last_resolve.referencing_node = node;
     }
@@ -586,8 +591,8 @@ static struct resolver_entity *resolver_follow_exp_parenthesis(struct resolver_p
 
 static struct resolver_entity *resolver_follow_unary_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
-    struct resolver_entity* entity = resolver_follow_part_return_entity(resolver, node->unary.operand, result);
-    if(entity)
+    struct resolver_entity *entity = resolver_follow_part_return_entity(resolver, node->unary.operand, result);
+    if (entity)
     {
         entity->last_resolve.unary = &node->unary;
     }

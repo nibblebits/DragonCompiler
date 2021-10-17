@@ -1,13 +1,11 @@
 
-  int a[2][2];
-
+  int abc[3];
 int printf(const char* s, ...);
 int main()
 {
-    int a[2][2];
 
-     int c;
-   int b;
-   int d;
-      c = a[3][0];
+  int c;
+  c = abc[2];
+
+
 }

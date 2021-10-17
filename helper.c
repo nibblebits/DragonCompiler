@@ -643,8 +643,16 @@ bool variable_node_is_primative(struct node *node)
 
 size_t datatype_size(struct datatype *datatype)
 {
+    if (datatype->flags & DATATYPE_FLAG_IS_POINTER)
+        return DATA_SIZE_DWORD;
+
     if (datatype->flags & DATATYPE_FLAG_IS_ARRAY)
         return datatype->array.size;
+    return datatype->size;
+}
+
+size_t datatype_element_size(struct datatype *datatype)
+{
     if (datatype->flags & DATATYPE_FLAG_IS_POINTER)
         return DATA_SIZE_DWORD;
 
@@ -654,11 +662,6 @@ size_t datatype_size(struct datatype *datatype)
 size_t variable_size(struct node *var_node)
 {
     return datatype_size(&var_node->var.type);
-}
-
-size_t variable_size_for_move(struct node* var_node)
-{
-    return var_node->var.type.size;
 }
 
 size_t variable_size_for_list(struct node *var_list_node)
@@ -672,7 +675,6 @@ size_t variable_size_for_list(struct node *var_list_node)
         size += variable_size(var_node);
         var_node = vector_peek_ptr(var_list_node->var_list.list);
     }
-
 
     return size;
 }
@@ -848,9 +850,9 @@ int array_multiplier(struct datatype *dtype, int index, int index_value)
 int array_offset(struct datatype *dtype, int index, int index_value)
 {
     if (index == vector_count(dtype->array.brackets->n_brackets) - 1)
-        return index_value * dtype->size;
+        return index_value * datatype_element_size(dtype);
 
-    return array_multiplier(dtype, index, index_value) * dtype->size;
+    return array_multiplier(dtype, index, index_value) * datatype_element_size(dtype);
 }
 
 bool char_is_delim(char c, const char *delims)
@@ -863,4 +865,9 @@ bool char_is_delim(char c, const char *delims)
     }
 
     return false;
+}
+
+bool is_pointer_array_access(struct datatype *dtype, int index)
+{
+    return !(dtype->flags & DATATYPE_FLAG_IS_ARRAY) || array_total_indexes(dtype) < index;
 }

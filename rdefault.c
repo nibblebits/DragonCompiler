@@ -150,7 +150,8 @@ void *resolver_default_merge_struct_entity(struct resolver_result *result, struc
 
 void *resolver_default_new_array_entity(struct resolver_result *result, struct resolver_entity *array_entity, int index_val, int index, struct resolver_scope* scope)
 {
-    int index_offset = array_offset(&array_entity->var_data.dtype, index, index_val);
+    struct datatype* dtype = &array_entity->var_data.dtype;
+    int index_offset = array_offset(dtype, index, index_val);
     int final_offset = resolver_default_entity_private(array_entity)->offset + index_offset;
 
     int entity_flags = 0;

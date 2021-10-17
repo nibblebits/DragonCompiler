@@ -405,6 +405,30 @@ static void resolver_array_push(struct resolver_result *result, struct resolver_
     vector_push(resolver_array_data_vec(result), &entity);
 }
 
+struct resolver_entity *resolver_handle_array_entity_for_runtime(struct resolver_result *result, struct resolver_entity *entity, struct resolver_entity *left_entity, struct node *right_operand, int multiplier, int last_array_index, int additional_flags)
+{
+    entity = left_entity;
+    if (left_entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
+    {
+        // We have left entity as an array for runtime as well, therefore we must
+        // maintain left_entity as a seperate instance
+        resolver_array_push(result, left_entity);
+        entity = resolver_entity_clone(left_entity);
+    }
+
+    entity->flags |= RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME;
+    // Set the index node expression so caller knows how to resolve this.
+    entity->var_data.array_runtime.index_node = right_operand;
+    entity->var_data.array_runtime.multiplier = multiplier;
+
+    if (!(additional_flags & RESOLVER_ENTITY_FLAG_CUSTOM_MULTIPLIER))
+    {
+        // No custom multiplier, then generate one.
+        entity->var_data.array_runtime.multiplier = array_multiplier(&entity->var_data.dtype, last_array_index, 1);
+    }
+    return entity;
+}
+
 static struct resolver_entity *resolver_follow_array(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     bool first_array_bracket = result->flags & RESOLVER_RESULT_FLAG_PROCESSING_ARRAY_ENTITIES;
@@ -419,32 +443,14 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
     int last_array_index = vector_count(resolver_array_data_vec(result));
     struct node *right_operand = node->exp.right->bracket.inner;
 
-    //[[[a[]z][]z][]1]]
-
-    if (right_operand->type != NODE_TYPE_NUMBER)
+    if (is_pointer_array_access(&left_entity->var_data.dtype, last_array_index))
     {
-        if (left_entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
-        {
-            // We have left entity as an array for runtime as well, therefore we must
-            // maintain left_entity as a seperate instance
-            resolver_array_push(result, left_entity);
-
-            entity = resolver_entity_clone(left_entity);
-
-            entity->flags |= RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME;
-            // Set the index node expression so caller knows how to resolve this.
-            entity->var_data.array_runtime.index_node = right_operand;
-            entity->var_data.array_runtime.multiplier = array_multiplier(&entity->var_data.dtype, last_array_index, 1);
-        }
-        else
-        {
-            // This needs to be computed at runtime.
-            entity = left_entity;
-            entity->flags |= RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME;
-            // Set the index node expression so caller knows how to resolve this.
-            entity->var_data.array_runtime.index_node = right_operand;
-            entity->var_data.array_runtime.multiplier = array_multiplier(&entity->var_data.dtype, last_array_index, 1);
-        }
+        entity = resolver_handle_array_entity_for_runtime(result, entity, left_entity, right_operand, left_entity->var_data.dtype.size, last_array_index, RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME | RESOLVER_ENTITY_FLAG_CUSTOM_MULTIPLIER);
+        entity->flags |= RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY;
+    }
+    else if (right_operand->type != NODE_TYPE_NUMBER)
+    {
+        entity = resolver_handle_array_entity_for_runtime(result, entity, left_entity, right_operand, 0, last_array_index, 0);
     }
     else if (left_entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
     {

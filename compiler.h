@@ -558,7 +558,10 @@ enum
 {
     RESOLVER_ENTITY_FLAG_COMPILE_TIME_ENTITY = 0b00000001,
     RESOLVER_ENTITY_FLAG_IS_STACK = 0b00000010,
-    RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME = 0b00000100
+    RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME = 0b00000100,
+    RESOLVER_ENTITY_FLAG_CUSTOM_MULTIPLIER = 0b00001000,
+    RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY = 0b00010000
+
 };
 
 enum
@@ -1660,6 +1663,12 @@ bool is_array_node(struct node *node);
 bool is_parentheses_node(struct node *node);
 
 /**
+ * Returns true if the given dataatype and array index mean that
+ * any aray access should be treated as a pointer. I.e const char* abc; abc[0] = 'a';
+ */
+bool is_pointer_array_access(struct datatype* dtype, int index);
+
+/**
  * Returns true if this node represents an access node expression
  */
 bool is_access_node(struct node *node);
@@ -1781,9 +1790,9 @@ size_t array_brackets_calculate_size(struct datatype *type, struct array_bracket
  */
 size_t variable_size(struct node *var_node);
 size_t variable_size_for_list(struct node *var_list_node);
-size_t variable_size_for_move(struct node* var_node);
 
 size_t datatype_size(struct datatype *datatype);
+size_t datatype_element_size(struct datatype *datatype);
 
 bool is_array_operator(const char *op);
 bool is_argument_operator(const char *op);
@@ -1821,6 +1830,7 @@ bool is_logical_node(struct node *node);
 
 int compute_array_offset(struct node *node, size_t single_element_size);
 int array_offset(struct datatype *dtype, int index, int index_value);
+int array_total_indexes(struct datatype* dtype);
 
 /**
  * Returns the multipler for a given array index. How much you need to multiply by

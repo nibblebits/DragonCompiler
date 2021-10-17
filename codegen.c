@@ -938,7 +938,7 @@ static void codegen_gen_mem_access_first_for_expression(struct node *value_node,
     // then we will also load the value of the other registers into the expression result
     // not something that we want at all
 
-    reg_to_use = codegen_sub_register("eax", variable_size_for_move(entity->node));
+    reg_to_use = codegen_sub_register("eax", datatype_element_size(&entity->node->var.type));
     assert(reg_to_use);
     if (!S_EQ(reg_to_use, "eax"))
     {
@@ -1021,8 +1021,12 @@ static bool is_node_array_access(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op);
 }
 
+void codegen_generate_variable_access_for_pointer_array(struct resolver_entity *entity, struct history *history)
+{
+}
 void codegen_generate_variable_access_for_array(struct resolver_entity *entity, struct history *history)
 {
+
     struct resolver_entity *last_entity = NULL;
     int count = 0;
     while (entity)
@@ -1043,13 +1047,27 @@ void codegen_generate_variable_access_for_array(struct resolver_entity *entity, 
         count++;
     }
 
-    asm_push("mov eax, 0");
+    if (last_entity->flags & RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY)
+    {
+        asm_push("mov eax,[%s]", codegen_entity_private(last_entity)->address);
+    }
+    else
+    {
+        asm_push("mov eax, 0");
+    }
     for (int i = 0; i < count; i++)
     {
         asm_push("pop ecx");
         asm_push("add eax, ecx");
     }
-    asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
+    if (last_entity->flags & RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY)
+    {
+        asm_push("mov eax, [eax]");
+    }
+    else
+    {
+        asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
+    }
 }
 
 void codegen_generate_structure_push(struct node *node, struct resolver_entity *entity, struct history *history)

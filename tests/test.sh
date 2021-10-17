@@ -499,6 +499,14 @@ else
     echo -e "Multi-variable test passed"
 fi
 
+echo -e "Array test"
+./build/array_test
+if [ $? -ne 111 ]; then
+    echo -e "Array test failed"
+    res_code=1
+else
+    echo -e "Array test passed"
+fi
 
 
 echo -e "All tests finished"

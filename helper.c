@@ -869,5 +869,5 @@ bool char_is_delim(char c, const char *delims)
 
 bool is_pointer_array_access(struct datatype *dtype, int index)
 {
-    return !(dtype->flags & DATATYPE_FLAG_IS_ARRAY) || array_total_indexes(dtype) < index;
+    return !(dtype->flags & DATATYPE_FLAG_IS_ARRAY) || array_total_indexes(dtype) <= index;
 }

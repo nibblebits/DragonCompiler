@@ -1173,17 +1173,10 @@ void codegen_generate_assignment_instruction_for_operator(const char *mov_type_k
         asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use);
     }
 }
-void codegen_generate_assignment_expression(struct node *node, struct history *history)
+
+void codegen_generate_assignment_expression_value_part(struct resolver_entity *left_entity, struct node *right_node, const char *op, struct history *history)
 {
-    // Left node = to assign
-    // Right node = value
-
-    struct resolver_result *result = resolver_follow(current_process->resolver, node->exp.left);
-    assert(!resolver_result_failed(result));
-
-    struct resolver_entity *left_entity = resolver_result_entity_root(result);
-
-    codegen_generate_expressionable(node->exp.right, history);
+    codegen_generate_expressionable(right_node, history);
 
     register_unset_flag(REGISTER_EAX_IS_USED);
 
@@ -1202,10 +1195,21 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
             asm_push("mov ebx, [ebx]");
         }
 
-        codegen_generate_assignment_instruction_for_operator(mov_type_keyword, "ebx", reg_to_use, node->exp.op, variable_node(left_entity->node)->var.type.flags & DATATYPE_FLAG_IS_SIGNED);
+        codegen_generate_assignment_instruction_for_operator(mov_type_keyword, "ebx", reg_to_use, op, variable_node(left_entity->node)->var.type.flags & DATATYPE_FLAG_IS_SIGNED);
         return;
     }
-    codegen_generate_assignment_instruction_for_operator(mov_type_keyword, codegen_entity_private(left_entity)->address, reg_to_use, node->exp.op, variable_node(left_entity->node)->var.type.flags & DATATYPE_FLAG_IS_SIGNED);
+    codegen_generate_assignment_instruction_for_operator(mov_type_keyword, codegen_entity_private(left_entity)->address, reg_to_use, op, variable_node(left_entity->node)->var.type.flags & DATATYPE_FLAG_IS_SIGNED);
+}
+void codegen_generate_assignment_expression(struct node *node, struct history *history)
+{
+    // Left node = to assign
+    // Right node = value
+
+    struct resolver_result *result = resolver_follow(current_process->resolver, node->exp.left);
+    assert(!resolver_result_failed(result));
+
+    struct resolver_entity *left_entity = resolver_result_entity_root(result);
+    codegen_generate_assignment_expression_value_part(left_entity, node->exp.right, node->exp.op, history);
 }
 
 void codegen_generate_expressionable_function_arguments(struct node *func_call_args_exp_node, size_t *arguments_size)
@@ -1925,21 +1929,9 @@ void codegen_generate_scope_variable(struct node *node)
     // Scope variables have values, lets compute that
     if (node->var.val)
     {
-        // struct history history;
-        // // Process the right node first as this is an expression
-        // codegen_generate_expressionable(node->var.val, history_begin(&history, 0));
-
-        // // Mark the EAX register as no longer used.
-        // register_unset_flag(REGISTER_EAX_IS_USED);
-
-        // char address[256];
-        // // Write the move. Only intergers supported at the moment as you can see
-        // // this will be improved.
-        // asm_push("mov [%s], eax", codegen_stack_asm_address(codegen_entity_private(entity)->offset, address));
-        FAIL_ERR("NOt yet supported variable assignments will be redone soon");
+        struct history history;
+        codegen_generate_assignment_expression_value_part(entity, node->var.val, "=", history_begin(&history, 0));
     }
-
-    register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
 void codegen_generate_scope_variable_for_list(struct node *var_list_node)

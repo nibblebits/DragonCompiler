@@ -1021,19 +1021,83 @@ static bool is_node_array_access(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op);
 }
 
+void codegen_generate_variable_access_for_pointer_array_part(struct resolver_entity *entity, struct history *history)
+{
+    codegen_generate_expressionable(entity->var_data.array_runtime.index_node, history);
+    register_unset_flag(REGISTER_EAX_IS_USED);
+    if (resolver_entity_has_array_multiplier(entity))
+    {
+        asm_push("imul eax, %i", entity->var_data.array_runtime.multiplier);
+    }
+    asm_push("mov ecx, [ebx]");
+    asm_push("add eax, ecx");
+}
+
 void codegen_generate_variable_access_for_pointer_array(struct resolver_entity *entity, struct history *history)
 {
+    asm_push("mov ebx,[%s]", codegen_entity_private(entity)->address);
+    codegen_generate_expressionable(entity->var_data.array_runtime.index_node, history);
+    register_unset_flag(REGISTER_EAX_IS_USED);
+    if (resolver_entity_has_array_multiplier(entity))
+    {
+        asm_push("imul eax, %i", entity->var_data.array_runtime.multiplier);
+    }
+    
+    struct resolver_entity *next_entity = resolver_result_entity_next(entity);
+    bool had_next_entity = next_entity != NULL;
+    while (next_entity)
+    {
+        codegen_generate_variable_access_for_pointer_array_part(next_entity, history);
+        next_entity = resolver_result_entity_next(next_entity);
+    }
+
+    if (!had_next_entity)
+    {
+        asm_push("mov ebx, [ebx+eax]");
+        asm_push("mov eax, ebx");
+    }
+    else
+    {
+        asm_push("mov eax, [eax]");
+    }
 }
+
+void codegen_generate_variable_access_for_array_final_non_pointer_calculation(int count, struct resolver_entity* last_entity)
+{
+    // No count then nothing to do.
+    if (count == 0)
+        return;
+
+    asm_push("mov eax, 0");
+    for (int i = 0; i < count; i++)
+    {
+        asm_push("pop ecx");
+        asm_push("add eax, ecx");
+    }
+    asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
+}
+
 void codegen_generate_variable_access_for_array(struct resolver_entity *entity, struct history *history)
 {
-
     struct resolver_entity *last_entity = NULL;
     int count = 0;
+    bool had_pointer_array = 0;
     while (entity)
     {
         last_entity = entity;
         if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
         {
+            if (entity->flags & RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY)
+            {
+                codegen_generate_variable_access_for_array_final_non_pointer_calculation(count, last_entity);
+                count = 0;
+                had_pointer_array = true;
+                // We have a pointer array? thats all we will have going forward.
+                codegen_generate_variable_access_for_pointer_array(entity, history);
+                entity = resolver_result_entity_next(entity);
+                break;
+            }
+
             // This entity represents array access that requires runtime assistance
             codegen_generate_expressionable(entity->var_data.array_runtime.index_node, history);
             register_unset_flag(REGISTER_EAX_IS_USED);
@@ -1041,32 +1105,14 @@ void codegen_generate_variable_access_for_array(struct resolver_entity *entity, 
             {
                 asm_push("imul eax, %i", entity->var_data.array_runtime.multiplier);
             }
-            asm_push("push eax");
         }
         entity = resolver_result_entity_next(entity);
         count++;
     }
 
-    if (last_entity->flags & RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY)
+    if (!had_pointer_array)
     {
-        asm_push("mov eax,[%s]", codegen_entity_private(last_entity)->address);
-    }
-    else
-    {
-        asm_push("mov eax, 0");
-    }
-    for (int i = 0; i < count; i++)
-    {
-        asm_push("pop ecx");
-        asm_push("add eax, ecx");
-    }
-    if (last_entity->flags & RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY)
-    {
-        asm_push("mov eax, [eax]");
-    }
-    else
-    {
-        asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
+        codegen_generate_variable_access_for_array_final_non_pointer_calculation(count, last_entity);
     }
 }
 

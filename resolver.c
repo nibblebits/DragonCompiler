@@ -433,6 +433,7 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
 {
     bool first_array_bracket = result->flags & RESOLVER_RESULT_FLAG_PROCESSING_ARRAY_ENTITIES;
 
+
     // Left entity is the variable prior to the array access i.e a[5]
     resolver_follow_part(resolver, node->exp.left, result);
     struct resolver_entity *left_entity = resolver_result_pop(result);
@@ -447,6 +448,11 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
     {
         entity = resolver_handle_array_entity_for_runtime(result, entity, left_entity, right_operand, left_entity->var_data.dtype.size, last_array_index, RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME | RESOLVER_ENTITY_FLAG_CUSTOM_MULTIPLIER);
         entity->flags |= RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY;
+        if (!(result->flags & RESOLVER_RESULT_FLAG_HAS_POINTER_ARRAY_ACCESS))
+        {
+            entity->flags |= RESOLVER_ENTITY_FLAG_IS_FIRST_POINTER_ARRAY;
+            result->flags |= RESOLVER_RESULT_FLAG_HAS_POINTER_ARRAY_ACCESS;
+        }
     }
     else if (right_operand->type != NODE_TYPE_NUMBER)
     {

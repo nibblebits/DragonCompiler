@@ -1,4 +1,5 @@
+int** aa;
 int main()
 {
-    int x = 50;
+    aa[0][0] = 90;
 }

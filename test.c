@@ -1,5 +1,10 @@
-int** aa;
+int abc[8];
 int main()
 {
-    aa[0][0] = 90;
+    int c;
+    c = 0;
+    abc[c] = 50;
+
+    c = abc[0];
+    return c;
 }

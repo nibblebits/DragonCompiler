@@ -221,7 +221,8 @@ void make_return_node(struct node *exp_node)
 
 void make_function_node(struct datatype *ret_type, const char *name, struct vector *arguments, struct node *body)
 {
-    node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body_n = body});
+    struct node* function_node = node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body_n = body});
+    function_node->func.frame.elements = vector_create(sizeof(struct stack_frame_element));
 }
 
 void make_body_node(struct vector *body_vec, size_t size, bool padded, struct node *largest_var_node)

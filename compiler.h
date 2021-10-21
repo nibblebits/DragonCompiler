@@ -132,6 +132,7 @@ enum
     // Signifies that this is notthe root of the expression and the root has already
     // been dealt with.
     EXPRESSION_IS_NOT_ROOT_NODE = 0b1000000000000000000000000,
+    EXPRESSION_IS_ASSIGNMENT = 0b10000000000000000000000000,
 
 };
 
@@ -1072,6 +1073,42 @@ struct unary
     };
 };
 
+
+enum
+{
+    // Specifies that this stack frame element makes up part or the full memory of a variable.
+    STACK_FRAME_ELEMENT_TYPE_LOCAL_VARIABLE,
+    STACK_FRAME_ELEMENT_TYPE_SAVED_EAX,
+    STACK_FRAME_ELEMENT_TYPE_SAVED_BP,
+    STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE,
+    STACK_FRAME_ELEMENT_TYPE_UNKNOWN
+};
+
+/**
+ * Stack frame elements represent 4 bytes of stack memory pushed to the stack
+ */
+struct stack_frame_element
+{
+    // The stack frame element type
+    int type;
+    // The name of the element to expect here
+    // not variable name but tag name i.e assignment_right_operand
+    const char* name;
+
+    // The offset from the stack pointer this element can be located.
+    int offset_from_sp;
+};
+
+
+void stackframe_push(struct node *func_node, struct stack_frame_element *element);
+struct stack_frame_element *stackframe_back(struct node *func_node);
+void stackframe_pop(struct node *func_node);
+void stackframe_pop_expecting(struct node* func_node, int expecting_type, const char* expecting_name);
+struct stack_frame_element* stackframe_get_for_tag_name(struct node* func_node, int type, const char* name);
+void stackframe_assert_empty(struct node* func_node);
+void stackframe_sub(struct node* func_node, int type, const char* name, size_t amount);
+void stackframe_add(struct node* func_node, size_t amount);
+
 struct node
 {
     int type;
@@ -1167,6 +1204,16 @@ struct node
             // Essentally this is the sum of the size of all variables inside the body of the given function
             // regardless if the variables are deep in a scope they are included.
             size_t stack_size;
+
+            /**
+             * We keep track of the stack frame at compile time so the compiler knows
+             * what to expect on the stack at the point its generating an instruction
+             */
+            struct stack_frame
+            {
+                // A vector of stack_frame_element
+                struct vector* elements;
+            } frame;
         } func;
 
         struct body

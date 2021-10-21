@@ -424,7 +424,7 @@ struct resolver_entity *resolver_handle_array_entity_for_runtime(struct resolver
     if (!(additional_flags & RESOLVER_ENTITY_FLAG_CUSTOM_MULTIPLIER))
     {
         // No custom multiplier, then generate one.
-        entity->var_data.array_runtime.multiplier = array_multiplier(&entity->var_data.dtype, last_array_index, 1);
+        entity->var_data.array_runtime.multiplier = array_multiplier(&entity->var_data.dtype, last_array_index, 4);
     }
     return entity;
 }
@@ -450,7 +450,6 @@ static struct resolver_entity *resolver_follow_array(struct resolver_process *re
         entity->flags |= RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY;
         if (!(result->flags & RESOLVER_RESULT_FLAG_HAS_POINTER_ARRAY_ACCESS))
         {
-            entity->flags |= RESOLVER_ENTITY_FLAG_IS_FIRST_POINTER_ARRAY;
             result->flags |= RESOLVER_RESULT_FLAG_HAS_POINTER_ARRAY_ACCESS;
         }
     }

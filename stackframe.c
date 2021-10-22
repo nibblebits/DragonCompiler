@@ -25,7 +25,7 @@ void stackframe_push(struct node *func_node, struct stack_frame_element *element
 {
     struct stack_frame *frame = &func_node->func.frame;
     // Stack grows downwards
-    element->offset_from_sp = -(vector_count(frame->elements) * STACK_PUSH_SIZE);
+    element->offset_from_bp = -(vector_count(frame->elements) * STACK_PUSH_SIZE);
     vector_push(frame->elements, element);
 }
 
@@ -33,6 +33,16 @@ struct stack_frame_element *stackframe_back(struct node *func_node)
 {
     struct stack_frame *frame = &func_node->func.frame;
     return vector_back(frame->elements);
+}
+
+struct stack_frame_element* stackframe_back_expect(struct node* func_node, int expecting_type, const char* expecting_name)
+{
+    struct stack_frame_element* element = stackframe_back(func_node);
+    if(element->type != expecting_type || !S_EQ(element->name, expecting_name))
+    {
+        return NULL; 
+    }  
+    return element;
 }
 
 void stackframe_pop(struct node *func_node)

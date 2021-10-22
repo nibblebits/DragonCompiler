@@ -121,8 +121,8 @@ void parse_expressionable_for_op(struct history *history, const char *op);
 static struct history *history_down(struct history *history, int flags)
 {
     struct history *new_history = calloc(sizeof(struct history), 1);
-    history->flags = flags;
     memcpy(new_history, history, sizeof(struct history));
+    new_history->flags = flags;
     return new_history;
 }
 

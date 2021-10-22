@@ -17,6 +17,7 @@ void asm_push(const char *ins, ...);
 void codegen_gen_exp(struct generator *generator, struct node *node, int flags);
 void codegen_entity_address(struct generator *generator, struct resolver_entity *entity, struct generator_entity_address *address_out);
 void codegen_end_exp(struct generator *generator);
+void codegen_restore_assignment_right_operand(const char *output_register);
 
 struct _x86_generator_private
 {
@@ -93,6 +94,32 @@ struct history
         struct history_exp exp;
     };
 };
+
+
+enum
+{
+    CODEGEN_PREDICTION_EAX_WILL_BE_USED = 0b00000001,
+    CODEGEN_PREDICTION_EBX_WILL_BE_USED = 0b00000010,
+};
+
+/**
+ * This function will predict what will happen during code generation so that generators of code that does not exist yet
+ * can prepare themselves.
+ */
+static int codegen_predict(struct resolver_result* result)
+{
+    int flags = 0;
+    struct resolver_entity* entity = resolver_result_entity_root(result);
+    while(entity)
+    {
+        if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
+        {
+            // EAX will be used during this procedure.
+            flags |= CODEGEN_PREDICTION_EAX_WILL_BE_USED;
+        }
+    }
+    return flags;
+}
 
 enum
 {
@@ -215,15 +242,17 @@ const char *codegen_get_label_for_string(const char *str)
 
 static struct history *history_down(struct history *history, int flags)
 {
-    history->flags = flags;
-    return history;
+    struct history *new_history = calloc(sizeof(struct history), 1);
+    memcpy(new_history, history, sizeof(struct history));
+    new_history->flags = flags;
+    return new_history;
 }
 
 static struct history *history_begin(struct history *history_out, int flags)
 {
-    memset(history_out, 0, sizeof(struct history));
-    history_out->flags = flags;
-    return history_out;
+    struct history *new_history = calloc(sizeof(struct history), 1);
+    new_history->flags = flags;
+    return new_history;
 }
 
 struct resolver_default_entity_data *codegen_entity_private(struct resolver_entity *entity)
@@ -960,14 +989,8 @@ static void codegen_gen_mov_or_math_for_value(const char *reg, const char *value
     }
 
     codegen_use_register(reg);
-    if (flags & EXPRESSION_IS_ASSIGNMENT)
-    {
-        asm_push("mov %s %s, %s", datatype, value, reg);
-    }
-    else
-    {
-        asm_push("mov %s, %s", reg, value);
-    }
+    asm_push("mov %s, %s", reg, value);
+    
 }
 
 static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, int flags, struct resolver_entity *entity)
@@ -1131,7 +1154,7 @@ void codegen_generate_variable_access_for_pointer_array(struct resolver_entity *
     }
 }
 
-void codegen_generate_variable_access_for_array_final_non_pointer_calculation(int count, struct resolver_entity *last_entity)
+void codegen_generate_variable_access_for_array_final_non_pointer_calculation(int count, struct resolver_entity *last_entity, struct history* history)
 {
     // No count then nothing to do.
     if (count == 0)
@@ -1143,17 +1166,23 @@ void codegen_generate_variable_access_for_array_final_non_pointer_calculation(in
         asm_push_ins_pop("ecx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "array_pushed_computed_offset");
         asm_push("add eax, ecx");
     }
-    asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
-}
+
+
+    if (history->flags & EXPRESSION_GET_ADDRESS)
+    {
+        asm_push("lea ebx, [%s+eax]", codegen_entity_private(last_entity)->address);
+    }
+    else
+    {
+        asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
+    }
+}   
 
 void codegen_generate_variable_access_for_array(struct resolver_entity *entity, struct history *history)
 {
     struct resolver_entity *last_entity = NULL;
     int count = 0;
     bool had_pointer_array = 0;
-    int history_flags = history->flags;
-    // CLear the assignment flag we dont want to deal with that here.
-    history->flags &= ~EXPRESSION_IS_ASSIGNMENT;
     while (entity)
     {
         last_entity = entity;
@@ -1161,17 +1190,17 @@ void codegen_generate_variable_access_for_array(struct resolver_entity *entity, 
         {
             if (entity->flags & RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY)
             {
-                codegen_generate_variable_access_for_array_final_non_pointer_calculation(count, last_entity);
+                codegen_generate_variable_access_for_array_final_non_pointer_calculation(count, last_entity, history_down(history, history->flags));
                 count = 0;
                 had_pointer_array = true;
                 // We have a pointer array? thats all we will have going forward.
-                codegen_generate_variable_access_for_pointer_array(entity, history);
+                codegen_generate_variable_access_for_pointer_array(entity, history_down(history, history->flags));
                 entity = resolver_result_entity_next(entity);
                 break;
             }
 
             // This entity represents array access that requires runtime assistance
-            codegen_generate_expressionable(entity->var_data.array_runtime.index_node, history);
+            codegen_generate_expressionable(entity->var_data.array_runtime.index_node, history_down(history, 0));
             register_unset_flag(REGISTER_EAX_IS_USED);
             if (resolver_entity_has_array_multiplier(entity))
             {
@@ -1180,13 +1209,15 @@ void codegen_generate_variable_access_for_array(struct resolver_entity *entity, 
 
             asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "array_pushed_computed_offset");
         }
+
+        
         entity = resolver_result_entity_next(entity);
         count++;
     }
 
     if (!had_pointer_array)
     {
-        codegen_generate_variable_access_for_array_final_non_pointer_calculation(count, last_entity);
+        codegen_generate_variable_access_for_array_final_non_pointer_calculation(count, last_entity, history_down(history, history->flags));
     }
 }
 
@@ -1231,24 +1262,28 @@ void codegen_generate_variable_access_for_non_array(struct node *node, struct re
         entity = resolver_result_entity_next(entity);
     }
 }
+
+void codegen_restore_assignment_right_operand(const char *output_register)
+{
+    struct stack_frame_element *last_stack_push = stackframe_back_expect(current_function, STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "assignment_right_operand");
+    if (last_stack_push)
+    {
+        asm_push_ins_pop(output_register, STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "assignment_right_operand");
+    }
+}
 void codegen_generate_variable_access(struct node *node, struct resolver_result *result, struct history *history)
 {
     struct resolver_entity *entity = resolver_result_entity_root(result);
     assert(entity);
 
-    int history_flags = history->flags;
     if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
     {
-        codegen_generate_variable_access_for_array(entity, history);
-
-        if (history_flags & EXPRESSION_IS_ASSIGNMENT)
-        {
-            codegen_gen_mem_access(entity->node, history_flags, entity);
-        }
+        codegen_generate_variable_access_for_array(entity, history_down(history, history->flags));
         return;
     }
+    codegen_generate_variable_access_for_non_array(node, entity, history_down(history, history->flags));
 
-    codegen_generate_variable_access_for_non_array(node, entity, history);
+
 }
 
 void codegen_generate_assignment_instruction_for_operator(const char *mov_type_keyword, const char *address, const char *reg_to_use, const char *op, bool is_signed)
@@ -1304,28 +1339,14 @@ void codegen_generate_assignment_expression_value_part(struct resolver_result *r
 {
     codegen_generate_expressionable(right_node, history);
     register_unset_flag(REGISTER_EAX_IS_USED);
+    asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_EAX, "right_assignment_operand");
 
     const char *reg_to_use = "eax";
     const char *mov_type_keyword = codegen_byte_word_or_dword_or_ddword(datatype_size(&variable_node(left_entity->node)->var.type), &reg_to_use);
 
-    // if (left_entity->last_resolve.unary && op_is_indirection(left_entity->last_resolve.unary->op))
-    // {
-
-    //     asm_push("lea ebx, [%s]", codegen_entity_private(left_entity)->address);
-
-    //     // We have indirection in regards to the last entity resolved
-    //     // I.e ***a = 50;
-    //     for (int i = 0; i < left_entity->last_resolve.unary->indirection.depth; i++)
-    //     {
-    //         asm_push("mov ebx, [ebx]");
-    //     }
-
-    //     codegen_generate_assignment_instruction_for_operator(mov_type_keyword, "ebx", reg_to_use, op, variable_node(left_entity->node)->var.type.flags & DATATYPE_FLAG_IS_SIGNED);
-    //     return;
-    // }
-    // codegen_generate_assignment_instruction_for_operator(mov_type_keyword, codegen_entity_private(left_entity)->address, reg_to_use, op, variable_node(left_entity->node)->var.type.flags & DATATYPE_FLAG_IS_SIGNED);
-
-    codegen_generate_variable_access(left_node, result, history_down(history, history->flags | EXPRESSION_IS_ASSIGNMENT));
+    codegen_generate_variable_access(left_node, result, history_down(history, history->flags | EXPRESSION_GET_ADDRESS));
+    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_EAX, "right_assignment_operand");
+    asm_push("mov [ebx], eax");
     register_unset_flag(REGISTER_EAX_IS_USED);
 }
 void codegen_generate_assignment_expression(struct node *node, struct history *history)

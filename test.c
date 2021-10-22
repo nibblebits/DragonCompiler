@@ -2,9 +2,10 @@ int abc[8];
 int main()
 {
     int c;
-    c = 0;
-    abc[c] = 50;
-
-    c = abc[0];
-    return c;
+    int d;
+    d = 1;
+    c = 5;
+    abc[1] = 20;
+    abc[c] = abc[d];
+    return abc[c];
 }

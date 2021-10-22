@@ -143,7 +143,7 @@ enum
      EXPRESSION_IS_BELOW | EXPRESSION_IS_BELOW_OR_EQUAL | EXPRESSION_IS_EQUAL |                      \
      EXPRESSION_IS_NOT_EQUAL | EXPRESSION_LOGICAL_AND |                                              \
      EXPRESSION_IN_LOGICAL_EXPRESSION | EXPRESSION_IS_BITSHIFT_LEFT | EXPRESSION_IS_BITSHIFT_RIGHT | \
-     EXPRESSION_IS_BITWISE_OR | EXPRESSION_IS_BITWISE_AND | EXPRESSION_IS_BITWISE_XOR)
+     EXPRESSION_IS_BITWISE_OR | EXPRESSION_IS_BITWISE_AND | EXPRESSION_IS_BITWISE_XOR | EXPRESSION_IS_ASSIGNMENT)
 
 // Flags for structure access functions.
 enum
@@ -1096,12 +1096,14 @@ struct stack_frame_element
     const char* name;
 
     // The offset from the stack pointer this element can be located.
-    int offset_from_sp;
+    int offset_from_bp;
 };
 
 
 void stackframe_push(struct node *func_node, struct stack_frame_element *element);
 struct stack_frame_element *stackframe_back(struct node *func_node);
+struct stack_frame_element* stackframe_back_expect(struct node* func_node, int expecting_type, const char* expecting_name);
+
 void stackframe_pop(struct node *func_node);
 void stackframe_pop_expecting(struct node* func_node, int expecting_type, const char* expecting_name);
 struct stack_frame_element* stackframe_get_for_tag_name(struct node* func_node, int type, const char* name);

@@ -95,31 +95,11 @@ struct history
     };
 };
 
-
 enum
 {
     CODEGEN_PREDICTION_EAX_WILL_BE_USED = 0b00000001,
     CODEGEN_PREDICTION_EBX_WILL_BE_USED = 0b00000010,
 };
-
-/**
- * This function will predict what will happen during code generation so that generators of code that does not exist yet
- * can prepare themselves.
- */
-static int codegen_predict(struct resolver_result* result)
-{
-    int flags = 0;
-    struct resolver_entity* entity = resolver_result_entity_root(result);
-    while(entity)
-    {
-        if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
-        {
-            // EAX will be used during this procedure.
-            flags |= CODEGEN_PREDICTION_EAX_WILL_BE_USED;
-        }
-    }
-    return flags;
-}
 
 enum
 {
@@ -990,7 +970,6 @@ static void codegen_gen_mov_or_math_for_value(const char *reg, const char *value
 
     codegen_use_register(reg);
     asm_push("mov %s, %s", reg, value);
-    
 }
 
 static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, int flags, struct resolver_entity *entity)
@@ -1154,7 +1133,7 @@ void codegen_generate_variable_access_for_pointer_array(struct resolver_entity *
     }
 }
 
-void codegen_generate_variable_access_for_array_final_non_pointer_calculation(int count, struct resolver_entity *last_entity, struct history* history)
+void codegen_generate_variable_access_for_array_final_non_pointer_calculation(int count, struct resolver_entity *last_entity, struct history *history)
 {
     // No count then nothing to do.
     if (count == 0)
@@ -1167,7 +1146,6 @@ void codegen_generate_variable_access_for_array_final_non_pointer_calculation(in
         asm_push("add eax, ecx");
     }
 
-
     if (history->flags & EXPRESSION_GET_ADDRESS)
     {
         asm_push("lea ebx, [%s+eax]", codegen_entity_private(last_entity)->address);
@@ -1175,49 +1153,6 @@ void codegen_generate_variable_access_for_array_final_non_pointer_calculation(in
     else
     {
         asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
-    }
-}   
-
-void codegen_generate_variable_access_for_array(struct resolver_entity *entity, struct history *history)
-{
-    struct resolver_entity *last_entity = NULL;
-    int count = 0;
-    bool had_pointer_array = 0;
-    while (entity)
-    {
-        last_entity = entity;
-        if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
-        {
-            if (entity->flags & RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY)
-            {
-                codegen_generate_variable_access_for_array_final_non_pointer_calculation(count, last_entity, history_down(history, history->flags));
-                count = 0;
-                had_pointer_array = true;
-                // We have a pointer array? thats all we will have going forward.
-                codegen_generate_variable_access_for_pointer_array(entity, history_down(history, history->flags));
-                entity = resolver_result_entity_next(entity);
-                break;
-            }
-
-            // This entity represents array access that requires runtime assistance
-            codegen_generate_expressionable(entity->var_data.array_runtime.index_node, history_down(history, 0));
-            register_unset_flag(REGISTER_EAX_IS_USED);
-            if (resolver_entity_has_array_multiplier(entity))
-            {
-                asm_push("imul eax, %i", entity->var_data.array_runtime.multiplier);
-            }
-
-            asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "array_pushed_computed_offset");
-        }
-
-        
-        entity = resolver_result_entity_next(entity);
-        count++;
-    }
-
-    if (!had_pointer_array)
-    {
-        codegen_generate_variable_access_for_array_final_non_pointer_calculation(count, last_entity, history_down(history, history->flags));
     }
 }
 
@@ -1238,29 +1173,15 @@ void codegen_generate_structure_push(struct node *node, struct resolver_entity *
     codegen_response_acknowledge(RESPONSE_SET(.flags = RESPONSE_FLAG_PUSHED_STRUCTURE));
 }
 
-void codegen_generate_variable_access_for_non_array(struct node *node, struct resolver_entity *entity, struct history *history)
+void codegen_generate_variable_access_for_entity(struct node *node, struct resolver_entity *entity, struct history *history)
 {
-    if (datatype_is_non_pointer_struct(&entity->var_data.dtype))
-    {
-        codegen_generate_structure_push(node, entity, history);
-        return;
-    }
+    // if (datatype_is_non_pointer_struct(&entity->var_data.dtype))
+    // {
+    //     codegen_generate_structure_push(node, entity, history);
+    //     return;
+    // }
 
     codegen_gen_mem_access(node, history->flags, entity);
-
-    entity = resolver_result_entity_next(entity);
-    while (entity)
-    {
-        if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
-        {
-            codegen_generate_expressionable(entity->var_data.array_runtime.index_node, history);
-            register_unset_flag(REGISTER_EAX_IS_USED);
-        }
-
-        asm_push("mov eax, [eax+%i]", codegen_entity_private(entity)->offset);
-
-        entity = resolver_result_entity_next(entity);
-    }
 }
 
 void codegen_restore_assignment_right_operand(const char *output_register)
@@ -1271,19 +1192,9 @@ void codegen_restore_assignment_right_operand(const char *output_register)
         asm_push_ins_pop(output_register, STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "assignment_right_operand");
     }
 }
-void codegen_generate_variable_access(struct node *node, struct resolver_result *result, struct history *history)
+void codegen_generate_variable_access(struct node *node, struct resolver_entity *entity, struct history *history)
 {
-    struct resolver_entity *entity = resolver_result_entity_root(result);
-    assert(entity);
-
-    if (entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
-    {
-        codegen_generate_variable_access_for_array(entity, history_down(history, history->flags));
-        return;
-    }
-    codegen_generate_variable_access_for_non_array(node, entity, history_down(history, history->flags));
-
-
+    codegen_generate_variable_access_for_entity(node, entity, history_down(history, history->flags));
 }
 
 void codegen_generate_assignment_instruction_for_operator(const char *mov_type_keyword, const char *address, const char *reg_to_use, const char *op, bool is_signed)
@@ -1337,15 +1248,15 @@ void codegen_generate_assignment_instruction_for_operator(const char *mov_type_k
 
 void codegen_generate_assignment_expression_value_part(struct resolver_result *result, struct resolver_entity *left_entity, struct node *left_node, struct node *right_node, const char *op, struct history *history)
 {
-    codegen_generate_expressionable(right_node, history);
+    codegen_generate_expressionable(right_node, history_down(history, history->flags));
     register_unset_flag(REGISTER_EAX_IS_USED);
-    asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_EAX, "right_assignment_operand");
+    asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "right_assignment_operand");
 
     const char *reg_to_use = "eax";
     const char *mov_type_keyword = codegen_byte_word_or_dword_or_ddword(datatype_size(&variable_node(left_entity->node)->var.type), &reg_to_use);
 
-    codegen_generate_variable_access(left_node, result, history_down(history, history->flags | EXPRESSION_GET_ADDRESS));
-    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_EAX, "right_assignment_operand");
+    codegen_generate_expressionable(left_node, history_down(history, history->flags | EXPRESSION_GET_ADDRESS));
+    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "right_assignment_operand");
     asm_push("mov [ebx], eax");
     register_unset_flag(REGISTER_EAX_IS_USED);
 }
@@ -1357,8 +1268,22 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     struct resolver_result *result = resolver_follow(current_process->resolver, node->exp.left);
     assert(!resolver_result_failed(result));
 
-    struct resolver_entity *left_entity = resolver_result_entity_root(result);
-    codegen_generate_assignment_expression_value_part(result, left_entity, node->exp.left, node->exp.right, node->exp.op, history);
+    struct resolver_entity *root_assignment_entity = resolver_result_entity_root(result);
+    asm_push("lea ebx, [%s]", codegen_entity_private(root_assignment_entity)->address);
+    struct resolver_entity *current = resolver_result_entity_next(root_assignment_entity);
+    while (current)
+    {
+        asm_push("mov ebx, [ebx]");
+        asm_push("add ebx, %i", current->offset);
+        current = resolver_result_entity_next(current);
+    }
+
+    const char* reg_to_use = "eax";
+    const char* mov_type_keyword = 
+        codegen_byte_word_or_dword_or_ddword(datatype_element_size(&result->last_entity->dtype), &reg_to_use);
+
+    // All we do now is assign the value..
+    asm_push("mov %s, [ebx], %s", mov_type_keyword, reg_to_use);
 }
 
 void codegen_generate_expressionable_function_arguments(struct node *func_call_args_exp_node, size_t *arguments_size)
@@ -1589,7 +1514,7 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     // we must push and restore later on the EAX register
     if (must_save_restore)
     {
-        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_EAX, "arithmetic_save_to_stack");
+        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "arithmetic_save_to_stack");
         register_unset_flag(REGISTER_EAX_IS_USED);
     }
 
@@ -1603,7 +1528,7 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
 
     if (must_save_restore)
     {
-        asm_push_ins_pop("ecx", STACK_FRAME_ELEMENT_TYPE_SAVED_EAX, "arithmetic_save_to_stack");
+        asm_push_ins_pop("ecx", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "arithmetic_save_to_stack");
         codegen_gen_math_for_value("ecx", "eax", flags);
     }
 }
@@ -1664,12 +1589,23 @@ void codegen_generate_function_call(struct node *node, struct resolver_entity *e
     register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
+void codegen_generate_array_entity(struct node *node, struct resolver_entity *entity, struct history *history)
+{
+    asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "array_entity_ebx_save");
+    register_unset_flag(REGISTER_EAX_IS_USED);
+    codegen_generate_expressionable(entity->array.array_index_node, history);
+    asm_push("mov edx, eax");
+    asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "array_entity_ebx_save");
+    asm_push("imul edx, %i", entity->array.multiplier * datatype_element_size(&entity->array.dtype));
+    asm_push("add ebx, edx");
+}
+
 void codegen_generate_for_entity(struct node *node, struct resolver_entity *entity, struct history *history)
 {
     switch (entity->type)
     {
     case RESOLVER_ENTITY_TYPE_VARIABLE:
-        codegen_generate_variable_access(node, entity->result, history);
+        codegen_generate_variable_access(node, entity, history);
         break;
 
     case RESOLVER_ENTITY_TYPE_FUNCTION_CALL:
@@ -1694,7 +1630,13 @@ void _codegen_generate_exp_node(struct node *node, struct history *history)
     if (resolver_result_ok(result))
     {
         entity = resolver_result_entity(result);
-        codegen_generate_for_entity(node, entity, history);
+        struct resolver_entity *first_entity = entity;
+        while (entity)
+        {
+            codegen_generate_for_entity(node, entity, history);
+            entity = resolver_result_entity_next(entity);
+        }
+
         return;
     }
 
@@ -1751,7 +1693,7 @@ void codegen_generate_identifier(struct node *node, struct history *history)
     assert(resolver_result_ok(result));
 
     struct resolver_entity *entity = resolver_result_entity(result);
-    codegen_generate_variable_access(node, result, history);
+    codegen_generate_variable_access(node, entity, history);
 }
 
 static bool is_comma_operator(struct node *node)
@@ -1790,7 +1732,7 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
     if (eax_is_used)
     {
         register_unset_flag(REGISTER_EAX_IS_USED);
-        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_EAX, "eax_used_saved_value");
+        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "eax_used_saved_value");
     }
     codegen_generate_expressionable(node->unary.operand, history);
     // We have generated the value for the operand
@@ -1811,7 +1753,7 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
     }
     if (eax_is_used)
     {
-        asm_push_ins_pop("ecx", STACK_FRAME_ELEMENT_TYPE_SAVED_EAX, "eax_used_saved_value");
+        asm_push_ins_pop("ecx", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "eax_used_saved_value");
         codegen_gen_math_for_value("ecx", "eax", history->flags);
     }
 }

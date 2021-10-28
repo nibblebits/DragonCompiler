@@ -557,13 +557,12 @@ struct compile_process;
 
 enum
 {
-    RESOLVER_ENTITY_FLAG_COMPILE_TIME_ENTITY = 0b00000001,
-    RESOLVER_ENTITY_FLAG_IS_STACK = 0b00000010,
-    RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME = 0b00000100,
-    RESOLVER_ENTITY_FLAG_CUSTOM_MULTIPLIER = 0b00001000,
-    RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY = 0b00010000,
-    RESOLVER_ENTITY_FLAG_IS_FIRST_POINTER_ARRAY = 0b00100000
-
+    RESOLVER_ENTITY_FLAG_IS_STACK = 0b00000001,
+    // Signifies that merging with the next entity to forge one resolved entity is not possible
+    // and that runtime action needs to take place to resolve the path.
+    RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY = 0b00000010,
+    // Signifies we must not merge with the left entity and we must remain alone.
+    RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY = 0b00000100
 };
 
 enum
@@ -571,7 +570,10 @@ enum
     RESOLVER_ENTITY_TYPE_VARIABLE,
     RESOLVER_ENTITY_TYPE_FUNCTION,
     RESOLVER_ENTITY_TYPE_STRUCTURE,
-    RESOLVER_ENTITY_TYPE_FUNCTION_CALL
+    RESOLVER_ENTITY_TYPE_FUNCTION_CALL,
+    RESOLVER_ENTITY_TYPE_ARRAY_BRACKET,
+    // Rule types describe rules between  entities on the resolver stack.
+    RESOLVER_ENTITY_TYPE_RULE
 };
 
 struct resolver_entity
@@ -585,8 +587,12 @@ struct resolver_entity
     // if this is a structure it would be the structure name.
     const char *name;
 
+    // The offset from the first entity if applicable.
+    int offset;
+
     // Can be NULL if no variable is present. otherwise equal to a node
-    // that was resolved.
+    // that was resolved. Can include array bracket nodes, function calls
+    // and much more...
     struct node *node;
     union
     {
@@ -594,13 +600,29 @@ struct resolver_entity
         struct resolver_entity_var_data
         {
             struct datatype dtype;
-            struct resolver_array_runtime
+
+            struct resolver_array_runtime_
             {
+                // The datatype this array is bounded too
+                struct datatype dtype;
                 struct node *index_node;
                 int multiplier;
             } array_runtime;
 
         } var_data;
+
+        struct resolver_array
+        {
+
+            // The datatype this array is bounded too
+            struct datatype dtype;
+            int multiplier;
+            // The actual index value that was passed. "node" above us is the actual declaration.
+            struct node *array_index_node;
+            // The current index for this array
+            int index;
+
+        } array;
 
         struct resolver_entity_function_call_data
         {
@@ -612,19 +634,36 @@ struct resolver_entity
             // for this function call.
             size_t stack_size;
         } func_call_data;
+
+        struct resolver_entity_rule
+        {
+            // Rules to be applied to the left entity on the stack
+            struct resolver_entity_rule_left
+            {
+                int flags;
+            } left;
+
+            // Rules to be applied to the right entity on the stack.
+            struct resolver_entity_rule_right
+            {
+                int flags;
+            } right;
+        } rule;
     };
 
     // Information regarding the last resolve of this entity
     struct entity_last_resolve
     {
         // The unary that this entity is inside of. NULL if not existant
-        struct unary* unary;
+        struct unary *unary;
 
         // The node that referenced this entity leading to a successful resovle of this entity.
         // I.e we are "int a;" and the referencing node was the identifier "a" i.e int b = a; "a" references int a
-        struct node* referencing_node;
+        struct node *referencing_node;
     } last_resolve;
 
+    // The datatype for the this entity.
+    struct datatype dtype;
 
     // The scope that this entity belongs too.
     struct resolver_scope *scope;
@@ -644,42 +683,7 @@ struct resolver_entity
     struct resolver_entity *prev;
 };
 
-enum
-{
-    // This flag is set if the new structure entity should offset
-    // from the last entities base address.
-    NEW_STRUCT_ENTITY_FLAG_LAST_ENTITY_USE_BASE = 0b00000001
-};
-
-/**
- * Resolver handler for new struct entities. The function must return the private data
- * to be set in the resolver_entity
- */
-typedef void *(*RESOLVER_NEW_STRUCT_ENTITY)(struct resolver_result *result, struct node *var_node, int offset, struct resolver_scope *scope);
-
-/**
- * Used to merge two struct entities, generally their offsets for example. Receiver should merge them
- * so that they become one.
- * 
- * Should return private data for the merged entities
- */
-typedef void *(*RESOLVER_MERGE_STRUCT_ENTITY)(struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity, struct resolver_scope *scope);
-
-/**
- * THis function pointer is called when we have an array expression processed
- * by the resolver.
- * 
- * \param array_var_entity the Variable entity representing the array access. I.e a[5] this would be "a"
-*  \param index_val numerical value passed to this index.
- * \param index The numerical index in the array we are computing for, we need an array private that represents all you need for this given index
- */
-typedef void *(*RESOLVER_NEW_ARRAY_ENTITY)(struct resolver_result *result, struct resolver_entity *array_var_entity, int index_val, int index, struct resolver_scope* scope);
-
-/**
- * Used for when you need to join a calculated result with a previous entity.
- * Rather than creating a new entity like RESOLVER_NEW_ARRAY_ENTITY we join the result with the previous one
- */
-typedef void (*RESOLVER_JOIN_ARRAY_ENTITY_WITH_NEW_INDEX)(struct resolver_result *result, struct resolver_entity *join_entity, int index_val, int index);
+typedef void *(*RESOLVER_NEW_ARRAY_BRACKET_ENTITY)(struct resolver_result *result, struct node *array_entity_node);
 
 /**
  * User must delete the resolver scope private data. DO not delete the "scope" pointer!
@@ -691,23 +695,26 @@ typedef void (*RESOLVER_DELETE_SCOPE)(struct resolver_scope *scope);
  */
 typedef void (*RESOLVER_DELETE_ENTITY)(struct resolver_entity *entity);
 
+typedef struct resolver_entity *(*RESOLVER_MERGE_ENTITIES)(struct resolver_process* resolver, struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity);
+
+typedef void *(*RESOLVER_MAKE_PRIVATE)(struct resolver_entity *entity, struct node *node, int offset, struct resolver_scope *scope);
+
+typedef void (*RESOLVER_SET_RESULT_BASE)(struct resolver_result* result, struct resolver_entity* base_entity);
 struct resolver_callbacks
 {
-    // Must not be NULL!
-    // This function pointer is called when their is access to a new structure expression
-    // in the resolver. The function in question is required to return a new entity representing
-    // that structure variable.
-    RESOLVER_NEW_STRUCT_ENTITY new_struct_entity;
-    RESOLVER_MERGE_STRUCT_ENTITY merge_struct_entity;
-
     /**
      * Called when we need to create a new resolver_entity for the given array expression
      */
-    RESOLVER_NEW_ARRAY_ENTITY new_array_entity;
-    RESOLVER_JOIN_ARRAY_ENTITY_WITH_NEW_INDEX join_array_entity_index;
+    RESOLVER_NEW_ARRAY_BRACKET_ENTITY new_array_entity;
 
     RESOLVER_DELETE_SCOPE delete_scope;
     RESOLVER_DELETE_ENTITY delete_entity;
+
+    RESOLVER_MERGE_ENTITIES merge_entities;
+    // Asks the handler to make some private data for the entity given.
+    RESOLVER_MAKE_PRIVATE make_private;
+
+    RESOLVER_SET_RESULT_BASE set_result_base;
 };
 
 struct resolver_process
@@ -769,6 +776,24 @@ struct resolver_result
     // The last processed entity in the list
     struct resolver_entity *last_entity;
     int flags;
+
+    // Total number of entities.
+    size_t count;
+
+    struct resolver_result_base
+    {
+        // The address that can be addressed in assembly. I.e [ebp-4] [name]
+        char address[60];
+
+        // The base address excluding any offset applied to it
+        // I.e "ebp" for all stack variables.
+        // I.e "variable_name" for global variables.
+        char base_address[60];
+
+        // The numeric offset that we must use. This is the numeric offset
+        // that is applied to "address" if any.
+        int offset;
+    } base;
 };
 
 enum
@@ -1073,12 +1098,11 @@ struct unary
     };
 };
 
-
 enum
 {
     // Specifies that this stack frame element makes up part or the full memory of a variable.
     STACK_FRAME_ELEMENT_TYPE_LOCAL_VARIABLE,
-    STACK_FRAME_ELEMENT_TYPE_SAVED_EAX,
+    STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER,
     STACK_FRAME_ELEMENT_TYPE_SAVED_BP,
     STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE,
     STACK_FRAME_ELEMENT_TYPE_UNKNOWN
@@ -1093,23 +1117,22 @@ struct stack_frame_element
     int type;
     // The name of the element to expect here
     // not variable name but tag name i.e assignment_right_operand
-    const char* name;
+    const char *name;
 
     // The offset from the stack pointer this element can be located.
     int offset_from_bp;
 };
 
-
 void stackframe_push(struct node *func_node, struct stack_frame_element *element);
 struct stack_frame_element *stackframe_back(struct node *func_node);
-struct stack_frame_element* stackframe_back_expect(struct node* func_node, int expecting_type, const char* expecting_name);
+struct stack_frame_element *stackframe_back_expect(struct node *func_node, int expecting_type, const char *expecting_name);
 
 void stackframe_pop(struct node *func_node);
-void stackframe_pop_expecting(struct node* func_node, int expecting_type, const char* expecting_name);
-struct stack_frame_element* stackframe_get_for_tag_name(struct node* func_node, int type, const char* name);
-void stackframe_assert_empty(struct node* func_node);
-void stackframe_sub(struct node* func_node, int type, const char* name, size_t amount);
-void stackframe_add(struct node* func_node, size_t amount);
+void stackframe_pop_expecting(struct node *func_node, int expecting_type, const char *expecting_name);
+struct stack_frame_element *stackframe_get_for_tag_name(struct node *func_node, int type, const char *name);
+void stackframe_assert_empty(struct node *func_node);
+void stackframe_sub(struct node *func_node, int type, const char *name, size_t amount);
+void stackframe_add(struct node *func_node, size_t amount);
 
 struct node
 {
@@ -1214,7 +1237,7 @@ struct node
             struct stack_frame
             {
                 // A vector of stack_frame_element
-                struct vector* elements;
+                struct vector *elements;
             } frame;
         } func;
 
@@ -1365,7 +1388,7 @@ struct node
         struct var_list
         {
             // List of variable node pointers for this variable list.
-            struct vector* list;
+            struct vector *list;
         } var_list;
     };
 
@@ -1717,7 +1740,7 @@ bool is_parentheses_node(struct node *node);
  * Returns true if the given dataatype and array index mean that
  * any aray access should be treated as a pointer. I.e const char* abc; abc[0] = 'a';
  */
-bool is_pointer_array_access(struct datatype* dtype, int index);
+bool is_pointer_array_access(struct datatype *dtype, int index);
 
 /**
  * Returns true if this node represents an access node expression
@@ -1845,6 +1868,13 @@ size_t variable_size_for_list(struct node *var_list_node);
 size_t datatype_size(struct datatype *datatype);
 size_t datatype_element_size(struct datatype *datatype);
 
+/**
+ * Gets the given return datatype for the provided node.
+ * If its a variable the variable datatype is returned
+ * if its a function the return type is returned
+ */
+struct datatype *datatype_get(struct node *node);
+
 bool is_array_operator(const char *op);
 bool is_argument_operator(const char *op);
 /**
@@ -1881,7 +1911,7 @@ bool is_logical_node(struct node *node);
 
 int compute_array_offset(struct node *node, size_t single_element_size);
 int array_offset(struct datatype *dtype, int index, int index_value);
-int array_total_indexes(struct datatype* dtype);
+int array_total_indexes(struct datatype *dtype);
 
 /**
  * Returns the multipler for a given array index. How much you need to multiply by
@@ -1919,13 +1949,14 @@ struct compile_process *resolver_compiler(struct resolver_process *process);
 struct resolver_scope *resolver_new_scope(struct resolver_process *resolver, void *private, int flags);
 void resolver_finish_scope(struct resolver_process *resolver);
 struct resolver_process *resolver_new_process(struct compile_process *compiler, struct resolver_callbacks *callbacks);
-struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private);
+struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private, int offset);
 struct resolver_entity *resolver_register_function(struct resolver_process *process, struct node *func_node, void *private);
 struct resolver_entity *resolver_get_variable_in_scope(const char *var_name, struct resolver_scope *scope);
 struct resolver_entity *resolver_get_variable(struct resolver_result *result, struct resolver_process *resolver, const char *var_name);
 struct resolver_result *resolver_follow(struct resolver_process *resolver, struct node *node);
 struct resolver_entity *resolver_result_entity_root(struct resolver_result *result);
 struct resolver_entity *resolver_result_entity_next(struct resolver_entity *entity);
+struct resolver_entity* resolver_make_entity(struct resolver_process* process, struct resolver_result* result, struct node* node, int offset, int type, struct resolver_scope* scope);
 
 /**
  * Attempts to peek through the tree at the given node and looks for a datatype
@@ -2141,6 +2172,7 @@ enum
 {
     RESOLVER_DEFAULT_ENTITY_DATA_TYPE_VARIABLE,
     RESOLVER_DEFAULT_ENTITY_DATA_TYPE_FUNCTION,
+    RESOLVER_DEFAULT_ENTITY_DATA_TYPE_ARRAY_BRACKET
 };
 
 struct resolver_default_entity_data

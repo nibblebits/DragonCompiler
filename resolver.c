@@ -2,6 +2,7 @@
 #include "helpers/vector.h"
 #include <assert.h>
 
+static struct resolver_entity *resolver_follow_part_return_entity(struct resolver_process *resolver, struct node *node, struct resolver_result *result);
 bool resolver_result_failed(struct resolver_result *result)
 {
     return result->flags & RESOLVER_RESULT_FLAG_FAILED;
@@ -15,11 +16,6 @@ bool resolver_result_ok(struct resolver_result *result)
 bool resolver_result_finished(struct resolver_result *result)
 {
     return result->flags & RESOLVER_RESULT_FLAG_RUNTIME_NEEDED_TO_FINISH_PATH;
-}
-
-bool resolver_entity_runtime_required(struct resolver_entity *entity)
-{
-    return !(entity->flags & RESOLVER_ENTITY_FLAG_COMPILE_TIME_ENTITY);
 }
 
 struct resolver_entity *resolver_result_entity_root(struct resolver_result *result)
@@ -85,12 +81,15 @@ void resolver_result_entity_push(struct resolver_result *result, struct resolver
     {
         result->entity = entity;
         result->last_entity = entity;
+        result->count++;
         return;
     }
 
+    // Since we have more than one entity the first entity must be obtained via referen
     result->last_entity->next = entity;
     entity->prev = result->last_entity;
     result->last_entity = entity;
+    result->count++;
 }
 
 struct resolver_entity *resolver_result_peek(struct resolver_result *result)
@@ -101,15 +100,32 @@ struct resolver_entity *resolver_result_peek(struct resolver_result *result)
 struct resolver_entity *resolver_result_pop(struct resolver_result *result)
 {
     struct resolver_entity *entity = result->last_entity;
+    if (result->entity == NULL)
+    {
+        return NULL;
+    }
 
     if (result->entity == result->last_entity)
     {
         result->entity = result->last_entity->prev;
         result->last_entity = result->last_entity->prev;
-        return entity;
+        result->count--;
+        goto out;
     }
 
     result->last_entity = result->last_entity->prev;
+    result->count--;
+out:
+    if (result->count == 0)
+    {
+        // Popped the last element? Okay then remove some things
+        result->first_entity_const = NULL;
+        result->last_entity = NULL;
+        result->entity = NULL;
+    }
+
+    entity->prev = NULL;
+    entity->next = NULL;
     return entity;
 }
 
@@ -176,43 +192,68 @@ struct resolver_process *resolver_new_process(struct compile_process *compiler, 
 
 bool resolver_entity_has_array_multiplier(struct resolver_entity *entity)
 {
-    return entity->var_data.array_runtime.multiplier > 1;
+    //return entity->var_data.array_runtime.multiplier > 1;
 }
 
-struct resolver_entity *resolver_create_new_entity(int type, void *private)
+struct resolver_entity *resolver_create_new_entity(struct resolver_result *result, int type, void *private)
 {
     struct resolver_entity *entity = calloc(sizeof(struct resolver_entity), 1);
     if (!entity)
         return NULL;
 
+    if (result)
+    {
+        struct resolver_entity *last_entity = resolver_result_peek(result);
+    }
     entity->type = type;
     entity->private = private;
 
     return entity;
 }
 
-struct resolver_entity *resolver_create_new_entity_for_var_node_custom_scope(struct resolver_process *process, struct node *var_node, void *private, struct resolver_scope *scope)
+struct resolver_entity *resolver_create_new_entity_for_array_bracket(struct resolver_result *result, struct resolver_process *process, struct node *node, struct node *array_index_node, int index, struct datatype *dtype, void *private, struct resolver_scope *scope)
 {
-    struct resolver_entity *entity = resolver_create_new_entity(RESOLVER_ENTITY_TYPE_VARIABLE, private);
+    struct resolver_entity *entity = resolver_create_new_entity(result, RESOLVER_ENTITY_TYPE_ARRAY_BRACKET, private);
     if (!entity)
         return NULL;
 
     entity->scope = scope;
     assert(entity->scope);
-    entity->var_data.dtype = var_node->var.type;
-    entity->node = var_node;
-    entity->name = var_node->var.name;
+    entity->name = NULL;
+    entity->dtype = *dtype;
+    entity->node = node;
+    entity->array.index = index;
+    entity->array.dtype = *dtype;
+    entity->array.multiplier = array_multiplier(dtype, index, 1);
+    entity->array.array_index_node = array_index_node;
     return entity;
 }
 
-struct resolver_entity *resolver_create_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private)
+struct resolver_entity *resolver_create_new_entity_for_var_node_custom_scope(struct resolver_process *process, struct node *var_node, void *private, struct resolver_scope *scope, int offset)
 {
-    return resolver_create_new_entity_for_var_node_custom_scope(process, var_node, private, resolver_scope_current(process));
+    assert(var_node->type == NODE_TYPE_VARIABLE);
+    struct resolver_entity *entity = resolver_create_new_entity(NULL, RESOLVER_ENTITY_TYPE_VARIABLE, private);
+    if (!entity)
+        return NULL;
+
+    entity->scope = scope;
+    assert(entity->scope);
+    entity->dtype = var_node->var.type;
+    entity->var_data.dtype = var_node->var.type;
+    entity->node = var_node;
+    entity->name = var_node->var.name;
+    entity->offset = offset;
+    return entity;
 }
 
-struct resolver_entity *resolver_new_entity_for_var_node_no_push(struct resolver_process *process, struct node *var_node, void *private)
+struct resolver_entity *resolver_create_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private, int offset)
 {
-    struct resolver_entity *entity = resolver_create_new_entity_for_var_node(process, var_node, private);
+    return resolver_create_new_entity_for_var_node_custom_scope(process, var_node, private, resolver_scope_current(process), offset);
+}
+
+struct resolver_entity *resolver_new_entity_for_var_node_no_push(struct resolver_process *process, struct node *var_node, void *private, int offset)
+{
+    struct resolver_entity *entity = resolver_create_new_entity_for_var_node(process, var_node, private, offset);
     if (!entity)
         return NULL;
 
@@ -220,19 +261,44 @@ struct resolver_entity *resolver_new_entity_for_var_node_no_push(struct resolver
     {
         entity->flags |= RESOLVER_ENTITY_FLAG_IS_STACK;
     }
+
     return entity;
 }
-struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private)
+struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private, int offset)
 {
 
-    struct resolver_entity *entity = resolver_new_entity_for_var_node_no_push(process, var_node, private);
+    struct resolver_entity *entity = resolver_new_entity_for_var_node_no_push(process, var_node, private, offset);
     vector_push(process->scope.current->entities, &entity);
     return entity;
 }
 
-struct resolver_entity *resolver_create_new_entity_for_function_call(struct resolver_process *process, struct node *func_node, void *private)
+void resolver_new_entity_for_rule(struct resolver_process *process, struct resolver_result *result, struct resolver_entity_rule *rule)
 {
-    struct resolver_entity *entity = resolver_create_new_entity(RESOLVER_ENTITY_TYPE_FUNCTION_CALL, private);
+    struct resolver_entity *entity_rule = resolver_create_new_entity(result, RESOLVER_ENTITY_TYPE_RULE, NULL);
+    entity_rule->rule = *rule;
+    resolver_result_entity_push(result, entity_rule);
+}
+
+struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct node *node, int offset, int type, struct resolver_scope *scope)
+{
+    struct resolver_entity *entity = NULL;
+    switch (node->type)
+    {
+    case NODE_TYPE_VARIABLE:
+        entity = resolver_new_entity_for_var_node_no_push(process, node, NULL, offset);
+        break;
+    }
+
+    if (entity)
+    {
+        entity->private = process->callbacks.make_private(entity, node, offset, scope);
+    }
+    return entity;
+}
+
+struct resolver_entity *resolver_create_new_entity_for_function_call(struct resolver_result *result, struct resolver_process *process, struct node *func_node, void *private)
+{
+    struct resolver_entity *entity = resolver_create_new_entity(result, RESOLVER_ENTITY_TYPE_FUNCTION_CALL, private);
     if (!entity)
     {
         return NULL;
@@ -245,7 +311,7 @@ struct resolver_entity *resolver_create_new_entity_for_function_call(struct reso
 
 struct resolver_entity *resolver_register_function(struct resolver_process *process, struct node *func_node, void *private)
 {
-    struct resolver_entity *entity = resolver_create_new_entity(RESOLVER_ENTITY_TYPE_FUNCTION, private);
+    struct resolver_entity *entity = resolver_create_new_entity(NULL, RESOLVER_ENTITY_TYPE_FUNCTION, private);
     if (!entity)
         return NULL;
 
@@ -278,7 +344,7 @@ struct resolver_entity *resolver_get_entity_in_scope_with_entity_type(struct res
             // Union offset will be zero.
             offset = 0;
         }
-        return resolver_new_entity_for_var_node_no_push(resolver, out_node, resolver->callbacks.new_struct_entity(result, variable_node(out_node), offset, scope));
+        return resolver_make_entity(resolver, result, out_node, offset, RESOLVER_ENTITY_TYPE_VARIABLE, scope);
     }
 
     // Ok this is not a structure variable, lets search the scopes
@@ -365,38 +431,14 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
     struct resolver_entity *result_entity = NULL;
 
     resolver_follow_part(resolver, node->exp.left, result);
+    struct resolver_entity_rule rule = {};
+    if (is_access_node_with_op(node, "->"))
+    {
+        rule.left.flags = RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY;
+    }
+    resolver_new_entity_for_rule(resolver, result, &rule);
     resolver_follow_part(resolver, node->exp.right, result);
-
-    // Pop off the left node and right node so we can merge the offsets.
-    struct resolver_entity *right_entity = resolver_result_pop(result);
-    struct resolver_entity *left_entity = resolver_result_pop(result);
-
-    struct resolver_scope *var_scope = result->identifier->scope;
-
-    if (is_array_node(node->exp.left) && is_access_node_with_op(node->exp.right, "->"))
-    {
-        struct resolver_entity *extra_entity = resolver_result_pop(result);
-        result_entity = resolver_new_entity_for_var_node_no_push(resolver, left_entity->node, resolver->callbacks.merge_struct_entity(result, extra_entity, left_entity, var_scope));
-        resolver_result_entity_push(result, result_entity);
-        resolver_result_entity_push(result, right_entity);
-
-        return result_entity;
-    }
-
-    if (S_EQ(node->exp.op, "->"))
-    {
-        resolver_result_entity_push(result, left_entity);
-        resolver_result_entity_push(result, right_entity);
-        result_entity = right_entity;
-        return result_entity;
-    }
-
-    result_entity = resolver_new_entity_for_var_node_no_push(resolver, right_entity->node, resolver->callbacks.merge_struct_entity(result, left_entity, right_entity, var_scope));
-
-    // Push the right entity back to the stack as it has been merged with the left_entity
-    resolver_result_entity_push(result, result_entity);
-
-    return result_entity;
+    return NULL;
 }
 
 static void resolver_array_push(struct resolver_result *result, struct resolver_entity *entity)
@@ -405,80 +447,35 @@ static void resolver_array_push(struct resolver_result *result, struct resolver_
     vector_push(resolver_array_data_vec(result), &entity);
 }
 
-struct resolver_entity *resolver_handle_array_entity_for_runtime(struct resolver_result *result, struct resolver_entity *entity, struct resolver_entity *left_entity, struct node *right_operand, int multiplier, int last_array_index, int additional_flags)
+static struct resolver_entity *resolver_follow_array_bracket(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
-    entity = left_entity;
-    if (left_entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
-    {
-        // We have left entity as an array for runtime as well, therefore we must
-        // maintain left_entity as a seperate instance
-        resolver_array_push(result, left_entity);
-        entity = resolver_entity_clone(left_entity);
-    }
+    // We must create some private data for this array bracket
+    assert(node->type == NODE_TYPE_BRACKET);
+    int index = 0;
+    struct datatype dtype;
+    struct resolver_scope *scope = NULL;
+    struct resolver_entity *last_entity = resolver_result_peek(result);
+    scope = last_entity->scope;
+    dtype = last_entity->dtype;
 
-    entity->flags |= RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME;
-    // Set the index node expression so caller knows how to resolve this.
-    entity->var_data.array_runtime.index_node = right_operand;
-    entity->var_data.array_runtime.multiplier = multiplier;
-
-    if (!(additional_flags & RESOLVER_ENTITY_FLAG_CUSTOM_MULTIPLIER))
+    if (last_entity->type == RESOLVER_ENTITY_TYPE_ARRAY_BRACKET)
     {
-        // No custom multiplier, then generate one.
-        entity->var_data.array_runtime.multiplier = array_multiplier(&entity->var_data.dtype, last_array_index, 4);
+        index = last_entity->array.index + 1;
     }
-    return entity;
+    void *private = resolver->callbacks.new_array_entity(result, node);
+    struct resolver_entity *array_bracket_entity = resolver_create_new_entity_for_array_bracket(result, resolver, node, node->bracket.inner, index, &dtype, private, scope);
+    // The array bracket must be pushed to the stack
+    resolver_result_entity_push(result, array_bracket_entity);
+    return array_bracket_entity;
 }
 
 static struct resolver_entity *resolver_follow_array(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
-    bool first_array_bracket = result->flags & RESOLVER_RESULT_FLAG_PROCESSING_ARRAY_ENTITIES;
-
-
-    // Left entity is the variable prior to the array access i.e a[5]
+    // Left entity is the variable/or other type of node prior to the array access i.e a[5]
     resolver_follow_part(resolver, node->exp.left, result);
-    struct resolver_entity *left_entity = resolver_result_pop(result);
-
-    struct resolver_scope *scope = left_entity->scope;
-
-    struct resolver_entity *entity = NULL;
-    int last_array_index = vector_count(resolver_array_data_vec(result));
-    struct node *right_operand = node->exp.right->bracket.inner;
-
-    if (is_pointer_array_access(&left_entity->var_data.dtype, last_array_index))
-    {
-        entity = resolver_handle_array_entity_for_runtime(result, entity, left_entity, right_operand, left_entity->var_data.dtype.size, last_array_index, RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME | RESOLVER_ENTITY_FLAG_CUSTOM_MULTIPLIER);
-        entity->flags |= RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY;
-        if (!(result->flags & RESOLVER_RESULT_FLAG_HAS_POINTER_ARRAY_ACCESS))
-        {
-            result->flags |= RESOLVER_RESULT_FLAG_HAS_POINTER_ARRAY_ACCESS;
-        }
-    }
-    else if (right_operand->type != NODE_TYPE_NUMBER)
-    {
-        entity = resolver_handle_array_entity_for_runtime(result, entity, left_entity, right_operand, 0, last_array_index, 0);
-    }
-    else if (left_entity->flags & RESOLVER_ENTITY_FLAG_ARRAY_FOR_RUNTIME)
-    {
-        resolver->callbacks.join_array_entity_index(result, left_entity, right_operand->llnum, last_array_index);
-        entity = left_entity;
-    }
-    else if (right_operand->type == NODE_TYPE_NUMBER)
-    {
-        entity = resolver_create_new_entity_for_var_node_custom_scope(resolver, variable_node(result->identifier->node), resolver->callbacks.new_array_entity(result, left_entity, right_operand->llnum, last_array_index, scope), scope);
-    }
-
-    resolver_array_push(result, entity);
-    //[[sdog.e][]1]]
-
-    if (first_array_bracket)
-    {
-        // This is the very first array bracket.. As we are now finished
-        // parsing the entire array lets clear the vector in case
-        // theirs another array in this expression
-        vector_clear(resolver_array_data_vec(result));
-        result->flags &= ~RESOLVER_RESULT_FLAG_PROCESSING_ARRAY_ENTITIES;
-    }
-    return entity;
+    struct resolver_entity *left_entity = resolver_result_peek(result);
+    resolver_follow_part(resolver, node->exp.right, result);
+    return left_entity;
 }
 
 static struct resolver_entity *resolver_follow_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result);
@@ -514,7 +511,7 @@ static struct resolver_entity *resolver_follow_function_call(struct resolver_pro
     assert(entity);
 
     // As this is a function all we must create a new function call entity, for this given function call
-    struct resolver_entity *func_call_entity = resolver_create_new_entity_for_function_call(resolver, entity->node, NULL);
+    struct resolver_entity *func_call_entity = resolver_create_new_entity_for_function_call(result, resolver, entity->node, NULL);
     assert(func_call_entity);
 
     // Let's build the function call arguments
@@ -626,6 +623,10 @@ static struct resolver_entity *resolver_follow_part_return_entity(struct resolve
         entity = resolver_follow_exp(resolver, node, result);
         break;
 
+    case NODE_TYPE_BRACKET:
+        entity = resolver_follow_array_bracket(resolver, node, result);
+        break;
+
     case NODE_TYPE_EXPRESSION_PARENTHESIS:
         entity = resolver_follow_exp_parenthesis(resolver, node, result);
         break;
@@ -649,6 +650,140 @@ static void resolver_follow_part(struct resolver_process *resolver, struct node 
     resolver_follow_part_return_entity(resolver, node, result);
 }
 
+struct resolver_entity *resolver_merge_compile_time_result(struct resolver_process *resolver, struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity)
+{
+    if (left_entity && right_entity)
+    {
+        if (left_entity->flags & RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY ||
+            right_entity->flags & RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY)
+        {
+            goto no_merge_possible;
+        }
+
+        struct resolver_entity *result_entity =
+            resolver->callbacks.merge_entities(resolver, result, left_entity, right_entity);
+        if (!result_entity)
+        {
+            goto no_merge_possible;
+        }
+        return result_entity;
+    }
+
+no_merge_possible:
+    return NULL;
+}
+
+void resolver_push_vector_of_entities(struct resolver_result *result, struct vector *vec)
+{
+    vector_set_peek_pointer_end(vec);
+    vector_set_flag(vec, VECTOR_FLAG_PEEK_DECREMENT);
+    struct resolver_entity *entity = vector_peek_ptr(vec);
+    while (entity)
+    {
+        resolver_result_entity_push(result, entity);
+        entity = vector_peek_ptr(vec);
+    }
+}
+
+void _resolver_merge_compile_times(struct resolver_process *resolver, struct resolver_result *result)
+{
+    struct vector *saved_entities = vector_create(sizeof(struct resolver_entity *));
+
+    while (1)
+    {
+        struct resolver_entity *right_entity = resolver_result_pop(result);
+        struct resolver_entity *left_entity = resolver_result_pop(result);
+        if (!right_entity)
+        {
+            // Nothing on the stack...
+            break;
+        }
+
+        if (!left_entity)
+        {
+            // Only one entity? Then theirs nothing to be done push it back and lets go
+            resolver_result_entity_push(result, right_entity);
+            break;
+        }
+
+        struct resolver_entity *merged_entity = resolver_merge_compile_time_result(resolver, result, left_entity, right_entity);
+        if (merged_entity)
+        {
+            // We have a merged entity push to the resolver result.
+            resolver_result_entity_push(result, merged_entity);
+            continue;
+        }
+
+        // Right entity must never merge with the left again.
+        right_entity->flags |= RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY;
+
+        // We failed to merge, we must push the right entity to the saved entities stack
+        vector_push(saved_entities, &right_entity);
+
+        // The left entity goes back to the result as we may be able to merge it with next entity
+        resolver_result_entity_push(result, left_entity);
+    }
+
+    // Now we must push the vector back to the result
+    resolver_push_vector_of_entities(result, saved_entities);
+    vector_free(saved_entities);
+}
+
+void resolver_merge_compile_times(struct resolver_process *resolver, struct resolver_result *result)
+{
+    size_t total_entities = 0;
+    do
+    {
+        total_entities = result->count;
+        _resolver_merge_compile_times(resolver, result);
+        break;
+    } while (total_entities != 1 && total_entities != result->count);
+}
+
+void resolver_rule_apply_rules(struct resolver_entity* rule_entity, struct resolver_entity* left_entity, struct resolver_entity* right_entity)
+{
+    assert(rule_entity->type == RESOLVER_ENTITY_TYPE_RULE);
+    if (left_entity)
+    {
+        left_entity->flags |= rule_entity->rule.left.flags;
+    }
+
+    if (right_entity)
+    {
+        right_entity->flags |= rule_entity->rule.right.flags;
+    }
+}
+void resolver_execute_rules(struct resolver_process *resolver, struct resolver_result *result)
+{
+    struct vector *saved_entities = vector_create(sizeof(struct resolver_entity *));
+    struct resolver_entity *entity = resolver_result_pop(result);
+    struct resolver_entity* last_processed_entity = NULL;
+    while (entity)
+    {
+        if (entity->type == RESOLVER_ENTITY_TYPE_RULE)
+        {
+            struct resolver_entity* left_entity = resolver_result_pop(result);
+            resolver_rule_apply_rules(entity, left_entity, last_processed_entity);
+            entity = left_entity;
+        }
+
+        vector_push(saved_entities, &entity);
+        last_processed_entity = entity;
+        entity = resolver_result_pop(result);
+    }
+    resolver_push_vector_of_entities(result, saved_entities);
+}
+void resolver_finalize_result(struct resolver_process *resolver, struct resolver_result *result)
+{
+    struct resolver_entity *first_entity = resolver_result_entity_root(result);
+    if (!first_entity)
+    {
+        // Nothing .. okay
+        return;
+    }
+    resolver->callbacks.set_result_base(result, first_entity);
+}
+
 struct resolver_result *resolver_follow(struct resolver_process *resolver, struct node *node)
 {
     assert(resolver);
@@ -659,6 +794,9 @@ struct resolver_result *resolver_follow(struct resolver_process *resolver, struc
     {
         result->flags |= RESOLVER_RESULT_FLAG_FAILED;
     }
+    resolver_execute_rules(resolver, result);
+    resolver_merge_compile_times(resolver, result);
+    resolver_finalize_result(resolver, result);
     return result;
 }
 

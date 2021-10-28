@@ -655,7 +655,7 @@ size_t datatype_element_size(struct datatype *datatype)
 {
     if (datatype->flags & DATATYPE_FLAG_IS_POINTER)
         return DATA_SIZE_DWORD;
-
+    
     return datatype->size;
 }
 
@@ -870,4 +870,21 @@ bool char_is_delim(char c, const char *delims)
 bool is_pointer_array_access(struct datatype *dtype, int index)
 {
     return !(dtype->flags & DATATYPE_FLAG_IS_ARRAY) || array_total_indexes(dtype) <= index;
+}
+
+
+struct datatype* datatype_get(struct node* node)
+{
+    struct datatype* dtype = NULL;
+    switch(node->type)
+    {
+        case NODE_TYPE_VARIABLE:
+            dtype = &node->var.type;
+        break;
+
+        case NODE_TYPE_FUNCTION:
+            dtype = &node->func.rtype;
+        break;
+    }
+    return dtype;
 }

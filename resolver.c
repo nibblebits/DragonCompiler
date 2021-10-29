@@ -251,13 +251,13 @@ struct resolver_entity *resolver_create_new_entity_for_var_node(struct resolver_
     return resolver_create_new_entity_for_var_node_custom_scope(process, var_node, private, resolver_scope_current(process), offset);
 }
 
-struct resolver_entity *resolver_new_entity_for_var_node_no_push(struct resolver_process *process, struct node *var_node, void *private, int offset)
+struct resolver_entity *resolver_new_entity_for_var_node_no_push(struct resolver_process *process, struct node *var_node, void *private, int offset, struct resolver_scope* scope)
 {
-    struct resolver_entity *entity = resolver_create_new_entity_for_var_node(process, var_node, private, offset);
+    struct resolver_entity *entity = resolver_create_new_entity_for_var_node_custom_scope(process, var_node, private, scope, offset);
     if (!entity)
         return NULL;
 
-    if (resolver_process_scope_current(process)->flags & RESOLVER_SCOPE_FLAG_IS_STACK)
+    if (scope->flags & RESOLVER_SCOPE_FLAG_IS_STACK)
     {
         entity->flags |= RESOLVER_ENTITY_FLAG_IS_STACK;
     }
@@ -267,7 +267,7 @@ struct resolver_entity *resolver_new_entity_for_var_node_no_push(struct resolver
 struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private, int offset)
 {
 
-    struct resolver_entity *entity = resolver_new_entity_for_var_node_no_push(process, var_node, private, offset);
+    struct resolver_entity *entity = resolver_new_entity_for_var_node_no_push(process, var_node, private, offset, resolver_process_scope_current(process));
     vector_push(process->scope.current->entities, &entity);
     return entity;
 }
@@ -285,7 +285,7 @@ struct resolver_entity *resolver_make_entity(struct resolver_process *process, s
     switch (node->type)
     {
     case NODE_TYPE_VARIABLE:
-        entity = resolver_new_entity_for_var_node_no_push(process, node, NULL, offset);
+        entity = resolver_new_entity_for_var_node_no_push(process, node, NULL, offset, scope);
         break;
     }
 

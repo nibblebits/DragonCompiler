@@ -1265,11 +1265,13 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     // Left node = to assign
     // Right node = value
 
+    // Let's create the value
+    codegen_generate_expressionable(node->exp.right, history_down(history, 0));
     struct resolver_result *result = resolver_follow(current_process->resolver, node->exp.left);
     assert(!resolver_result_failed(result));
 
     struct resolver_entity *root_assignment_entity = resolver_result_entity_root(result);
-    asm_push("lea ebx, [%s]", codegen_entity_private(root_assignment_entity)->address);
+    asm_push("lea ebx, [%s]", result->base.address);
     struct resolver_entity *current = resolver_result_entity_next(root_assignment_entity);
     while (current)
     {
@@ -2003,7 +2005,7 @@ void codegen_generate_stack_scope(struct vector *statements, size_t scope_size)
     // New body new scope.
 
     // Resolver scope needs to exist too it will be this normal scopes replacement
-    codegen_new_scope(RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK);
+    codegen_new_scope(RESOLVER_SCOPE_FLAG_IS_STACK);
     codegen_generate_scope_no_new_scope(statements);
     codegen_finish_scope();
 }

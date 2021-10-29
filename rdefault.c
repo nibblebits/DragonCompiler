@@ -70,7 +70,7 @@ void *resolver_default_make_private(struct resolver_entity *entity, struct node 
 {
     struct resolver_default_entity_data *entity_data = resolver_default_new_entity_data();
     int entity_flags = 0x00;
-    if (scope->flags & RESOLVER_SCOPE_FLAG_IS_STACK)
+    if (entity->flags & RESOLVER_ENTITY_FLAG_IS_STACK)
     {
         entity_flags |= RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK;
     }
@@ -136,12 +136,7 @@ void resolver_default_new_scope(struct resolver_process *resolver, int flags)
     struct resolver_default_scope_data *scope_data = calloc(sizeof(struct resolver_default_scope_data), 1);
     scope_data->flags |= flags;
 
-    int resolver_scope_flags = 0;
-    if (flags & RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK)
-    {
-        resolver_scope_flags |= RESOLVER_SCOPE_FLAG_IS_STACK;
-    }
-    resolver_new_scope(resolver, scope_data, resolver_scope_flags);
+    resolver_new_scope(resolver, scope_data, flags);
 }
 
 void resolver_default_finish_scope(struct resolver_process *resolver)

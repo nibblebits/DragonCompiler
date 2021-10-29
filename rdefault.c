@@ -164,7 +164,7 @@ struct resolver_entity *resolver_default_merge_entities(struct resolver_process*
     struct resolver_default_entity_data *left_scope_data = resolver_default_entity_private(left_entity);
     struct resolver_default_entity_data *right_scope_data = resolver_default_entity_private(right_entity);
     int new_pos = left_scope_data->offset + right_scope_data->offset;
-    return resolver_make_entity(process, result, right_entity->node, new_pos, right_entity->type, right_entity->scope);
+    return resolver_make_entity(process, result, &right_entity->dtype, left_entity->node, new_pos, left_entity->type, left_entity->scope);
 }
 
 struct resolver_process *resolver_default_new_process(struct compile_process *compiler)

@@ -279,7 +279,7 @@ void resolver_new_entity_for_rule(struct resolver_process *process, struct resol
     resolver_result_entity_push(result, entity_rule);
 }
 
-struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct node *node, int offset, int type, struct resolver_scope *scope)
+struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct datatype* custom_dtype, struct node *node, int offset, int type, struct resolver_scope *scope)
 {
     struct resolver_entity *entity = NULL;
     switch (node->type)
@@ -291,6 +291,10 @@ struct resolver_entity *resolver_make_entity(struct resolver_process *process, s
 
     if (entity)
     {
+        if (custom_dtype)
+        {
+            entity->dtype = *custom_dtype;
+        }
         entity->private = process->callbacks.make_private(entity, node, offset, scope);
     }
     return entity;
@@ -344,7 +348,7 @@ struct resolver_entity *resolver_get_entity_in_scope_with_entity_type(struct res
             // Union offset will be zero.
             offset = 0;
         }
-        return resolver_make_entity(resolver, result, out_node, offset, RESOLVER_ENTITY_TYPE_VARIABLE, scope);
+        return resolver_make_entity(resolver, result, NULL, out_node, offset, RESOLVER_ENTITY_TYPE_VARIABLE, scope);
     }
 
     // Ok this is not a structure variable, lets search the scopes

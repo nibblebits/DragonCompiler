@@ -1285,7 +1285,7 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
         codegen_byte_word_or_dword_or_ddword(datatype_element_size(&result->last_entity->dtype), &reg_to_use);
 
     // All we do now is assign the value..
-    asm_push("mov %s, [ebx], %s", mov_type_keyword, reg_to_use);
+    asm_push("mov %s [ebx], %s", mov_type_keyword, reg_to_use);
 }
 
 void codegen_generate_expressionable_function_arguments(struct node *func_call_args_exp_node, size_t *arguments_size)

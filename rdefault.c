@@ -167,20 +167,20 @@ static void resolver_default_merge_array_calculate_out_offset(struct datatype *d
 }
 struct resolver_entity *resolver_default_merge_entities(struct resolver_process *process, struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity)
 {
-    struct resolver_default_entity_data *left_scope_data = resolver_default_entity_private(left_entity);
-    struct resolver_default_entity_data *right_scope_data = resolver_default_entity_private(right_entity);
-    int new_pos = left_scope_data->offset + right_scope_data->offset;
+   // struct resolver_default_entity_data *left_scope_data = resolver_default_entity_private(left_entity);
+    //struct resolver_default_entity_data *right_scope_data = resolver_default_entity_private(right_entity);
+    int new_pos = left_entity->offset + right_entity->offset;
 
-    if (left_entity->type == RESOLVER_ENTITY_TYPE_ARRAY_BRACKET)
-    {
-        resolver_default_merge_array_calculate_out_offset(&left_entity->dtype, left_entity, &new_pos);
-    }
-    if (right_entity->type == RESOLVER_ENTITY_TYPE_ARRAY_BRACKET)
-    {
-        resolver_default_merge_array_calculate_out_offset(&right_entity->dtype, right_entity, &new_pos);
-    }
+    // if (left_entity->type == RESOLVER_ENTITY_TYPE_ARRAY_BRACKET)
+    // {
+    //     resolver_default_merge_array_calculate_out_offset(&left_entity->dtype, left_entity, &new_pos);
+    // }
+    // if (right_entity->type == RESOLVER_ENTITY_TYPE_ARRAY_BRACKET)
+    // {
+    //     resolver_default_merge_array_calculate_out_offset(&right_entity->dtype, right_entity, &new_pos);
+    // }
 
-    return resolver_make_entity(process, result, &right_entity->dtype, left_entity->node, new_pos, left_entity->type, left_entity->scope);
+    return resolver_make_entity(process, result, &right_entity->dtype, left_entity->node, new_pos, left_entity->type, left_entity->flags, left_entity->scope);
 }
 
 struct resolver_process *resolver_default_new_process(struct compile_process *compiler)

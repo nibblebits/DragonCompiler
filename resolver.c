@@ -227,6 +227,13 @@ struct resolver_entity *resolver_create_new_entity_for_array_bracket(struct reso
     entity->array.multiplier = array_multiplier(dtype, index, 1);
     entity->array.array_index_node = array_index_node;
 
+    int array_index_val = 1;
+    if (array_index_node->type == NODE_TYPE_NUMBER)
+    {
+        array_index_val = array_index_node->llnum;
+    }
+    entity->offset = array_offset(dtype, index, array_index_val);
+
     return entity;
 }
 
@@ -292,7 +299,7 @@ void resolver_new_entity_for_rule(struct resolver_process *process, struct resol
     resolver_result_entity_push(result, entity_rule);
 }
 
-struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *custom_dtype, struct node *node, int offset, int type, struct resolver_scope *scope)
+struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *custom_dtype, struct node *node, int offset, int type, int flags, struct resolver_scope *scope)
 {
     struct resolver_entity *entity = NULL;
     switch (node->type)
@@ -307,6 +314,7 @@ struct resolver_entity *resolver_make_entity(struct resolver_process *process, s
 
     if (entity)
     {
+        entity->flags = flags;
         if (custom_dtype)
         {
             entity->dtype = *custom_dtype;
@@ -364,7 +372,7 @@ struct resolver_entity *resolver_get_entity_in_scope_with_entity_type(struct res
             // Union offset will be zero.
             offset = 0;
         }
-        return resolver_make_entity(resolver, result, NULL, out_node, offset, RESOLVER_ENTITY_TYPE_VARIABLE, scope);
+        return resolver_make_entity(resolver, result, NULL, out_node, offset, RESOLVER_ENTITY_TYPE_VARIABLE, 0, scope);
     }
 
     // Ok this is not a structure variable, lets search the scopes

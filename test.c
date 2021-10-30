@@ -1,7 +1,8 @@
-
-int abc[20][4];
+int hi[4][8];
 int main()
 {
     int c;
-    abc[2][3] = 50;
+    c = 2;
+    hi[2][2] = 30;
+    return hi[c][c];
 }   

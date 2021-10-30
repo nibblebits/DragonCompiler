@@ -1261,17 +1261,48 @@ void codegen_generate_assignment_expression_value_part(struct resolver_result *r
     register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
+void codegen_generate_entity_access_array_bracket(struct resolver_result *result, struct resolver_entity *entity)
+{
+    struct history history = {};
+    // We have an array bracket that needs to be computed at runtime..
+ 
+    codegen_generate_expressionable(entity->array.array_index_node, history_begin(&history, 0));
+    asm_push("imul eax, %i", entity->offset);
+    asm_push("add ebx, eax");
+    register_unset_flag(REGISTER_EAX_IS_USED);
+}
+
+void codegen_generate_entity_access_for_variable(struct resolver_result *result, struct resolver_entity *entity)
+{
+    if (entity->flags & RESOLVER_ENTITY_FLAG_DO_INDIRECTION)
+    {
+        asm_push("mov ebx, [ebx]");
+    }
+    asm_push("add ebx, %i", entity->offset);
+}
+void codegen_generate_entity_access_for_entity(struct resolver_result *result, struct resolver_entity *entity)
+{
+    switch (entity->type)
+    {
+    case RESOLVER_ENTITY_TYPE_ARRAY_BRACKET:
+        codegen_generate_entity_access_array_bracket(result, entity);
+        break;
+
+    case RESOLVER_ENTITY_TYPE_VARIABLE:
+        codegen_generate_entity_access_for_variable(result, entity);
+        break;
+
+    default:
+        compiler_error(current_process, "COMPILER BUG...");
+    }
+}
 void codegen_generate_entity_access(struct resolver_result *result, struct resolver_entity *root_assignment_entity)
 {
     asm_push("lea ebx, [%s]", result->base.address);
     struct resolver_entity *current = resolver_result_entity_next(root_assignment_entity);
     while (current)
     {
-        if (current->flags & RESOLVER_ENTITY_FLAG_DO_INDIRECTION)
-        {
-            asm_push("mov ebx, [ebx]");
-        }
-        asm_push("add ebx, %i", current->offset);
+        codegen_generate_entity_access_for_entity(result, current);
         current = resolver_result_entity_next(current);
     }
 }
@@ -1282,6 +1313,7 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
 
     // Let's create the value
     codegen_generate_expressionable(node->exp.right, history_down(history, 0));
+    register_unset_flag(REGISTER_EAX_IS_USED);
     struct resolver_result *result = resolver_follow(current_process->resolver, node->exp.left);
     assert(!resolver_result_failed(result));
 

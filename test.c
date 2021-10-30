@@ -3,6 +3,6 @@ int main()
 {
     int c;
     c = 2;
-    hi[2][2] = 30;
-    return hi[c][c];
+    hi[c][c] = 30;
+    return hi[2][2];
 }   

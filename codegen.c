@@ -1313,6 +1313,8 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
 
     // Let's create the value
     codegen_generate_expressionable(node->exp.right, history_down(history, 0));
+    asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "assignment_eax_right_value_save");
+
     register_unset_flag(REGISTER_EAX_IS_USED);
     struct resolver_result *result = resolver_follow(current_process->resolver, node->exp.left);
     assert(!resolver_result_failed(result));
@@ -1324,6 +1326,8 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     const char *mov_type_keyword =
         codegen_byte_word_or_dword_or_ddword(datatype_element_size(&result->last_entity->dtype), &reg_to_use);
 
+    // Restore the value
+    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "assignment_eax_right_value_save");
     // All we do now is assign the value..
     asm_push("mov %s [ebx], %s", mov_type_keyword, reg_to_use);
 }

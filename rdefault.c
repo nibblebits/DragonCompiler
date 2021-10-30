@@ -159,11 +159,27 @@ void resolver_default_delete_scope(struct resolver_scope *scope)
     free(scope->private);
 }
 
-struct resolver_entity *resolver_default_merge_entities(struct resolver_process* process, struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity)
+static void resolver_default_merge_array_calculate_out_offset(struct datatype *dtype, struct resolver_entity *entity, int *out_offset)
+{
+    assert(entity->array.array_index_node->type == NODE_TYPE_NUMBER);
+    int index_val = entity->array.array_index_node->llnum;
+    *(out_offset) += array_offset(dtype, entity->array.index, index_val);
+}
+struct resolver_entity *resolver_default_merge_entities(struct resolver_process *process, struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity)
 {
     struct resolver_default_entity_data *left_scope_data = resolver_default_entity_private(left_entity);
     struct resolver_default_entity_data *right_scope_data = resolver_default_entity_private(right_entity);
     int new_pos = left_scope_data->offset + right_scope_data->offset;
+
+    if (left_entity->type == RESOLVER_ENTITY_TYPE_ARRAY_BRACKET)
+    {
+        resolver_default_merge_array_calculate_out_offset(&left_entity->dtype, left_entity, &new_pos);
+    }
+    if (right_entity->type == RESOLVER_ENTITY_TYPE_ARRAY_BRACKET)
+    {
+        resolver_default_merge_array_calculate_out_offset(&right_entity->dtype, right_entity, &new_pos);
+    }
+
     return resolver_make_entity(process, result, &right_entity->dtype, left_entity->node, new_pos, left_entity->type, left_entity->scope);
 }
 

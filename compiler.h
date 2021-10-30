@@ -562,7 +562,10 @@ enum
     // and that runtime action needs to take place to resolve the path.
     RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY = 0b00000010,
     // Signifies we must not merge with the left entity and we must remain alone.
-    RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY = 0b00000100
+    RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY = 0b00000100,
+
+    // Signifies we are accessing a pointer and indirection at runtime must exist.
+    RESOLVER_ENTITY_FLAG_DO_INDIRECTION = 0b00001000
 };
 
 enum
@@ -573,7 +576,11 @@ enum
     RESOLVER_ENTITY_TYPE_FUNCTION_CALL,
     RESOLVER_ENTITY_TYPE_ARRAY_BRACKET,
     // Rule types describe rules between  entities on the resolver stack.
-    RESOLVER_ENTITY_TYPE_RULE
+    RESOLVER_ENTITY_TYPE_RULE,
+
+    // General types are types that specify basic information such as datatype, offset
+    // but with no name information at all.
+    RESOLVER_ENTITY_TYPE_GENERAL
 };
 
 struct resolver_entity

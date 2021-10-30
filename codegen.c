@@ -1260,6 +1260,21 @@ void codegen_generate_assignment_expression_value_part(struct resolver_result *r
     asm_push("mov [ebx], eax");
     register_unset_flag(REGISTER_EAX_IS_USED);
 }
+
+void codegen_generate_entity_access(struct resolver_result *result, struct resolver_entity *root_assignment_entity)
+{
+    asm_push("lea ebx, [%s]", result->base.address);
+    struct resolver_entity *current = resolver_result_entity_next(root_assignment_entity);
+    while (current)
+    {
+        if (current->flags & RESOLVER_ENTITY_FLAG_DO_INDIRECTION)
+        {
+            asm_push("mov ebx, [ebx]");
+        }
+        asm_push("add ebx, %i", current->offset);
+        current = resolver_result_entity_next(current);
+    }
+}
 void codegen_generate_assignment_expression(struct node *node, struct history *history)
 {
     // Left node = to assign
@@ -1271,17 +1286,10 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     assert(!resolver_result_failed(result));
 
     struct resolver_entity *root_assignment_entity = resolver_result_entity_root(result);
-    asm_push("lea ebx, [%s]", result->base.address);
-    struct resolver_entity *current = resolver_result_entity_next(root_assignment_entity);
-    while (current)
-    {
-        asm_push("mov ebx, [ebx]");
-        asm_push("add ebx, %i", current->offset);
-        current = resolver_result_entity_next(current);
-    }
+    codegen_generate_entity_access(result, root_assignment_entity);
 
-    const char* reg_to_use = "eax";
-    const char* mov_type_keyword = 
+    const char *reg_to_use = "eax";
+    const char *mov_type_keyword =
         codegen_byte_word_or_dword_or_ddword(datatype_element_size(&result->last_entity->dtype), &reg_to_use);
 
     // All we do now is assign the value..
@@ -1628,17 +1636,15 @@ void _codegen_generate_exp_node(struct node *node, struct history *history)
 
     // Can we locate a variable for the given expression?
     struct resolver_result *result = resolver_follow(current_process->resolver, node);
-    struct resolver_entity *entity = NULL;
     if (resolver_result_ok(result))
     {
-        entity = resolver_result_entity(result);
-        struct resolver_entity *first_entity = entity;
-        while (entity)
-        {
-            codegen_generate_for_entity(node, entity, history);
-            entity = resolver_result_entity_next(entity);
-        }
+        struct resolver_entity *root_assignment_entity = resolver_result_entity_root(result);
+        codegen_generate_entity_access(result, root_assignment_entity);
 
+        const char *reg_to_use = "eax";
+        const char *mov_type_keyword =
+            codegen_byte_word_or_dword_or_ddword(datatype_element_size(&result->last_entity->dtype), &reg_to_use);
+        asm_push("mov eax, [ebx]");
         return;
     }
 

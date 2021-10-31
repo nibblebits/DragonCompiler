@@ -237,6 +237,25 @@ struct resolver_entity *resolver_create_new_entity_for_array_bracket(struct reso
     return entity;
 }
 
+struct resolver_entity *resolver_create_new_entity_for_merged_array_bracket(struct resolver_result *result, struct resolver_process *process, struct node *node, struct node *array_index_node, int index, struct datatype *dtype, void *private, struct resolver_scope *scope)
+{
+    struct resolver_entity *entity = resolver_create_new_entity(result, RESOLVER_ENTITY_TYPE_ARRAY_BRACKET, private);
+    if (!entity)
+        return NULL;
+
+    entity->scope = scope;
+    assert(entity->scope);
+    entity->name = NULL;
+    entity->dtype = *dtype;
+    entity->node = node;
+    entity->array.index = index;
+    entity->array.dtype = *dtype;
+    entity->array.multiplier = array_multiplier(dtype, index, 1);
+    entity->array.array_index_node = array_index_node;
+    return entity;
+}
+
+
 struct resolver_entity* resolver_create_new_unknown_entity(struct resolver_process* process, struct resolver_result* result, struct datatype* dtype, struct node* node, struct resolver_scope* scope, int offset)
 {
   struct resolver_entity *entity = resolver_create_new_entity(NULL, RESOLVER_ENTITY_TYPE_GENERAL, NULL);
@@ -299,9 +318,11 @@ void resolver_new_entity_for_rule(struct resolver_process *process, struct resol
     resolver_result_entity_push(result, entity_rule);
 }
 
-struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *custom_dtype, struct node *node, int offset, int type, int flags, struct resolver_scope *scope)
+struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *custom_dtype, struct node *node, struct resolver_entity* guided_entity, struct resolver_scope *scope)
 {
     struct resolver_entity *entity = NULL;
+    int offset = guided_entity->offset;
+    int flags = guided_entity->flags;
     switch (node->type)
     {
     case NODE_TYPE_VARIABLE:
@@ -372,7 +393,7 @@ struct resolver_entity *resolver_get_entity_in_scope_with_entity_type(struct res
             // Union offset will be zero.
             offset = 0;
         }
-        return resolver_make_entity(resolver, result, NULL, out_node, offset, RESOLVER_ENTITY_TYPE_VARIABLE, 0, scope);
+        return resolver_make_entity(resolver, result, NULL, out_node, &(struct resolver_entity){.type=RESOLVER_ENTITY_TYPE_VARIABLE,.offset=offset}, scope);
     }
 
     // Ok this is not a structure variable, lets search the scopes
@@ -493,17 +514,17 @@ static struct resolver_entity *resolver_follow_array_bracket(struct resolver_pro
     }
     void *private = resolver->callbacks.new_array_entity(result, node);
     struct resolver_entity *array_bracket_entity = resolver_create_new_entity_for_array_bracket(result, resolver, node, node->bracket.inner, index, &dtype, private, scope);
+     struct resolver_entity_rule rule = {};
     if (node->bracket.inner->type != NODE_TYPE_NUMBER)
     {
-        // Not a number then we need to ensure that this is not computed
-        // at compile time
-        struct resolver_entity *last_entity = resolver_result_peek(result);
-        if (last_entity)
-        {
-            // Got a last entity?
-            last_entity->flags |= RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY;
-        }
+        array_bracket_entity->flags = RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY | RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY;
     }
+    else
+    {
+        // If its a number then we have already computed the entire offset, let the compiler know with a flag..
+        array_bracket_entity->flags = RESOLVER_ENTITY_FLAG_JUST_USE_OFFSET;
+    }
+
     // The array bracket must be pushed to the stack
     resolver_result_entity_push(result, array_bracket_entity);
     return array_bracket_entity;

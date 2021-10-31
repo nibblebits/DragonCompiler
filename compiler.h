@@ -565,7 +565,8 @@ enum
     RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY = 0b00000100,
 
     // Signifies we are accessing a pointer and indirection at runtime must exist.
-    RESOLVER_ENTITY_FLAG_DO_INDIRECTION = 0b00001000
+    RESOLVER_ENTITY_FLAG_DO_INDIRECTION = 0b00001000,
+    RESOLVER_ENTITY_FLAG_JUST_USE_OFFSET = 0b00010000
 };
 
 enum
@@ -1963,7 +1964,7 @@ struct resolver_entity *resolver_get_variable(struct resolver_result *result, st
 struct resolver_result *resolver_follow(struct resolver_process *resolver, struct node *node);
 struct resolver_entity *resolver_result_entity_root(struct resolver_result *result);
 struct resolver_entity *resolver_result_entity_next(struct resolver_entity *entity);
-struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *custom_dtype, struct node *node, int offset, int type, int flags, struct resolver_scope *scope);
+struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *custom_dtype, struct node *node, struct resolver_entity* guided_entity, struct resolver_scope *scope);
 
 /**
  * Attempts to peek through the tree at the given node and looks for a datatype

@@ -1267,12 +1267,21 @@ void codegen_generate_entity_access_array_bracket(struct resolver_result *result
     // We have an array bracket that needs to be computed at runtime..
  
     codegen_generate_expressionable(entity->array.array_index_node, history_begin(&history, 0));
-    asm_push("imul eax, %i", entity->offset);
-    asm_push("add ebx, eax");
+    if (entity->flags & RESOLVER_ENTITY_FLAG_JUST_USE_OFFSET)
+    {
+        // Resolver has spoken.. Just use the offset as its completley computed already...
+        asm_push("add ebx, %i", entity->offset);
+    }
+    else
+    {
+        asm_push("imul eax, %i", entity->offset);
+        asm_push("add ebx, eax");
+
+    }
     register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
-void codegen_generate_entity_access_for_variable(struct resolver_result *result, struct resolver_entity *entity)
+void codegen_generate_entity_access_for_variable_or_general(struct resolver_result *result, struct resolver_entity *entity)
 {
     if (entity->flags & RESOLVER_ENTITY_FLAG_DO_INDIRECTION)
     {
@@ -1289,7 +1298,8 @@ void codegen_generate_entity_access_for_entity(struct resolver_result *result, s
         break;
 
     case RESOLVER_ENTITY_TYPE_VARIABLE:
-        codegen_generate_entity_access_for_variable(result, entity);
+    case RESOLVER_ENTITY_TYPE_GENERAL:
+        codegen_generate_entity_access_for_variable_or_general(result, entity);
         break;
 
     default:

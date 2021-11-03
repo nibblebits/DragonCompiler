@@ -509,5 +509,15 @@ else
 fi
 
 
+echo -e "Advanced access test"
+./build/advanced_access
+if [ $? -ne 50 ]; then
+    echo -e "Advanced access test failed"
+    res_code=1
+else
+    echo -e "Advanced access test passed"
+fi
+
+
 echo -e "All tests finished"
 exit $res_code

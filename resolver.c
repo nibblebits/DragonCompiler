@@ -97,6 +97,17 @@ struct resolver_entity *resolver_result_peek(struct resolver_result *result)
     return result->last_entity;
 }
 
+struct resolver_entity* resolver_result_peek_ignore_rule_entity(struct resolver_result* result)
+{
+    struct resolver_entity* entity = resolver_result_peek(result);
+    while(entity && entity->type == RESOLVER_ENTITY_TYPE_RULE)
+    {
+        entity = entity->prev;
+    }
+
+    return entity;
+}
+
 struct resolver_entity *resolver_result_pop(struct resolver_result *result)
 {
     struct resolver_entity *entity = result->last_entity;
@@ -504,7 +515,7 @@ static struct resolver_entity *resolver_follow_array_bracket(struct resolver_pro
     int index = 0;
     struct datatype dtype;
     struct resolver_scope *scope = NULL;
-    struct resolver_entity *last_entity = resolver_result_peek(result);
+    struct resolver_entity *last_entity = resolver_result_peek_ignore_rule_entity(result);
     scope = last_entity->scope;
     dtype = last_entity->dtype;
 

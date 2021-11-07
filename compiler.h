@@ -133,6 +133,7 @@ enum
     // been dealt with.
     EXPRESSION_IS_NOT_ROOT_NODE = 0b1000000000000000000000000,
     EXPRESSION_IS_ASSIGNMENT = 0b10000000000000000000000000,
+    IS_ALONE_STATEMENT = 0b100000000000000000000000000
 
 };
 
@@ -143,7 +144,7 @@ enum
      EXPRESSION_IS_BELOW | EXPRESSION_IS_BELOW_OR_EQUAL | EXPRESSION_IS_EQUAL |                      \
      EXPRESSION_IS_NOT_EQUAL | EXPRESSION_LOGICAL_AND |                                              \
      EXPRESSION_IN_LOGICAL_EXPRESSION | EXPRESSION_IS_BITSHIFT_LEFT | EXPRESSION_IS_BITSHIFT_RIGHT | \
-     EXPRESSION_IS_BITWISE_OR | EXPRESSION_IS_BITWISE_AND | EXPRESSION_IS_BITWISE_XOR | EXPRESSION_IS_ASSIGNMENT)
+     EXPRESSION_IS_BITWISE_OR | EXPRESSION_IS_BITWISE_AND | EXPRESSION_IS_BITWISE_XOR | EXPRESSION_IS_ASSIGNMENT | IS_ALONE_STATEMENT)
 
 // Flags for structure access functions.
 enum
@@ -1653,6 +1654,11 @@ struct node *first_node_of_type_from_left(struct node *node, int type, int depth
 void node_set_vector(struct vector *vec, struct vector *secondary_vec);
 void node_push(struct node *node);
 struct node *node_create(struct node *_node);
+
+/*
+*Finds the inner node of the given node, returns its self it is an appropiate inner node
+*/
+struct node* node_find_inner(struct node* node);
 
 struct node *node_peek_or_null();
 

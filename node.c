@@ -520,6 +520,20 @@ bool function_node_is_prototype(struct node *node)
     return node->func.body_n == NULL;
 }
 
+
+struct node* node_find_inner(struct node* node)
+{
+    struct node* result_node= node;
+    switch(node->type)
+    {
+        case NODE_TYPE_UNARY:
+            result_node = node->unary.operand;
+        break;
+    }
+
+    return result_node;
+}
+
 struct node *variable_node(struct node *node)
 {
     struct node *var_node = NULL;

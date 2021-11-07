@@ -356,7 +356,7 @@ struct resolver_entity *resolver_make_entity(struct resolver_process *process, s
     return entity;
 }
 
-struct resolver_entity *resolver_create_new_entity_for_function_call(struct resolver_result *result, struct resolver_process *process, struct node *func_node, void *private)
+struct resolver_entity *resolver_create_new_entity_for_function_call(struct resolver_result *result, struct resolver_process *process, void *private)
 {
     struct resolver_entity *entity = resolver_create_new_entity(result, RESOLVER_ENTITY_TYPE_FUNCTION_CALL, private);
     if (!entity)
@@ -364,7 +364,6 @@ struct resolver_entity *resolver_create_new_entity_for_function_call(struct reso
         return NULL;
     }
 
-    entity->name = func_node->func.name;
     entity->func_call_data.arguments = vector_create(sizeof(struct node *));
     return entity;
 }
@@ -577,15 +576,14 @@ static void resolver_build_function_call_arguments(struct resolver_process *reso
 
 static struct resolver_entity *resolver_follow_function_call(struct resolver_process *resolver, struct resolver_result *result, struct node *node)
 {
-    // Ok this is a function call, left operand = function name, right operand = arguments
-    const char *func_name = node->exp.left->sval;
-    struct resolver_entity *entity = resolver_get_function(result, resolver, func_name);
-    assert(entity);
+    // Ok this is a function call, left operand = function name or function pointer, right operand = arguments
+    resolver_follow_part(resolver, node->exp.left, result);
 
     // As this is a function all we must create a new function call entity, for this given function call
-    struct resolver_entity *func_call_entity = resolver_create_new_entity_for_function_call(result, resolver, entity->node, NULL);
+    struct resolver_entity *func_call_entity = resolver_create_new_entity_for_function_call(result, resolver, NULL);
     assert(func_call_entity);
-
+    func_call_entity->flags |= RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY;
+    
     // Let's build the function call arguments
     resolver_build_function_call_arguments(resolver, node->exp.right, func_call_entity, &func_call_entity->func_call_data.stack_size);
 
@@ -596,7 +594,7 @@ static struct resolver_entity *resolver_follow_function_call(struct resolver_pro
 }
 static struct resolver_entity *resolver_follow_parentheses(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
-    // This may be a function call is the left operand an identifier?
+    // Need better way of checking if this is function call or not..
     if (node->exp.left->type == NODE_TYPE_IDENTIFIER)
     {
         return resolver_follow_function_call(resolver, result, node);

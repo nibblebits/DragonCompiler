@@ -114,7 +114,7 @@ struct resolver_default_entity_data *resolver_default_new_entity_data_for_functi
     struct resolver_default_entity_data *entity_data = resolver_default_new_entity_data();
     entity_data->flags = flags;
     entity_data->type = RESOLVER_DEFAULT_ENTITY_DATA_TYPE_FUNCTION;
-    resolver_default_global_asm_address(func_node->sval, 0, entity_data->address);
+    resolver_default_global_asm_address(func_node->func.name, 0, entity_data->address);
     return entity_data;
 }
 
@@ -165,9 +165,9 @@ static void resolver_default_merge_array_calculate_out_offset(struct datatype *d
     int index_val = entity->array.array_index_node->llnum;
     *(out_offset) += array_offset(dtype, entity->array.index, index_val);
 }
+
 struct resolver_entity *resolver_default_merge_entities(struct resolver_process *process, struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity)
 {
-   
     int new_pos = left_entity->offset + right_entity->offset;
     return resolver_make_entity(process, result, &right_entity->dtype, left_entity->node, &(struct resolver_entity){.type=right_entity->type, .flags=left_entity->flags, .offset=new_pos, .array=right_entity->array},left_entity->scope);
 }

@@ -169,7 +169,7 @@ all: ${OBJECTS}
 	../main ./units/array_test.c ./build/array_test
 
 ./build/advanced_access.o:./units/advanced_access.c
-	../main ./units/advanced_access.c ./build/advanced_access.o
+	../main ./units/advanced_access.c ./build/advanced_access
 
 clean:
 	rm -rf ${OBJECTS}

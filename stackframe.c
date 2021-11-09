@@ -32,13 +32,13 @@ void stackframe_push(struct node *func_node, struct stack_frame_element *element
 struct stack_frame_element *stackframe_back(struct node *func_node)
 {
     struct stack_frame *frame = &func_node->func.frame;
-    return vector_back(frame->elements);
+    return vector_back_or_null(frame->elements);
 }
 
 struct stack_frame_element* stackframe_back_expect(struct node* func_node, int expecting_type, const char* expecting_name)
 {
     struct stack_frame_element* element = stackframe_back(func_node);
-    if(element->type != expecting_type || !S_EQ(element->name, expecting_name))
+    if(element && element->type != expecting_type || !S_EQ(element->name, expecting_name))
     {
         return NULL; 
     }  
@@ -55,6 +55,7 @@ void stackframe_pop_expecting(struct node *func_node, int expecting_type, const 
 {
     struct stack_frame *frame = &func_node->func.frame;
     struct stack_frame_element *last_element = stackframe_back(func_node);
+    assert(last_element);
     assert(last_element->type == expecting_type && S_EQ(last_element->name, expecting_name));
     stackframe_pop(func_node);
 }

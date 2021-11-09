@@ -534,6 +534,14 @@ struct node* node_find_inner(struct node* node)
     return result_node;
 }
 
+struct node *variable_node_or_list(struct node *node)
+{
+    if (node->type == NODE_TYPE_VARIABLE_LIST)
+        return node;
+
+    return variable_node(node);
+}
+
 struct node *variable_node(struct node *node)
 {
     struct node *var_node = NULL;

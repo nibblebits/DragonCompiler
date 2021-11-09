@@ -567,6 +567,23 @@ void asm_push_ins_pop(const char *fmt, int expecting_stack_entity_type, const ch
     stackframe_pop_expecting(current_function, expecting_stack_entity_type, expecting_stack_entity_name);
 }
 
+void asm_push_ins_pop_or_ignore(const char *fmt, int expecting_stack_entity_type, const char *expecting_stack_entity_name, ...)
+{
+    if (!stackframe_back_expect(current_function, expecting_stack_entity_type, expecting_stack_entity_name))
+    {
+        return;
+    }
+
+    char tmp_buf[200];
+    sprintf(tmp_buf, "pop %s", fmt);
+    va_list args;
+    va_start(args, expecting_stack_entity_name);
+    asm_push_args(tmp_buf, args);
+    va_end(args);
+
+    stackframe_pop_expecting(current_function, expecting_stack_entity_type, expecting_stack_entity_name);
+}
+
 void asm_push_ebp()
 {
     asm_push_ins_push("ebp", STACK_FRAME_ELEMENT_TYPE_SAVED_BP, "function_entry_saved_ebp");
@@ -898,6 +915,11 @@ void codegen_gen_cmp(const char *value, const char *set_ins)
     asm_push("movzx eax, al");
 }
 
+bool codegen_can_gen_math(int flags)
+{
+    return flags & EXPRESSION_GEN_MATHABLE;
+}
+
 void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
 {
     if (flags & EXPRESSION_IS_ADDITION)
@@ -950,10 +972,12 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
     }
     else if (flags & EXPRESSION_IS_BITSHIFT_LEFT)
     {
+        value = codegen_sub_register(value, DATA_TYPE_CHAR);
         asm_push("sal %s, %s", reg, value);
     }
     else if (flags & EXPRESSION_IS_BITSHIFT_RIGHT)
     {
+        value = codegen_sub_register(value, DATA_TYPE_CHAR);
         asm_push("sar %s, %s", reg, value);
     }
     else if (flags & EXPRESSION_IS_BITWISE_AND)
@@ -995,15 +1019,6 @@ static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, in
 
 static void codegen_gen_mem_access_get_address(struct node *value_node, int flags, struct resolver_entity *entity)
 {
-    if (flags & EXPRESSION_INDIRECTION)
-    {
-        codegen_use_register("eax");
-        // We have indirection, therefore we should load the address into EBX.
-        // rather than mov instruction
-        asm_push("mov ebx, [%s]", codegen_entity_private(entity)->address);
-        return;
-    }
-
     asm_push("lea ebx, [%s]", codegen_entity_private(entity)->address);
     asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 }
@@ -1067,7 +1082,7 @@ static void codegen_gen_mem_access(struct node *value_node, int flags, struct re
 void codegen_generate_number_node(struct node *node, struct history *history)
 {
     const char *reg_to_use = "eax";
-    asm_push_ins_push("%i", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", node->llnum);
+    asm_push_ins_push("dword %i", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", node->llnum);
 }
 
 /**
@@ -1611,16 +1626,21 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     struct node *right_node = node->exp.right;
 
     // We need to set the correct flag regarding which operator is being used
-    flags |= codegen_set_flag_for_operator(node->exp.op);
+    int op_flags = codegen_set_flag_for_operator(node->exp.op);
     codegen_generate_expressionable(left_node, history_down(history, flags));
     codegen_generate_expressionable(right_node, history_down(history, flags));
-    // Pop off right value
-    asm_push_ins_pop("ecx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
-    // Pop off left value
-    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
-    // Add together
-    codegen_gen_math_for_value("eax", "ecx", flags);
+    if (codegen_can_gen_math(op_flags))
+    {
+        // Pop off right value
+        asm_push_ins_pop("ecx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        // Pop off left value
+        asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        // Add together, subtract, multiply ect...
+        codegen_gen_math_for_value("eax", "ecx", op_flags);
+    }
+    // Caller always expects a response from us..
     asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
 }
 
 bool codegen_should_push_function_call_argument(struct response *res)
@@ -1778,11 +1798,21 @@ static bool is_comma_operator(struct node *node)
 
 void codegen_generate_unary_indirection(struct node *node, struct history *history)
 {
+    const char *reg_to_use = "ebx";
     int flags = history->flags;
     // Generate the operand while passing the indirection flag
     codegen_generate_expressionable(node->unary.operand, history_down(history, flags | EXPRESSION_GET_ADDRESS | EXPRESSION_INDIRECTION));
-    const char *reg_to_use = "ebx";
+    // Lets pop off the value
+    asm_push_ins_pop(reg_to_use, STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
     int depth = node->unary.indirection.depth;
+    // If we want the value not the address then we must depth+1 because
+    // expressionable above will give us the address not the value
+    if (!(history->flags & EXPRESSION_GET_ADDRESS))
+    {
+        depth++;
+    }
+    
     for (int i = 0; i < depth; i++)
     {
         asm_push("mov %s, [%s]", reg_to_use, reg_to_use);
@@ -1800,33 +1830,26 @@ void codegen_generate_unary_address(struct node *node, struct history *history)
 
 void codegen_generate_normal_unary(struct node *node, struct history *history)
 {
-    bool eax_is_used = register_is_used("eax");
-    if (eax_is_used)
-    {
-        register_unset_flag(REGISTER_EAX_IS_USED);
-        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "eax_used_saved_value");
-    }
     codegen_generate_expressionable(node->unary.operand, history);
+    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
     // We have generated the value for the operand
     // Let's now decide what to do with the result based on the operator
     if (S_EQ(node->unary.op, "-"))
     {
         // We have negation operator, so negate.
         asm_push("neg eax");
+        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     }
     else if (S_EQ(node->unary.op, "~"))
     {
         asm_push("not eax");
+        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     }
     else if (S_EQ(node->unary.op, "*"))
     {
         // We are accessing a pointer
         codegen_generate_unary_indirection(node, history);
-    }
-    if (eax_is_used)
-    {
-        asm_push_ins_pop("ecx", STACK_FRAME_ELEMENT_TYPE_SAVED_REGISTER, "eax_used_saved_value");
-        codegen_gen_math_for_value("ecx", "eax", history->flags);
     }
 }
 
@@ -1858,6 +1881,8 @@ void codegen_generate_string(struct node *node, struct history *history)
 {
     const char *label = codegen_register_string(node->sval);
     codegen_gen_mov_for_value("eax", label, "dword", history->flags);
+    asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
 }
 
 void codegen_generate_tenary(struct node *node, struct history *history)
@@ -1865,6 +1890,9 @@ void codegen_generate_tenary(struct node *node, struct history *history)
     int true_label_id = codegen_label_count();
     int false_label_id = codegen_label_count();
     int tenary_end_label_id = codegen_label_count();
+
+    // Pop off the result for the tenary
+    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
     // Condition node would have already been generated as tenaries are
     // nested into an expression
@@ -1875,12 +1903,15 @@ void codegen_generate_tenary(struct node *node, struct history *history)
     register_unset_flag(REGISTER_EAX_IS_USED);
     // Now we generate the true condition
     codegen_generate_new_expressionable(node->tenary.true_node, history_down(history, 0));
+    asm_push_ins_pop_or_ignore("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
     asm_push("jmp .tenary_end_%i", tenary_end_label_id);
 
     asm_push(".tenary_false_%i:", false_label_id);
     // Now the false condition
     register_unset_flag(REGISTER_EAX_IS_USED);
     codegen_generate_new_expressionable(node->tenary.false_node, history_down(history, 0));
+    asm_push_ins_pop_or_ignore("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     asm_push(".tenary_end_%i:", tenary_end_label_id);
 }
 
@@ -2069,8 +2100,8 @@ size_t codegen_compute_stack_size(struct vector *vec)
     return C_ALIGN(stack_size);
 }
 
-void codegen_generate_scope_no_new_scope(struct vector *statements, struct history* history);
-void codegen_generate_stack_scope(struct vector *statements, size_t scope_size, struct history* history)
+void codegen_generate_scope_no_new_scope(struct vector *statements, struct history *history);
+void codegen_generate_stack_scope(struct vector *statements, size_t scope_size, struct history *history)
 {
     // New body new scope.
 
@@ -2080,7 +2111,7 @@ void codegen_generate_stack_scope(struct vector *statements, size_t scope_size, 
     codegen_finish_scope();
 }
 
-void codegen_generate_body(struct node *node, struct history* history)
+void codegen_generate_body(struct node *node, struct history *history)
 {
     codegen_generate_stack_scope(node->body.statements, node->body.size, history);
 }
@@ -2152,11 +2183,12 @@ void _codegen_generate_if_stmt(struct node *node, int end_label_id)
     struct history history;
     int if_label_id = codegen_label_count();
     codegen_generate_brand_new_expression(node->stmt._if.cond_node, history_begin(&history, 0));
+    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     asm_push("cmp eax, 0");
     asm_push("je .if_%i", if_label_id);
     // Unset the EAX register flag we are not using it now
     register_unset_flag(REGISTER_EAX_IS_USED);
-    codegen_generate_body(node->stmt._if.body_node, history_begin(&history, 0));
+    codegen_generate_body(node->stmt._if.body_node, history_begin(&history, IS_ALONE_STATEMENT));
     asm_push("jmp .if_end_%i", end_label_id);
     asm_push(".if_%i:", if_label_id);
 
@@ -2184,10 +2216,12 @@ void codegen_generate_while_stmt(struct node *node)
 
     // Generate the expressionable condition
     codegen_generate_brand_new_expression(node->stmt._while.cond, history_begin(&history, 0));
+    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
     asm_push("cmp eax, 0");
     asm_push("je .while_end_%i", while_end_id);
     // Okay, let us now generate the body
-    codegen_generate_body(node->stmt._while.body, history_begin(&history, 0));
+    codegen_generate_body(node->stmt._while.body, history_begin(&history, IS_ALONE_STATEMENT));
     asm_push("jmp .while_start_%i", while_start_id);
     asm_push(".while_end_%i:", while_end_id);
     codegen_end_entry_exit_point();
@@ -2199,8 +2233,10 @@ void codegen_generate_do_while_stmt(struct node *node)
     codegen_begin_entry_exit_point();
     int do_while_start_id = codegen_label_count();
     asm_push(".do_while_start_%i:", do_while_start_id);
-    codegen_generate_body(node->stmt._do_while.body, history_begin(&history, 0));
+    codegen_generate_body(node->stmt._do_while.body, history_begin(&history, IS_ALONE_STATEMENT));
     codegen_generate_brand_new_expression(node->stmt._do_while.cond, history_begin(&history, 0));
+    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
     asm_push("cmp eax, 0");
     asm_push("jne .do_while_start_%i", do_while_start_id);
     codegen_end_entry_exit_point();
@@ -2217,6 +2253,7 @@ void codegen_generate_for_stmt(struct node *node)
     {
         // We have our FOR loop initialization, lets initialize.
         codegen_generate_brand_new_expression(for_stmt->init, history_begin(&history, 0));
+        asm_push_ins_pop_or_ignore("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     }
 
     asm_push(".for_loop%i:", for_loop_start_id);
@@ -2224,18 +2261,21 @@ void codegen_generate_for_stmt(struct node *node)
     {
         // We have our FOR loop condition, lets condition it.
         codegen_generate_brand_new_expression(for_stmt->cond, history_begin(&history, 0));
+        asm_push_ins_pop_or_ignore("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
         asm_push("cmp eax, 0");
         asm_push("je .for_loop_end%i", for_loop_end_id);
     }
 
     if (for_stmt->body)
     {
-        codegen_generate_body(for_stmt->body, history_begin(&history, 0));
+        codegen_generate_body(for_stmt->body, history_begin(&history, IS_ALONE_STATEMENT));
     }
 
     if (for_stmt->loop)
     {
         codegen_generate_brand_new_expression(for_stmt->loop, history_begin(&history, 0));
+        asm_push_ins_pop_or_ignore("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     }
     asm_push("jmp .for_loop%i", for_loop_start_id);
     asm_push(".for_loop_end%i:", for_loop_end_id);
@@ -2293,10 +2333,12 @@ void codegen_generate_switch_stmt(struct node *node)
     codegen_begin_switch_statement();
 
     codegen_generate_brand_new_expression(node->stmt._switch.exp, history_begin(&history, 0));
+    asm_push_ins_pop_or_ignore("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
     codegen_generate_switch_stmt_case_jumps(node);
 
     // Let's generate the body
-    codegen_generate_body(node->stmt._switch.body, history_begin(&history, 0));
+    codegen_generate_body(node->stmt._switch.body, history_begin(&history, IS_ALONE_STATEMENT));
 
     codegen_end_switch_statement();
     codegen_end_entry_exit_point();
@@ -2323,7 +2365,7 @@ void codegen_generate_goto_stmt(struct node *node)
     asm_push("jmp label_%s", node->stmt._goto.label->sval);
 }
 
-void codegen_generate_statement(struct node *node, struct history* history)
+void codegen_generate_statement(struct node *node, struct history *history)
 {
     switch (node->type)
     {
@@ -2394,7 +2436,7 @@ void codegen_generate_statement(struct node *node, struct history* history)
     }
 }
 
-void codegen_generate_scope_no_new_scope(struct vector *statements, struct history* history)
+void codegen_generate_scope_no_new_scope(struct vector *statements, struct history *history)
 {
     vector_set_peek_pointer(statements, 0);
     struct node *statement_node = vector_peek_ptr(statements);

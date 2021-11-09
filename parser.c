@@ -579,10 +579,9 @@ void make_variable_node_and_register(struct history *history, struct datatype *d
     node_push(var_node);
 }
 
-void make_variable_list_node(struct vector* var_list)
+void make_variable_list_node(struct vector *var_list)
 {
-    node_create(&(struct node){NODE_TYPE_VARIABLE_LIST, .var_list.list=var_list});
-
+    node_create(&(struct node){NODE_TYPE_VARIABLE_LIST, .var_list.list = var_list});
 }
 void make_bracket_node(struct node *inner_node)
 {
@@ -608,10 +607,24 @@ static void parser_append_size_for_node_struct_union(struct history *history, si
         *_variable_size = align_value(*_variable_size, largest_var_node->var.type.size);
     }
 }
-
-static void parser_append_size_for_node(struct history *history, size_t *_variable_size, struct node *node)
+void parser_append_size_for_node(struct history *history, size_t *_variable_size, struct node *node);
+void parser_append_size_for_variable_list(struct history *history, size_t *_variable_size, struct vector *var_list)
 {
-    if (node && node->type == NODE_TYPE_VARIABLE)
+    vector_set_peek_pointer(var_list, 0);
+    struct node *node = vector_peek_ptr(var_list);
+    while (node)
+    {
+        parser_append_size_for_node(history, _variable_size, node);
+        node = vector_peek_ptr(var_list);
+    }
+}
+
+void parser_append_size_for_node(struct history *history, size_t *_variable_size, struct node *node)
+{
+    if (!node)
+        return;
+
+    if (node->type == NODE_TYPE_VARIABLE)
     {
         // Is this a structure variable?
         if (node_is_struct_or_union_variable(node))
@@ -625,6 +638,10 @@ static void parser_append_size_for_node(struct history *history, size_t *_variab
         // *variable_size += node->var.type.size;
         // Test new with all possibilities.
         *_variable_size += variable_size(node);
+    }
+    else if (node->type == NODE_TYPE_VARIABLE_LIST)
+    {
+        parser_append_size_for_variable_list(history, _variable_size, node->var_list.list);
     }
 }
 
@@ -676,7 +693,7 @@ void parse_body_single_statement(size_t *variable_size, struct vector *body_vec,
 
     // Change the variable_size if this statement is a variable.
     // Incrementing it by the size of our variable
-    parser_append_size_for_node(history, variable_size, variable_node(stmt_node));
+    parser_append_size_for_node(history, variable_size, variable_node_or_list(stmt_node));
 
     struct node *largest_var_node = NULL;
     if (stmt_node->type == NODE_TYPE_VARIABLE)
@@ -736,7 +753,7 @@ void parse_body_multiple_statements(size_t *variable_size, struct vector *body_v
 
         // Change the variable_size if this statement is a variable.
         // Incrementing it by the size of our variable
-        parser_append_size_for_node(history, variable_size, variable_node(stmt_node));
+        parser_append_size_for_node(history, variable_size, variable_node_or_list(stmt_node));
     }
 
     // bodies must end with a right curley bracket!
@@ -2334,11 +2351,11 @@ void parse_variable_function_or_struct_union(struct history *history)
     if (token_is_operator(token_peek_next(), ","))
     {
         // As we have more variables we want to create a variable list for this
-        struct vector* var_list = vector_create(sizeof(struct node*));
+        struct vector *var_list = vector_create(sizeof(struct node *));
         // Pop off original node that was parsed and add it to the list
-        struct node* var_node = node_pop();
+        struct node *var_node = node_pop();
         vector_push(var_list, &var_node);
-        while(token_is_operator(token_peek_next(), ","))
+        while (token_is_operator(token_peek_next(), ","))
         {
             // Get rid of the comma
             token_next();

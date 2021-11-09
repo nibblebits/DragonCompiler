@@ -137,6 +137,29 @@ enum
 
 };
 
+#define EXPRESSION_GEN_MATHABLE (\
+    EXPRESSION_IS_ADDITION | \
+    EXPRESSION_IS_SUBTRACTION | \
+    EXPRESSION_IS_MULTIPLICATION | \
+    EXPRESSION_IS_DIVISION | \
+    EXPRESSION_IN_FUNCTION_CALL | \
+    EXPRESSION_INDIRECTION | \
+    EXPRESSION_GET_ADDRESS | \
+    EXPRESSION_IS_ABOVE | \
+    EXPRESSION_IS_ABOVE_OR_EQUAL | \
+    EXPRESSION_IS_BELOW | \
+    EXPRESSION_IS_BELOW_OR_EQUAL | \
+    EXPRESSION_IS_EQUAL | \
+    EXPRESSION_IS_NOT_EQUAL | \
+    EXPRESSION_LOGICAL_AND | \
+    EXPRESSION_LOGICAL_OR | \
+    EXPRESSION_IN_LOGICAL_EXPRESSION | \
+    EXPRESSION_IS_BITSHIFT_LEFT | \
+    EXPRESSION_IS_BITSHIFT_RIGHT | \
+    EXPRESSION_IS_BITWISE_OR | \
+    EXPRESSION_IS_BITWISE_AND | \
+    EXPRESSION_IS_BITWISE_XOR)
+
 #define EXPRESSION_UNINHERITABLE_FLAGS                                                               \
     (EXPRESSION_FLAG_RIGHT_NODE | EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS |                            \
      EXPRESSION_IS_ADDITION | EXPRESSION_IS_SUBTRACTION | EXPRESSION_IS_MULTIPLICATION |             \
@@ -2294,6 +2317,8 @@ struct node *node_function_get_final_argument(struct node *func_node);
  * with a variable then it will return the variable
  */
 struct node *variable_node(struct node *node);
+struct node *variable_node_or_list(struct node *node);
+
 
 /**
  * Returns true if the given character is a hexadecimal character

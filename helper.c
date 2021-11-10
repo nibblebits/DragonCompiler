@@ -655,7 +655,7 @@ size_t datatype_element_size(struct datatype *datatype)
 {
     if (datatype->flags & DATATYPE_FLAG_IS_POINTER)
         return DATA_SIZE_DWORD;
-    
+
     return datatype->size;
 }
 
@@ -831,6 +831,12 @@ int compute_array_offset(struct node *node, size_t single_element_size)
 
 int array_multiplier(struct datatype *dtype, int index, int index_value)
 {
+    if (!(dtype->flags & DATATYPE_FLAG_IS_ARRAY))
+    {
+        // No array here? then just return the index value.
+        return index_value;
+    }
+
     vector_set_peek_pointer(dtype->array.brackets->n_brackets, index + 1);
 
     int size_sum = index_value;
@@ -849,10 +855,17 @@ int array_multiplier(struct datatype *dtype, int index, int index_value)
 
 int array_offset(struct datatype *dtype, int index, int index_value)
 {
-    if (index == vector_count(dtype->array.brackets->n_brackets) - 1)
+    if (!(dtype->flags & DATATYPE_FLAG_IS_ARRAY) ||
+        (index == vector_count(dtype->array.brackets->n_brackets) - 1))
+    {
         return index_value * datatype_element_size(dtype);
-
+    }
     return array_multiplier(dtype, index, index_value) * datatype_element_size(dtype);
+}
+
+size_t array_brackets_count(struct datatype* dtype)
+{
+    return vector_count(dtype->array.brackets->n_brackets);
 }
 
 bool char_is_delim(char c, const char *delims)
@@ -872,18 +885,17 @@ bool is_pointer_array_access(struct datatype *dtype, int index)
     return !(dtype->flags & DATATYPE_FLAG_IS_ARRAY) || array_total_indexes(dtype) <= index;
 }
 
-
-struct datatype* datatype_get(struct node* node)
+struct datatype *datatype_get(struct node *node)
 {
-    struct datatype* dtype = NULL;
-    switch(node->type)
+    struct datatype *dtype = NULL;
+    switch (node->type)
     {
-        case NODE_TYPE_VARIABLE:
-            dtype = &node->var.type;
+    case NODE_TYPE_VARIABLE:
+        dtype = &node->var.type;
         break;
 
-        case NODE_TYPE_FUNCTION:
-            dtype = &node->func.rtype;
+    case NODE_TYPE_FUNCTION:
+        dtype = &node->func.rtype;
         break;
     }
     return dtype;

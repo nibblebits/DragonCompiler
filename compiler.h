@@ -590,7 +590,8 @@ enum
 
     // Signifies we are accessing a pointer and indirection at runtime must exist.
     RESOLVER_ENTITY_FLAG_DO_INDIRECTION = 0b00001000,
-    RESOLVER_ENTITY_FLAG_JUST_USE_OFFSET = 0b00010000
+    RESOLVER_ENTITY_FLAG_JUST_USE_OFFSET = 0b00010000,
+    RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY_ENTITY = 0b00100000
 };
 
 enum
@@ -1948,6 +1949,7 @@ bool is_logical_node(struct node *node);
 
 int compute_array_offset(struct node *node, size_t single_element_size);
 int array_offset(struct datatype *dtype, int index, int index_value);
+size_t array_brackets_count(struct datatype* dtype);
 int array_total_indexes(struct datatype *dtype);
 
 /**

@@ -1108,41 +1108,6 @@ static bool is_node_array_access(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op);
 }
 
-void codegen_generate_variable_access_for_pointer_array_part(struct resolver_entity *entity, struct history *history)
-{
-    codegen_generate_expressionable(entity->var_data.array_runtime.index_node, history);
-    register_unset_flag(REGISTER_EAX_IS_USED);
-    if (resolver_entity_has_array_multiplier(entity))
-    {
-        asm_push("imul eax, %i", entity->var_data.array_runtime.multiplier);
-    }
-    asm_push("mov ecx, [ebx]");
-    asm_push("add eax, ecx");
-}
-
-void codegen_generate_variable_access_for_array_final_non_pointer_calculation(int count, struct resolver_entity *last_entity, struct history *history)
-{
-    // No count then nothing to do.
-    if (count == 0)
-        return;
-
-    asm_push("mov eax, 0");
-    for (int i = 0; i < count; i++)
-    {
-        asm_push_ins_pop("ecx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "array_pushed_computed_offset");
-        asm_push("add eax, ecx");
-    }
-
-    if (history->flags & EXPRESSION_GET_ADDRESS)
-    {
-        asm_push("lea ebx, [%s+eax]", codegen_entity_private(last_entity)->address);
-    }
-    else
-    {
-        asm_push("mov eax, [%s+eax]", codegen_entity_private(last_entity)->address);
-    }
-}
-
 void codegen_generate_structure_push(struct node *node, struct resolver_entity *entity, struct history *history)
 {
     asm_push("; STRUCTURE PUSH");
@@ -1247,12 +1212,28 @@ void codegen_generate_assignment_expression_value_part(struct resolver_result *r
     asm_push("mov [ebx], eax");
     register_unset_flag(REGISTER_EAX_IS_USED);
 }
-
+void codegen_generate_entity_access_array_bracket_pointer(struct resolver_result *result, struct resolver_entity *entity)
+{
+    struct history history = {};
+    // We must first access the pointer from the last entity
+    asm_push("mov ebx, [ebx]");
+    // Now we have accessed the pointer we may add on the offset
+    codegen_generate_expressionable(entity->array.array_index_node, history_begin(&history, 0));
+     asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    asm_push("add ebx, eax");
+    
+}
 void codegen_generate_entity_access_array_bracket(struct resolver_result *result, struct resolver_entity *entity)
 {
     struct history history = {};
     // We have an array bracket that needs to be computed at runtime..
+    if (entity->flags & RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY_ENTITY)
+    {
+        codegen_generate_entity_access_array_bracket_pointer(result, entity);
+        return;
+    }
 
+    // Normal array access
     codegen_generate_expressionable(entity->array.array_index_node, history_begin(&history, 0));
     asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 

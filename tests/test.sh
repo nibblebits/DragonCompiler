@@ -518,6 +518,14 @@ else
     echo -e "Advanced access test passed"
 fi
 
+echo -e "Structure pointer returned from function then accessed test"
+./build/structure_pointer_ret_func
+if [ $? -ne 75 ]; then
+    echo -e "Structure pointer returned from function then accessed test failed"
+    res_code=1
+else
+    echo -e "Structure pointer returned from function then accessed test passed"
+fi
 
 echo -e "All tests finished"
 exit $res_code

@@ -1273,6 +1273,13 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
     // Call the function, address is in EBX
     asm_push("call ebx");
 
+    struct resolver_entity* next_entity = resolver_result_entity_next(entity);
+    if (next_entity && datatype_is_struct_or_union(&entity->dtype))
+    {
+        // We have a next entity and the return type is a structure or union
+        // therefore we should move the return value EAX Into EBX 
+        asm_push("mov ebx, eax");
+    }
     codegen_stack_add(entity->func_call_data.stack_size);
 }
 void codegen_generate_entity_access_for_entity(struct resolver_result *result, struct resolver_entity *entity)
@@ -1677,25 +1684,8 @@ void codegen_generate_function_call(struct node *node, struct resolver_entity *e
     // Now to restore the stack
     codegen_stack_add(entity->func_call_data.stack_size);
 
-    register_unset_flag(REGISTER_EAX_IS_USED);
 }
 
-void codegen_generate_for_entity(struct node *node, struct resolver_entity *entity, struct history *history)
-{
-    switch (entity->type)
-    {
-    case RESOLVER_ENTITY_TYPE_VARIABLE:
-        codegen_generate_variable_access(node, entity, history);
-        break;
-
-    case RESOLVER_ENTITY_TYPE_FUNCTION_CALL:
-        codegen_generate_function_call(node, entity, history);
-        break;
-
-    default:
-        FAIL_ERR("Invalid entity to generate, check supported type");
-    }
-}
 void _codegen_generate_exp_node(struct node *node, struct history *history)
 {
     if (is_node_assignment(node))

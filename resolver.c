@@ -129,7 +129,7 @@ struct resolver_entity *resolver_result_pop(struct resolver_result *result)
 out:
     if (result->count == 0)
     {
-        // Popped the last element? Okay then remove some things
+        // Popped the last element? Okay then reRESOLVER_ENTITY_FLAG_DO_INDIRECTIONe some things
         result->first_entity_const = NULL;
         result->last_entity = NULL;
         result->entity = NULL;
@@ -313,9 +313,9 @@ struct resolver_entity *resolver_new_entity_for_var_node_no_push(struct resolver
 
     return entity;
 }
+
 struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process *process, struct node *var_node, void *private, int offset)
 {
-
     struct resolver_entity *entity = resolver_new_entity_for_var_node_no_push(process, var_node, private, offset, resolver_process_scope_current(process));
     vector_push(process->scope.current->entities, &entity);
     return entity;
@@ -355,14 +355,14 @@ struct resolver_entity *resolver_make_entity(struct resolver_process *process, s
     return entity;
 }
 
-struct resolver_entity *resolver_create_new_entity_for_function_call(struct resolver_result *result, struct resolver_process *process, void *private)
+struct resolver_entity *resolver_create_new_entity_for_function_call(struct resolver_result *result, struct resolver_process *process, struct resolver_entity* left_operand_entity, void *private)
 {
     struct resolver_entity *entity = resolver_create_new_entity(result, RESOLVER_ENTITY_TYPE_FUNCTION_CALL, private);
     if (!entity)
     {
         return NULL;
     }
-
+    entity->dtype = left_operand_entity->dtype;
     entity->func_call_data.arguments = vector_create(sizeof(struct node *));
     return entity;
 }
@@ -375,6 +375,8 @@ struct resolver_entity *resolver_register_function(struct resolver_process *proc
 
     entity->name = func_node->func.name;
     entity->node = func_node;
+    entity->dtype = func_node->func.rtype;
+    entity->scope = resolver_process_scope_current(process);
     // Functions must be on the root most scope
     vector_push(process->scope.root->entities, &entity);
     return entity;
@@ -384,19 +386,19 @@ struct resolver_entity *resolver_get_entity_in_scope_with_entity_type(struct res
 {
     // If we have a last structure entity, then they have to be asking for a variable
     // if they are not then theirs a bug here.
-    assert(!result->last_struct_union_entity || entity_type == -1 || entity_type == RESOLVER_ENTITY_TYPE_VARIABLE);
+    assert(!result || !result->last_struct_union_entity || entity_type == -1 || entity_type == RESOLVER_ENTITY_TYPE_VARIABLE);
 
     // If we have a last struct entity set then we must be accessing a structure
     // i.e a.b.c therefore we can assume a variable type since structures can only hold variables
     // and other structures that are named with variables.
-    if (result->last_struct_union_entity && node_is_struct_or_union_variable(result->last_struct_union_entity->node))
+    if (result && result->last_struct_union_entity)
     {
         struct resolver_scope *scope = result->last_struct_union_entity->scope;
         struct node *out_node = NULL;
-        struct datatype *node_var_datatype = &variable_node(result->last_struct_union_entity->node)->var.type;
+        struct datatype *node_var_datatype = &result->last_struct_union_entity->dtype;
 
         // Unions offset will always be zero ;)
-        int offset = struct_offset(resolver_compiler(resolver), node_var_type_str(variable_node(result->last_struct_union_entity->node)), entity_name, &out_node, 0, 0);
+        int offset = struct_offset(resolver_compiler(resolver), node_var_datatype->type_str, entity_name, &out_node, 0, 0);
         if (node_var_datatype->type == DATA_TYPE_UNION)
         {
             // Union offset will be zero.
@@ -489,11 +491,17 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
     struct resolver_entity *result_entity = NULL;
 
     resolver_follow_part(resolver, node->exp.left, result);
+    struct resolver_entity* left_entity = resolver_result_peek(result);
     struct resolver_entity_rule rule = {};
     if (is_access_node_with_op(node, "->"))
     {
         rule.left.flags = RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY;
-        rule.right.flags = RESOLVER_ENTITY_FLAG_DO_INDIRECTION;
+
+        // Function calls return addresses of structures, no need for indirection
+        if (left_entity->type != RESOLVER_ENTITY_TYPE_FUNCTION_CALL)
+        {
+            rule.right.flags = RESOLVER_ENTITY_FLAG_DO_INDIRECTION;
+        }
     }
     resolver_new_entity_for_rule(resolver, result, &rule);
     resolver_follow_part(resolver, node->exp.right, result);
@@ -585,10 +593,12 @@ static struct resolver_entity *resolver_follow_function_call(struct resolver_pro
     // Ok this is a function call, left operand = function name or function pointer, right operand = arguments
     resolver_follow_part(resolver, node->exp.left, result);
 
+    struct resolver_entity* left_entity = resolver_result_peek(result);
+
     // As this is a function all we must create a new function call entity, for this given function call
-    struct resolver_entity *func_call_entity = resolver_create_new_entity_for_function_call(result, resolver, NULL);
+    struct resolver_entity *func_call_entity = resolver_create_new_entity_for_function_call(result, resolver, left_entity, NULL);
     assert(func_call_entity);
-    func_call_entity->flags |= RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY;
+    func_call_entity->flags |= RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY | RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY;
 
     // Let's build the function call arguments
     resolver_build_function_call_arguments(resolver, node->exp.right, func_call_entity, &func_call_entity->func_call_data.stack_size);
@@ -644,7 +654,8 @@ struct resolver_entity *resolver_follow_for_name(struct resolver_process *resolv
         result->identifier = entity;
     }
 
-    if (entity->type == RESOLVER_ENTITY_TYPE_VARIABLE && datatype_is_struct_or_union(&entity->var_data.dtype))
+    if (entity->type == RESOLVER_ENTITY_TYPE_VARIABLE && datatype_is_struct_or_union(&entity->var_data.dtype) ||
+        (entity->type == RESOLVER_ENTITY_TYPE_FUNCTION && datatype_is_struct_or_union(&entity->dtype)))
     {
         result->last_struct_union_entity = entity;
     }

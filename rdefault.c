@@ -87,6 +87,9 @@ void *resolver_default_make_private(struct resolver_entity *entity, struct node 
 void resolver_default_set_result_base(struct resolver_result *result, struct resolver_entity *base_entity)
 {
     struct resolver_default_entity_data *data = resolver_default_entity_private(base_entity);
+    if (!data)
+        return;
+
     strncpy(result->base.base_address, data->base_address, sizeof(result->base.base_address));
     strncpy(result->base.address, data->address, sizeof(result->base.address));
     result->base.offset = data->offset;

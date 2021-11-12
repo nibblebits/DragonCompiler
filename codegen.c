@@ -1219,9 +1219,8 @@ void codegen_generate_entity_access_array_bracket_pointer(struct resolver_result
     asm_push("mov ebx, [ebx]");
     // Now we have accessed the pointer we may add on the offset
     codegen_generate_expressionable(entity->array.array_index_node, history_begin(&history, 0));
-     asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     asm_push("add ebx, eax");
-    
 }
 void codegen_generate_entity_access_array_bracket(struct resolver_result *result, struct resolver_entity *entity)
 {
@@ -1273,15 +1272,27 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
     // Call the function, address is in EBX
     asm_push("call ebx");
 
-    struct resolver_entity* next_entity = resolver_result_entity_next(entity);
+    struct resolver_entity *next_entity = resolver_result_entity_next(entity);
     if (next_entity && datatype_is_struct_or_union(&entity->dtype))
     {
         // We have a next entity and the return type is a structure or union
-        // therefore we should move the return value EAX Into EBX 
+        // therefore we should move the return value EAX Into EBX
         asm_push("mov ebx, eax");
     }
     codegen_stack_add(entity->func_call_data.stack_size);
 }
+
+void codegen_generate_entity_access(struct resolver_result *result, struct resolver_entity *root_assignment_entity, struct node *top_most_node, struct history *history);
+
+void codegen_generate_entity_access_for_unsupported(struct resolver_result *result, struct resolver_entity *entity)
+{
+    struct history history = {};
+    history.flags = EXPRESSION_GET_ADDRESS;
+    codegen_generate_expressionable(entity->node, &history);
+    // We have now resolved the unsupported entity.
+    asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+}
+
 void codegen_generate_entity_access_for_entity(struct resolver_result *result, struct resolver_entity *entity)
 {
     switch (entity->type)
@@ -1298,6 +1309,11 @@ void codegen_generate_entity_access_for_entity(struct resolver_result *result, s
     case RESOLVER_ENTITY_TYPE_FUNCTION_CALL:
         codegen_generate_entity_access_for_function_call(result, entity);
         break;
+
+    case RESOLVER_ENTITY_TYPE_UNSUPPORTED:
+        // Resolver didnt support this node, we need to break the problem down further.
+        codegen_generate_entity_access_for_unsupported(result, entity);
+        break;
     default:
         compiler_error(current_process, "COMPILER BUG...");
     }
@@ -1313,9 +1329,14 @@ void codegen_apply_unary_access(int amount)
 
 void codegen_generate_entity_access(struct resolver_result *result, struct resolver_entity *root_assignment_entity, struct node *top_most_node, struct history *history)
 {
-    asm_push("lea ebx, [%s]", result->base.address);
-    struct resolver_entity *current = resolver_result_entity_next(root_assignment_entity);
+    struct resolver_entity *current = root_assignment_entity;
     struct resolver_entity *last_entity = root_assignment_entity;
+    if (root_assignment_entity->type != RESOLVER_ENTITY_TYPE_UNSUPPORTED)
+    {
+        asm_push("lea ebx, [%s]", result->base.address);
+        current = resolver_result_entity_next(root_assignment_entity);
+    }
+
     while (current)
     {
         last_entity = current;
@@ -1628,7 +1649,6 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     }
     // Caller always expects a response from us..
     asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
-
 }
 
 bool codegen_should_push_function_call_argument(struct response *res)
@@ -1683,7 +1703,6 @@ void codegen_generate_function_call(struct node *node, struct resolver_entity *e
 
     // Now to restore the stack
     codegen_stack_add(entity->func_call_data.stack_size);
-
 }
 
 void _codegen_generate_exp_node(struct node *node, struct history *history)
@@ -1783,7 +1802,7 @@ void codegen_generate_unary_indirection(struct node *node, struct history *histo
     {
         depth++;
     }
-    
+
     for (int i = 0; i < depth; i++)
     {
         asm_push("mov %s, [%s]", reg_to_use, reg_to_use);
@@ -1853,7 +1872,6 @@ void codegen_generate_string(struct node *node, struct history *history)
     const char *label = codegen_register_string(node->sval);
     codegen_gen_mov_for_value("eax", label, "dword", history->flags);
     asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
-
 }
 
 void codegen_generate_tenary(struct node *node, struct history *history)

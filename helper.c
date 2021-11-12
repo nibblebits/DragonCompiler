@@ -306,6 +306,16 @@ struct node *struct_for_access(struct resolver_process *process, struct node *no
     memset(details_out, 0, sizeof(struct struct_access_details));
     return _struct_for_access(process, node, type_str, flags, details_out);
 }
+
+struct datatype* datatype_for_final_node(struct node* node)
+{
+    switch(node->type)
+    {
+        case NODE_TYPE_IDENTIFIER:
+        
+        break;
+    }
+}
 bool is_access_node(struct node *node)
 {
     return node->type == NODE_TYPE_EXPRESSION && is_access_operator(node->exp.op);

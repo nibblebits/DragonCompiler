@@ -212,13 +212,26 @@ struct resolver_entity *resolver_create_new_entity(struct resolver_result *resul
     if (!entity)
         return NULL;
 
-    if (result)
-    {
-        struct resolver_entity *last_entity = resolver_result_peek(result);
-    }
     entity->type = type;
     entity->private = private;
 
+    return entity;
+}
+
+
+struct resolver_entity* resolver_create_new_entity_for_unsupported_node(struct resolver_result* result, struct node* node, struct resolver_entity* lower_entity)
+{
+    struct resolver_entity* entity = resolver_create_new_entity(result, RESOLVER_ENTITY_TYPE_UNSUPPORTED, NULL);
+    if (!entity)
+        return NULL;
+
+    entity->node = node;
+    entity->dtype = lower_entity->dtype;
+    entity->array = lower_entity->array;
+    entity->func_call_data = lower_entity->func_call_data;
+
+    // We are unsupported, we cannot merge.
+    entity->flags = RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY | RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY;
     return entity;
 }
 
@@ -684,14 +697,29 @@ static struct resolver_entity *resolver_follow_exp_parenthesis(struct resolver_p
     return resolver_follow_part_return_entity(resolver, node->parenthesis.exp, result);
 }
 
-static struct resolver_entity *resolver_follow_unary_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+struct resolver_entity* resolver_follow_unsupported_unary_node(struct resolver_process* resolver, struct node* node, struct resolver_result* result)
 {
-    struct resolver_entity *entity = resolver_follow_part_return_entity(resolver, node->unary.operand, result);
-    if (entity)
+    return resolver_follow_part_return_entity(resolver, node->unary.operand, result);
+}
+static struct resolver_entity* resolver_follow_unsupported_node(struct resolver_process* resovler, struct node* node, struct resolver_result* result)
+{
+    // We still need to know the type of this unsupported node so we should continue to follow it
+    switch(node->type)
     {
-        entity->last_resolve.unary = &node->unary;
+        case NODE_TYPE_UNARY:
+            resolver_follow_unsupported_unary_node(resovler, node, result);
+        break;
+
+        default:
+            FAIL_ERR("Unable to follow unsupported node, we don't acknowledge it.");
     }
-    return entity;
+
+    struct resolver_entity* lower_entity = resolver_result_pop(result);
+    struct resolver_entity* unsupported_entity = resolver_create_new_entity_for_unsupported_node(result, node, lower_entity);
+    assert(unsupported_entity);
+
+    // Push the unsupported entity to the result stack
+    resolver_result_entity_push(result, unsupported_entity);
 }
 
 static struct resolver_entity *resolver_follow_part_return_entity(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
@@ -718,9 +746,12 @@ static struct resolver_entity *resolver_follow_part_return_entity(struct resolve
         entity = resolver_follow_exp_parenthesis(resolver, node, result);
         break;
 
-    case NODE_TYPE_UNARY:
-        entity = resolver_follow_unary_exp(resolver, node, result);
-        break;
+        default:
+        {
+            // Couldn't do anything? Then create a special entity that requires more computation
+            // later on
+            entity = resolver_follow_unsupported_node(resolver, node, result);
+        }
     }
 
     if (entity)

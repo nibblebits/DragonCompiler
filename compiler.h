@@ -606,7 +606,9 @@ enum
 
     // General types are types that specify basic information such as datatype, offset
     // but with no name information at all.
-    RESOLVER_ENTITY_TYPE_GENERAL
+    RESOLVER_ENTITY_TYPE_GENERAL,
+    RESOLVER_ENTITY_TYPE_UNSUPPORTED
+    
 };
 
 struct resolver_entity
@@ -687,8 +689,6 @@ struct resolver_entity
     // Information regarding the last resolve of this entity
     struct entity_last_resolve
     {
-        // The unary that this entity is inside of. NULL if not existant
-        struct unary *unary;
 
         // The node that referenced this entity leading to a successful resovle of this entity.
         // I.e we are "int a;" and the referencing node was the identifier "a" i.e int b = a; "a" references int a

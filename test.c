@@ -11,14 +11,12 @@ struct dog
 };
 
 struct dog d;
-struct dog* abc(int x)
-{
-    d.y = 50;
-    d.d.d = 75;
-    return &d;
-}
-
+struct dog* _ptr;
+struct dog** sptr;
 int main()
 {
-    return abc(5)->d.d;
+    d.y = 50;
+    _ptr = &d;
+    sptr = &_ptr;
+    return (*sptr)->y;
 }

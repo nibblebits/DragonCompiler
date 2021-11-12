@@ -918,7 +918,7 @@ void parse_for_indirection_unary()
 
     // Now lets parse the expression after this unary operator
     struct history history;
-    parse_expressionable_single(history_begin(&history, 0));
+    parse_expressionable(history_begin(&history, EXPRESSION_IS_UNARY));
 
     struct node *unary_operand_node = node_pop();
     make_unary_node("*", unary_operand_node);
@@ -933,7 +933,7 @@ void parse_for_normal_unary()
     const char *unary_op = token_next()->sval;
     // Now lets parse the expression after this unary operator
     struct history history;
-    parse_expressionable_single(history_begin(&history, 0));
+    parse_expressionable(history_begin(&history, EXPRESSION_IS_UNARY));
     struct node *unary_operand_node = node_pop();
     make_unary_node(unary_op, unary_operand_node);
 }
@@ -1575,33 +1575,38 @@ void parse_for_comma(struct history *history)
     make_exp_node(node_left, node_right, ",");
 }
 
-void parse_exp(struct history *history)
+int parse_exp(struct history *history)
 {
+    // Unary expression may only nest with particular operators.
+    if (history->flags & EXPRESSION_IS_UNARY && 
+        (!is_access_operator(token_peek_next()->sval) && 
+        !is_array_operator(token_peek_next()->sval)))
+    {
+        return -1;
+    }
+
     if (S_EQ(token_peek_next()->sval, ","))
     {
         parse_for_comma(history);
-        return;
     }
-
-    if (S_EQ(token_peek_next()->sval, "("))
+    else if (S_EQ(token_peek_next()->sval, "("))
     {
         parse_for_parentheses(history);
-        return;
     }
-
-    if (S_EQ(token_peek_next()->sval, "["))
+    else if (S_EQ(token_peek_next()->sval, "["))
     {
         parse_for_array(history);
-        return;
     }
-
-    if (S_EQ(token_peek_next()->sval, "?"))
+    else if (S_EQ(token_peek_next()->sval, "?"))
     {
         parse_for_tenary(history);
-        return;
+    }
+    else
+    {
+        parse_exp_normal(history);
     }
 
-    parse_exp_normal(history);
+    return 0;
 }
 
 void parse_symbol()
@@ -1637,8 +1642,7 @@ int parse_expressionable_single(struct history *history)
         res = 0;
         break;
     case TOKEN_TYPE_OPERATOR:
-        parse_exp(history);
-        res = 0;
+        res = parse_exp(history);
         break;
 
     case TOKEN_TYPE_KEYWORD:

@@ -6,7 +6,7 @@ struct wolf
 struct dog
 {
     int x;
-    int y;
+    int* y;
     struct wolf d;
 };
 
@@ -15,8 +15,7 @@ struct dog* _ptr;
 struct dog** sptr;
 int main()
 {
-    d.y = 50;
-    _ptr = &d;
-    sptr = &_ptr;
-    return (*sptr)->y;
+    int yy;
+    yy = &d.y;
+    return yy;
 }

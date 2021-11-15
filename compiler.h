@@ -592,7 +592,10 @@ enum
     // Signifies we are accessing a pointer and indirection at runtime must exist.
     RESOLVER_ENTITY_FLAG_DO_INDIRECTION = 0b00001000,
     RESOLVER_ENTITY_FLAG_JUST_USE_OFFSET = 0b00010000,
-    RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY_ENTITY = 0b00100000
+    RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY_ENTITY = 0b00100000,
+    // This flag is set if the datatype of an entity
+    // was changed due to a cast of some kind.
+    RESOLVER_ENTITY_FLAG_WAS_CASTED = 0b01000000
 };
 
 enum
@@ -608,7 +611,7 @@ enum
     // General types are types that specify basic information such as datatype, offset
     // but with no name information at all.
     RESOLVER_ENTITY_TYPE_GENERAL,
-    RESOLVER_ENTITY_TYPE_UNSUPPORTED
+    RESOLVER_ENTITY_TYPE_UNSUPPORTED,
     
 };
 
@@ -1073,7 +1076,8 @@ enum
     NODE_TYPE_UNARY,
     NODE_TYPE_STRUCT,
     NODE_TYPE_UNION,
-    NODE_TYPE_BRACKET // Array brackets i.e [50][20] Two node brackets.
+    NODE_TYPE_BRACKET, // Array brackets i.e [50][20] Two node brackets.
+    NODE_TYPE_CAST
 };
 
 enum
@@ -1424,6 +1428,13 @@ struct node
             // List of variable node pointers for this variable list.
             struct vector *list;
         } var_list;
+
+        struct cast
+        {
+            // Datatype of the cast.
+            struct datatype dtype;
+            struct node* operand;
+        } cast;
     };
 
     // Literal values for nodes of generic types. I.e numbers and identifiers
@@ -1746,6 +1757,8 @@ void make_else_node(struct node *body_node);
 void make_union_node(const char *struct_name, struct node *body_node);
 void make_struct_node(const char *struct_name, struct node *body_node);
 void make_unary_node(const char *unary_op, struct node *operand_node);
+void make_cast_node(struct datatype* dtype, struct node* operand_node);
+
 void make_return_node(struct node *exp_node);
 void make_function_node(struct datatype *ret_type, const char *name, struct vector *arguments, struct node *body);
 void make_body_node(struct vector *body_vec, size_t size, bool padded, struct node *largest_var_node);
@@ -1885,6 +1898,9 @@ struct node *variable_struct_or_union_largest_variable_node(struct node *var_nod
  */
 struct node *body_largest_variable_node(struct node *body_node);
 
+bool unary_operand_compatiable(struct token* token);
+bool is_parentheses(const char* s);
+
 /**
  * Array
  * 
@@ -1906,6 +1922,8 @@ size_t variable_size_for_list(struct node *var_list_node);
 
 size_t datatype_size(struct datatype *datatype);
 size_t datatype_element_size(struct datatype *datatype);
+size_t datatype_size_no_ptr(struct datatype *datatype);
+
 
 /**
  * Gets the given return datatype for the provided node.

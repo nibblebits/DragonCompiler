@@ -697,6 +697,21 @@ static struct resolver_entity *resolver_follow_exp_parenthesis(struct resolver_p
     return resolver_follow_part_return_entity(resolver, node->parenthesis.exp, result);
 }
 
+struct resolver_entity* resolver_follow_cast(struct resolver_process* resolver, struct node* node, struct resolver_result* result)
+{
+    resolver_follow_part(resolver, node->cast.operand, result);
+    struct resolver_entity* operand_entity = resolver_result_pop(result);
+    if (!operand_entity)
+    {
+        // Not something we can handle, lets go...
+        return NULL;
+    }
+
+    operand_entity->flags |= RESOLVER_ENTITY_FLAG_WAS_CASTED;
+    operand_entity->dtype = node->cast.dtype;
+    resolver_result_entity_push(result, operand_entity);
+}
+
 struct resolver_entity* resolver_follow_unsupported_unary_node(struct resolver_process* resolver, struct node* node, struct resolver_result* result)
 {
     return resolver_follow_part_return_entity(resolver, node->unary.operand, result);
@@ -711,7 +726,7 @@ static struct resolver_entity* resolver_follow_unsupported_node(struct resolver_
         break;
 
         default:
-            FAIL_ERR("Unable to follow unsupported node, we don't acknowledge it.");
+            return NULL;
     }
 
     struct resolver_entity* lower_entity = resolver_result_pop(result);
@@ -746,6 +761,9 @@ static struct resolver_entity *resolver_follow_part_return_entity(struct resolve
         entity = resolver_follow_exp_parenthesis(resolver, node, result);
         break;
 
+    case NODE_TYPE_CAST:
+        entity = resolver_follow_cast(resolver, node, result);
+        break;
         default:
         {
             // Couldn't do anything? Then create a special entity that requires more computation

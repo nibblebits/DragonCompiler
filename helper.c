@@ -307,12 +307,12 @@ struct node *struct_for_access(struct resolver_process *process, struct node *no
     return _struct_for_access(process, node, type_str, flags, details_out);
 }
 
-struct datatype* datatype_for_final_node(struct node* node)
+struct datatype *datatype_for_final_node(struct node *node)
 {
-    switch(node->type)
+    switch (node->type)
     {
-        case NODE_TYPE_IDENTIFIER:
-        
+    case NODE_TYPE_IDENTIFIER:
+
         break;
     }
 }
@@ -651,6 +651,13 @@ bool variable_node_is_primative(struct node *node)
     return datatype_is_primitive(node->var.type.type_str);
 }
 
+size_t datatype_size_no_ptr(struct datatype *datatype)
+{
+    if (datatype->flags & DATATYPE_FLAG_IS_ARRAY)
+        return datatype->array.size;
+    return datatype->size;
+}
+
 size_t datatype_size(struct datatype *datatype)
 {
     if (datatype->flags & DATATYPE_FLAG_IS_POINTER)
@@ -873,9 +880,21 @@ int array_offset(struct datatype *dtype, int index, int index_value)
     return array_multiplier(dtype, index, index_value) * datatype_element_size(dtype);
 }
 
-size_t array_brackets_count(struct datatype* dtype)
+size_t array_brackets_count(struct datatype *dtype)
 {
     return vector_count(dtype->array.brackets->n_brackets);
+}
+
+bool is_parentheses(const char *s)
+{
+    return (S_EQ(s, "("));
+}
+
+bool unary_operand_compatiable(struct token *token)
+{
+    return is_access_operator(token->sval) ||
+           is_array_operator(token->sval) ||
+           is_parentheses(token->sval);
 }
 
 bool char_is_delim(char c, const char *delims)

@@ -214,6 +214,11 @@ void make_unary_node(const char *unary_op, struct node *operand_node)
     node_create(&(struct node){NODE_TYPE_UNARY, .unary.op = unary_op, .unary.operand = operand_node});
 }
 
+void make_cast_node(struct datatype* dtype, struct node* operand_node)
+{
+    node_create(&(struct node){NODE_TYPE_CAST, .cast.dtype=*dtype, .cast.operand=operand_node});
+}
+
 void make_return_node(struct node *exp_node)
 {
     node_create(&(struct node){NODE_TYPE_STATEMENT_RETURN, .stmt.ret.exp = exp_node});

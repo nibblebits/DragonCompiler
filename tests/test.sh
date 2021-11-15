@@ -527,5 +527,14 @@ else
     echo -e "Structure pointer returned from function then accessed test passed"
 fi
 
+echo -e "Structure pointer casted to another structure test"
+./build/struct_casted
+if [ $? -ne 50 ]; then
+    echo -e "Structure pointer casted to another structure test failed"
+    res_code=1
+else
+    echo -e "Structure pointer casted to another structure test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

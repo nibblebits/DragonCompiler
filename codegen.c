@@ -662,6 +662,14 @@ static struct node *codegen_node_next()
     return vector_peek_ptr(current_process->node_tree_vec);
 }
 
+void codegen_reduce_register(const char *reg, size_t size)
+{
+    if (size != DATA_SIZE_DWORD)
+    {
+        asm_push("movsx eax, %s", codegen_sub_register("eax", size));
+    }
+}
+
 bool codegen_write_string_char_escaped(char c)
 {
     const char *c_out = NULL;
@@ -1705,6 +1713,21 @@ void codegen_generate_function_call(struct node *node, struct resolver_entity *e
     codegen_stack_add(entity->func_call_data.stack_size);
 }
 
+bool codegen_resolve_node(struct node *node, struct history *history)
+{
+    struct resolver_result *result = resolver_follow(current_process->resolver, node);
+    if (resolver_result_ok(result))
+    {
+        struct resolver_entity *root_assignment_entity = resolver_result_entity_root(result);
+        codegen_generate_entity_access(result, root_assignment_entity, node, history);
+
+        codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = result->last_entity}));
+        return true;
+    }
+
+    return false;
+}
+
 void _codegen_generate_exp_node(struct node *node, struct history *history)
 {
     if (is_node_assignment(node))
@@ -1714,12 +1737,8 @@ void _codegen_generate_exp_node(struct node *node, struct history *history)
     }
 
     // Can we locate a variable for the given expression?
-    struct resolver_result *result = resolver_follow(current_process->resolver, node);
-    if (resolver_result_ok(result))
+    if (codegen_resolve_node(node, history))
     {
-        struct resolver_entity *root_assignment_entity = resolver_result_entity_root(result);
-        codegen_generate_entity_access(result, root_assignment_entity, node, history);
-
         return;
     }
 
@@ -1790,12 +1809,19 @@ void codegen_generate_unary_indirection(struct node *node, struct history *histo
 {
     const char *reg_to_use = "ebx";
     int flags = history->flags;
+
+    codegen_response_expect();
+
     // Generate the operand while passing the indirection flag
     codegen_generate_expressionable(node->unary.operand, history_down(history, flags | EXPRESSION_GET_ADDRESS | EXPRESSION_INDIRECTION));
+    struct response *res = codegen_response_pull();
+    assert(codegen_response_has_entity(res));
+
     // Lets pop off the value
     asm_push_ins_pop(reg_to_use, STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
     int depth = node->unary.indirection.depth;
+    int real_depth = depth;
     // If we want the value not the address then we must depth+1 because
     // expressionable above will give us the address not the value
     if (!(history->flags & EXPRESSION_GET_ADDRESS))
@@ -1808,7 +1834,18 @@ void codegen_generate_unary_indirection(struct node *node, struct history *histo
         asm_push("mov %s, [%s]", reg_to_use, reg_to_use);
     }
 
+    // Do we need to truncate this value?
+    if (real_depth == res->data.resolved_entity->dtype.pointer_depth)
+    {
+        // Seems like it as the depth equals total pointer depth
+        // so in this senario we will be pointing directly on the datatype size..
+        codegen_reduce_register(reg_to_use, datatype_size_no_ptr(&res->data.resolved_entity->dtype));
+    }
+
     asm_push_ins_push(reg_to_use, STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    // Acknowledge it again incase someone else is waiting for a response..
+    codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = res->data.resolved_entity}));
+
 }
 
 void codegen_generate_unary_address(struct node *node, struct history *history)
@@ -1871,6 +1908,21 @@ void codegen_generate_string(struct node *node, struct history *history)
 {
     const char *label = codegen_register_string(node->sval);
     codegen_gen_mov_for_value("eax", label, "dword", history->flags);
+    asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+}
+
+void codegen_generate_cast(struct node *node, struct history *history)
+{
+    // Can we resolve the current node ?
+    if (!codegen_resolve_node(node, history))
+    {
+        // Nope.. lets generate an expressionable on the operand.
+        codegen_generate_expressionable(node->cast.operand, history);
+    }
+
+    // We must reduce EAX
+    asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    codegen_reduce_register("eax", datatype_size(&node->cast.dtype));
     asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 }
 
@@ -1938,6 +1990,10 @@ void codegen_generate_expressionable(struct node *node, struct history *history)
 
     case NODE_TYPE_TENARY:
         codegen_generate_tenary(node, history);
+        break;
+
+    case NODE_TYPE_CAST:
+        codegen_generate_cast(node, history);
         break;
     }
 }

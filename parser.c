@@ -117,6 +117,10 @@ int parse_next();
 void parse_statement(struct history *history);
 void parse_expressionable_root(struct history *history);
 void parse_expressionable_for_op(struct history *history, const char *op);
+void parse_variable_function_or_struct_union(struct history *history);
+void parse_keyword_return(struct history *history);
+void parse_datatype_type(struct datatype *datatype);
+void parse_datatype(struct datatype *datatype);
 
 static struct history *history_down(struct history *history, int flags)
 {
@@ -928,6 +932,20 @@ void parse_for_indirection_unary()
     node_push(unary_node);
 }
 
+void parse_for_cast()
+{
+    // ( is parsed by the caller.
+    struct datatype dtype;
+    parse_datatype(&dtype);
+    expect_sym(')');
+
+    struct history history;
+    parse_expressionable(&history);
+
+    struct node* operand_node = node_pop();
+    make_cast_node(&dtype, operand_node);
+}
+
 void parse_for_normal_unary()
 {
     const char *unary_op = token_next()->sval;
@@ -1115,10 +1133,6 @@ void parse_struct_or_union(struct datatype *dtype)
     };
 }
 
-void parse_variable_function_or_struct_union(struct history *history);
-void parse_keyword_return(struct history *history);
-void parse_datatype_type(struct datatype *datatype);
-void parse_datatype(struct datatype *datatype);
 
 void parse_identifier(struct history *history)
 {
@@ -1579,8 +1593,7 @@ int parse_exp(struct history *history)
 {
     // Unary expression may only nest with particular operators.
     if (history->flags & EXPRESSION_IS_UNARY && 
-        (!is_access_operator(token_peek_next()->sval) && 
-        !is_array_operator(token_peek_next()->sval)))
+        !unary_operand_compatiable(token_peek_next()))
     {
         return -1;
     }
@@ -1773,12 +1786,21 @@ void parse_expressionable_for_op(struct history *history, const char *op)
 
 void parse_for_parentheses(struct history *history)
 {
-    struct node *left_node = NULL;
+    expect_op("(");
+    if (token_peek_next()->type == TOKEN_TYPE_KEYWORD)
+    {
+        // We have a cast here... I believe.
+        parse_for_cast();
+        return;
+    }
 
-    // We must check to see if we have a left node i.e "test(50+20)". Left node = test
+
+    struct node *left_node = NULL;
+    struct node *tmp_node = node_peek_or_null();
+
+   // We must check to see if we have a left node i.e "test(50+20)". Left node = test
     // If we have a left node we will have to create an expression
     // otherwise we can just create a parentheses node
-    struct node *tmp_node = node_peek_or_null();
     if (tmp_node && node_is_value_type(tmp_node))
     {
         left_node = tmp_node;
@@ -1786,7 +1808,6 @@ void parse_for_parentheses(struct history *history)
     }
 
     // We want a new history for parentheses
-    expect_op("(");
     parse_expressionable_root(history_begin(history, 0));
     expect_sym(')');
 

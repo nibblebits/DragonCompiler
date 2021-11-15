@@ -876,6 +876,8 @@ struct token
         unsigned int inum;
         unsigned long lnum;
         unsigned long long llnum;
+        float fnum;
+        double dnum;
         void *any;
     };
 

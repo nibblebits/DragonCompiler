@@ -29,7 +29,7 @@ static struct token tmp_token;
 static struct lex_process *lex_process;
 
 const char *read_number_str();
-unsigned long long read_number();
+double read_number();
 
 void error(const char *fmt, ...)
 {
@@ -118,6 +118,7 @@ bool is_keyword(const char *str)
            S_EQ(str, "char") ||
            S_EQ(str, "short") ||
            S_EQ(str, "int") ||
+           S_EQ(str, "float") ||
            S_EQ(str, "double") ||
            S_EQ(str, "long") ||
            S_EQ(str, "void") ||
@@ -270,7 +271,7 @@ static struct token *token_create(struct token *_token)
 
 static void lex_handle_escape_number(struct buffer *buf)
 {
-    long long number = read_number();
+    double number = read_number();
     if (number > 255)
     {
         error("Characters must be betwene 0-255 wide chars are not yet supported");
@@ -452,7 +453,7 @@ const char *read_number_str()
     const char *num = NULL;
     struct buffer *buffer = buffer_create();
     char c = peekc();
-    LEX_GETC_IF(buffer, c, c >= '0' && c <= '9');
+    LEX_GETC_IF(buffer, c, (c >= '0' && c <= '9') || c == '.');
 
     // Null terminator.
     buffer_write(buffer, 0x00);
@@ -460,10 +461,10 @@ const char *read_number_str()
     return buffer_ptr(buffer);
 }
 
-unsigned long long read_number()
+double read_number()
 {
     const char *s = read_number_str();
-    return atoll(s);
+    return atof(s);
 }
 
 static int lexer_number_type(char c)
@@ -480,7 +481,7 @@ static int lexer_number_type(char c)
     return number_type;
 }
 
-static struct token *token_make_number_for_value(unsigned long val)
+static struct token *token_make_number_for_value(double val)
 {
     int number_type = lexer_number_type(peekc());
     if (number_type != NUMBER_TYPE_NORMAL)
@@ -489,7 +490,7 @@ static struct token *token_make_number_for_value(unsigned long val)
         // that we need to pop off
         nextc();
     }
-    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .llnum = val, .num.type = number_type});
+    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .dnum = val, .num.type = number_type});
 }
 
 static struct token *token_make_number()

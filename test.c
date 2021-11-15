@@ -4,5 +4,5 @@ int main()
 {
     char x;
     x = 255;
-    printf("%i\n", (unsigned char) x);
+    printf("%i\n", (unsigned char)x);
 }

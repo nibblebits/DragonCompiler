@@ -666,12 +666,12 @@ void codegen_reduce_register(const char *reg, size_t size, bool is_signed)
 {
     if (size != DATA_SIZE_DWORD)
     {
-        const char* ins = "movsx";
+        const char *ins = "movsx";
         if (!is_signed)
         {
             ins = "movzx";
         }
-  
+
         asm_push("%s eax, %s", ins, codegen_sub_register("eax", size));
     }
 }
@@ -1290,14 +1290,20 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
     vector_set_peek_pointer_end(entity->func_call_data.arguments);
 
     struct node *node = vector_peek_ptr(entity->func_call_data.arguments);
+
+    // EBX must be saved for each argument incase its used
+    // therefore we will use ECX instead.
+    asm_push("mov ecx,ebx");
+
     while (node)
     {
         struct history history;
         codegen_generate_expressionable(node, history_begin(&history, 0));
         node = vector_peek_ptr(entity->func_call_data.arguments);
     }
+
     // Call the function, address is in EBX
-    asm_push("call ebx");
+    asm_push("call ecx");
 
     struct resolver_entity *next_entity = resolver_result_entity_next(entity);
     if (next_entity && datatype_is_struct_or_union(&entity->dtype))
@@ -1864,7 +1870,6 @@ void codegen_generate_unary_indirection(struct node *node, struct history *histo
     asm_push_ins_push(reg_to_use, STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     // Acknowledge it again incase someone else is waiting for a response..
     codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = res->data.resolved_entity}));
-
 }
 
 void codegen_generate_unary_address(struct node *node, struct history *history)

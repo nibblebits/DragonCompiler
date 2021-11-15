@@ -1,11 +1,12 @@
 
+int printf(const char* s, ...);
 int main()
 {
-  int x;
-  x = 20;
-  int* ptr;
-  ptr = &x;
-  *ptr = 30;
-  
-  return x;
+    short a;
+    a = 50;    
+
+    int z;
+    z = (unsigned char) 0xffff;
+    printf("%i\n", z);
+
 }

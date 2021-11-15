@@ -2,11 +2,11 @@
 int printf(const char* s, ...);
 int main()
 {
-    short a;
-    a = 50;    
 
+    int y;
+    y = 0xffffff;
     int z;
-    z = (unsigned char) 0xffff;
+    z =  (char)255;
     printf("%i\n", z);
 
 }

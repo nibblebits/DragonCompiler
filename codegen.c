@@ -662,11 +662,17 @@ static struct node *codegen_node_next()
     return vector_peek_ptr(current_process->node_tree_vec);
 }
 
-void codegen_reduce_register(const char *reg, size_t size)
+void codegen_reduce_register(const char *reg, size_t size, bool is_signed)
 {
     if (size != DATA_SIZE_DWORD)
     {
-        asm_push("movsx eax, %s", codegen_sub_register("eax", size));
+        const char* ins = "movsx";
+        if (!is_signed)
+        {
+            ins = "movzx";
+        }
+  
+        asm_push("%s eax, %s", ins, codegen_sub_register("eax", size));
     }
 }
 
@@ -1839,7 +1845,7 @@ void codegen_generate_unary_indirection(struct node *node, struct history *histo
     {
         // Seems like it as the depth equals total pointer depth
         // so in this senario we will be pointing directly on the datatype size..
-        codegen_reduce_register(reg_to_use, datatype_size_no_ptr(&res->data.resolved_entity->dtype));
+        codegen_reduce_register(reg_to_use, datatype_size_no_ptr(&res->data.resolved_entity->dtype), res->data.resolved_entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
     }
 
     asm_push_ins_push(reg_to_use, STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
@@ -1922,7 +1928,7 @@ void codegen_generate_cast(struct node *node, struct history *history)
 
     // We must reduce EAX
     asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
-    codegen_reduce_register("eax", datatype_size(&node->cast.dtype));
+    codegen_reduce_register("eax", datatype_size(&node->cast.dtype), node->cast.dtype.flags & DATATYPE_FLAG_IS_SIGNED);
     asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 }
 

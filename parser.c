@@ -1832,6 +1832,7 @@ void parse_for_parentheses(struct history *history)
  */
 void parse_datatype_modifiers(struct datatype *datatype)
 {
+
     struct token *token = token_peek_next();
     // Datatypes can have many modifiers.
     while (token && token->type == TOKEN_TYPE_KEYWORD)
@@ -1844,6 +1845,10 @@ void parse_datatype_modifiers(struct datatype *datatype)
         if (S_EQ(token->sval, "signed"))
         {
             datatype->flags |= DATATYPE_FLAG_IS_SIGNED;
+        }
+        else if(S_EQ(token->sval, "unsigned"))
+        {
+            datatype->flags &= ~DATATYPE_FLAG_IS_SIGNED;
         }
         else if (S_EQ(token->sval, "static"))
         {
@@ -2090,6 +2095,9 @@ void parse_datatype_type(struct datatype *datatype)
 void parse_datatype(struct datatype *datatype)
 {
     memset(datatype, 0, sizeof(struct datatype));
+    // By default all variables are signed
+    datatype->flags |= DATATYPE_FLAG_IS_SIGNED;
+
     parse_datatype_modifiers(datatype);
     parse_datatype_type(datatype);
     // We can have modifiers to the right too.

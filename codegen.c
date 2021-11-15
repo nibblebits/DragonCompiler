@@ -1088,7 +1088,20 @@ static void codegen_gen_mem_access(struct node *value_node, int flags, struct re
         return;
     }
 
-    asm_push_ins_push("dword [%s]", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", codegen_entity_private(entity)->address);
+    // If the value cannot be pushed directly to the stack
+    // we must first strip it down in the EAX register then push that instead..
+    if (datatype_element_size(&entity->dtype) != DATA_SIZE_DWORD)
+    {
+        asm_push("mov eax, [%s]", codegen_entity_private(entity)->address);
+        codegen_reduce_register("eax", datatype_element_size(&entity->dtype), entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
+        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    }
+    else
+    {
+        // This can be pushed straight to the stack? i.e 4 bytes in size..
+        // Then don't waste instructions
+        asm_push_ins_push("dword [%s]", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", codegen_entity_private(entity)->address);
+    }
 }
 /**
  * For literal numbers

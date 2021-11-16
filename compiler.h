@@ -1467,6 +1467,12 @@ bool node_is_expressionable(struct node *node);
 bool node_is_expression(struct node *node, const char *op);
 
 /**
+ * Returns true if the node is valid, false if it cannot be used.
+ * Returns false if this node is NULL or this node is type NODE_TYPE_BLANK
+ */
+bool node_valid(struct node* node);
+
+/**
  * Called to issue a compiler error and terminate the compiler
  */
 void compiler_error(struct compile_process *compiler, const char *msg, ...);
@@ -1987,7 +1993,7 @@ struct resolver_result *resolver_new_result(struct resolver_process *process);
 void resolver_result_free(struct resolver_result *result);
 bool resolver_result_failed(struct resolver_result *result);
 bool resolver_result_ok(struct resolver_result *result);
-
+struct datatype* resolver_get_datatype(struct resolver_process* resolver, struct node* node);
 /**
  * Returns true if this entity has an array multiplier that must
  * be computed at runtime.
@@ -2021,18 +2027,6 @@ struct resolver_entity *resolver_result_entity_root(struct resolver_result *resu
 struct resolver_entity *resolver_result_entity_next(struct resolver_entity *entity);
 struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *custom_dtype, struct node *node, struct resolver_entity* guided_entity, struct resolver_scope *scope);
 
-/**
- * Attempts to peek through the tree at the given node and looks for a datatype
- * that can be associated with the node entity.
- * 
- * For example if you had an array and you did array[50].
- * 
- * If you passed the array node here the datatype of "array" would be returned.
- * 
- * If you call this function on a function call then the return type of the function call will be returned
- * the deepest possible type will be returned.
- */
-struct datatype *resolver_get_datatype(struct node *node);
 
 // Code gen
 

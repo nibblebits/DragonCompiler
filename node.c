@@ -235,6 +235,11 @@ void make_body_node(struct vector *body_vec, size_t size, bool padded, struct no
     node_create(&(struct node){NODE_TYPE_BODY, .body.statements = body_vec, .body.size = size, .body.padded = padded, .body.largest_var_node = largest_var_node});
 }
 
+bool node_valid(struct node* node)
+{
+    return node && node->type != NODE_TYPE_BLANK;
+}
+
 bool node_is_struct_or_union_variable(struct node *node)
 {
     if (node->type != NODE_TYPE_VARIABLE)

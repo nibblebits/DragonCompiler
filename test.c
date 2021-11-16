@@ -1,11 +1,11 @@
-int test()
+int special(int data)
 {
-    return 56 + 10;
+    int k;
+    k = data;
+    return k+5;
 }
 
 int main()
 {
-    int x;
-    x = test();
-    return x - 10;
+    return special(55);
 }

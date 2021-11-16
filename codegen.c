@@ -1138,7 +1138,7 @@ static bool is_node_array_access(struct node *node)
 void codegen_generate_structure_push(struct node *node, struct resolver_entity *entity, struct history *history)
 {
     asm_push("; STRUCTURE PUSH");
-    size_t structure_size = align_value(entity->var_data.dtype.size, DATA_SIZE_DWORD);
+    size_t structure_size = align_value(entity->dtype.size, DATA_SIZE_DWORD);
     int pushes = structure_size / DATA_SIZE_DWORD;
 
     for (int i = pushes - 1; i >= 0; i--)
@@ -1154,11 +1154,12 @@ void codegen_generate_structure_push(struct node *node, struct resolver_entity *
 
 void codegen_generate_variable_access_for_entity(struct node *node, struct resolver_entity *entity, struct history *history)
 {
-    // if (datatype_is_non_pointer_struct(&entity->var_data.dtype))
-    // {
-    //     codegen_generate_structure_push(node, entity, history);
-    //     return;
-    // }
+    if (datatype_is_non_pointer_struct(&entity->var_data.dtype) && 
+        history->flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS)
+    {
+        codegen_generate_structure_push(node, entity, history);
+        return;
+    }
 
     codegen_gen_mem_access(node, history->flags, entity);
 }
@@ -1298,7 +1299,7 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
     while (node)
     {
         struct history history;
-        codegen_generate_expressionable(node, history_begin(&history, 0));
+        codegen_generate_expressionable(node, history_begin(&history, EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS));
         node = vector_peek_ptr(entity->func_call_data.arguments);
     }
 

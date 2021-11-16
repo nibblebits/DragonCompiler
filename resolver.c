@@ -218,10 +218,9 @@ struct resolver_entity *resolver_create_new_entity(struct resolver_result *resul
     return entity;
 }
 
-
-struct resolver_entity* resolver_create_new_entity_for_unsupported_node(struct resolver_result* result, struct node* node, struct resolver_entity* lower_entity)
+struct resolver_entity *resolver_create_new_entity_for_unsupported_node(struct resolver_result *result, struct node *node, struct resolver_entity *lower_entity)
 {
-    struct resolver_entity* entity = resolver_create_new_entity(result, RESOLVER_ENTITY_TYPE_UNSUPPORTED, NULL);
+    struct resolver_entity *entity = resolver_create_new_entity(result, RESOLVER_ENTITY_TYPE_UNSUPPORTED, NULL);
     if (!entity)
         return NULL;
 
@@ -368,7 +367,7 @@ struct resolver_entity *resolver_make_entity(struct resolver_process *process, s
     return entity;
 }
 
-struct resolver_entity *resolver_create_new_entity_for_function_call(struct resolver_result *result, struct resolver_process *process, struct resolver_entity* left_operand_entity, void *private)
+struct resolver_entity *resolver_create_new_entity_for_function_call(struct resolver_result *result, struct resolver_process *process, struct resolver_entity *left_operand_entity, void *private)
 {
     struct resolver_entity *entity = resolver_create_new_entity(result, RESOLVER_ENTITY_TYPE_FUNCTION_CALL, private);
     if (!entity)
@@ -504,7 +503,7 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
     struct resolver_entity *result_entity = NULL;
 
     resolver_follow_part(resolver, node->exp.left, result);
-    struct resolver_entity* left_entity = resolver_result_peek(result);
+    struct resolver_entity *left_entity = resolver_result_peek(result);
     struct resolver_entity_rule rule = {};
     if (is_access_node_with_op(node, "->"))
     {
@@ -543,6 +542,16 @@ static void resolver_array_bracket_set_flags(struct resolver_entity *bracket_ent
         bracket_entity->flags = RESOLVER_ENTITY_FLAG_JUST_USE_OFFSET;
     }
 }
+
+struct datatype *resolver_get_datatype(struct resolver_process *resolver, struct node *node)
+{
+    struct resolver_result *result = resolver_follow(resolver, node);
+    if (!resolver_result_ok(result))
+        return NULL;
+
+    return &result->last_entity->dtype;
+}
+
 static struct resolver_entity *resolver_follow_array_bracket(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     // We must create some private data for this array bracket
@@ -592,12 +601,25 @@ static void resolver_build_function_call_arguments(struct resolver_process *reso
     {
         resolver_build_function_call_arguments(resolver, argument_node->parenthesis.exp, root_func_call_entity, total_size_out);
     }
-    else if(argument_node->type != NODE_TYPE_BLANK)
+    else if (node_valid(argument_node))
     {
         // We must now push this node to the output vector
         vector_push(root_func_call_entity->func_call_data.arguments, &argument_node);
-        // It will use 4 bytes on the stack
-        *total_size_out += DATA_SIZE_DWORD;
+        size_t stack_change = DATA_SIZE_DWORD;
+        struct datatype *dtype = resolver_get_datatype(resolver, argument_node);
+        if (dtype)
+        {
+            // It will use 4 bytes on the stack unless its a structure
+            stack_change = datatype_size(dtype);
+            if (stack_change < DATA_SIZE_DWORD)
+            {
+                stack_change = DATA_SIZE_DWORD;
+            }
+
+            // We must round if appropiate to highest word
+            stack_change = align_value(stack_change, DATA_SIZE_DWORD);
+        }
+        *total_size_out += stack_change;
     }
 }
 
@@ -606,7 +628,7 @@ static struct resolver_entity *resolver_follow_function_call(struct resolver_pro
     // Ok this is a function call, left operand = function name or function pointer, right operand = arguments
     resolver_follow_part(resolver, node->exp.left, result);
 
-    struct resolver_entity* left_entity = resolver_result_peek(result);
+    struct resolver_entity *left_entity = resolver_result_peek(result);
 
     // As this is a function all we must create a new function call entity, for this given function call
     struct resolver_entity *func_call_entity = resolver_create_new_entity_for_function_call(result, resolver, left_entity, NULL);
@@ -697,10 +719,10 @@ static struct resolver_entity *resolver_follow_exp_parenthesis(struct resolver_p
     return resolver_follow_part_return_entity(resolver, node->parenthesis.exp, result);
 }
 
-struct resolver_entity* resolver_follow_cast(struct resolver_process* resolver, struct node* node, struct resolver_result* result)
+struct resolver_entity *resolver_follow_cast(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     resolver_follow_part(resolver, node->cast.operand, result);
-    struct resolver_entity* operand_entity = resolver_result_pop(result);
+    struct resolver_entity *operand_entity = resolver_result_pop(result);
     if (!operand_entity)
     {
         // Not something we can handle, lets go...
@@ -712,25 +734,25 @@ struct resolver_entity* resolver_follow_cast(struct resolver_process* resolver, 
     resolver_result_entity_push(result, operand_entity);
 }
 
-struct resolver_entity* resolver_follow_unsupported_unary_node(struct resolver_process* resolver, struct node* node, struct resolver_result* result)
+struct resolver_entity *resolver_follow_unsupported_unary_node(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     return resolver_follow_part_return_entity(resolver, node->unary.operand, result);
 }
-static struct resolver_entity* resolver_follow_unsupported_node(struct resolver_process* resovler, struct node* node, struct resolver_result* result)
+static struct resolver_entity *resolver_follow_unsupported_node(struct resolver_process *resovler, struct node *node, struct resolver_result *result)
 {
     // We still need to know the type of this unsupported node so we should continue to follow it
-    switch(node->type)
+    switch (node->type)
     {
-        case NODE_TYPE_UNARY:
-            resolver_follow_unsupported_unary_node(resovler, node, result);
+    case NODE_TYPE_UNARY:
+        resolver_follow_unsupported_unary_node(resovler, node, result);
         break;
 
-        default:
-            return NULL;
+    default:
+        return NULL;
     }
 
-    struct resolver_entity* lower_entity = resolver_result_pop(result);
-    struct resolver_entity* unsupported_entity = resolver_create_new_entity_for_unsupported_node(result, node, lower_entity);
+    struct resolver_entity *lower_entity = resolver_result_pop(result);
+    struct resolver_entity *unsupported_entity = resolver_create_new_entity_for_unsupported_node(result, node, lower_entity);
     assert(unsupported_entity);
 
     // Push the unsupported entity to the result stack
@@ -764,12 +786,12 @@ static struct resolver_entity *resolver_follow_part_return_entity(struct resolve
     case NODE_TYPE_CAST:
         entity = resolver_follow_cast(resolver, node, result);
         break;
-        default:
-        {
-            // Couldn't do anything? Then create a special entity that requires more computation
-            // later on
-            entity = resolver_follow_unsupported_node(resolver, node, result);
-        }
+    default:
+    {
+        // Couldn't do anything? Then create a special entity that requires more computation
+        // later on
+        entity = resolver_follow_unsupported_node(resolver, node, result);
+    }
     }
 
     if (entity)
@@ -934,25 +956,4 @@ struct resolver_result *resolver_follow(struct resolver_process *resolver, struc
     resolver_merge_compile_times(resolver, result);
     resolver_finalize_result(resolver, result);
     return result;
-}
-
-/**
- * Attempts to peek through the tree at the given node and looks for a datatype
- * that can be associated with the node entity.
- * 
- * For example if you had an array and you did array[50].
- * 
- * If you passed the array node here the datatype of "array" would be returned.
- * 
- * If you call this function on a function call then the return type of the function call will be returned
- * the deepest possible type will be returned.
- */
-struct datatype *resolver_get_datatype(struct node *node)
-{
-    switch (node->type)
-    {
-    case NODE_TYPE_IDENTIFIER:
-
-        break;
-    }
 }

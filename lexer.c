@@ -29,7 +29,7 @@ static struct token tmp_token;
 static struct lex_process *lex_process;
 
 const char *read_number_str();
-double read_number();
+unsigned long long read_number();
 
 void error(const char *fmt, ...)
 {
@@ -271,7 +271,7 @@ static struct token *token_create(struct token *_token)
 
 static void lex_handle_escape_number(struct buffer *buf)
 {
-    double number = read_number();
+    long long number = read_number();
     if (number > 255)
     {
         error("Characters must be betwene 0-255 wide chars are not yet supported");
@@ -461,10 +461,10 @@ const char *read_number_str()
     return buffer_ptr(buffer);
 }
 
-double read_number()
+unsigned long long read_number()
 {
     const char *s = read_number_str();
-    return atof(s);
+    return atoll(s);
 }
 
 static int lexer_number_type(char c)
@@ -481,7 +481,7 @@ static int lexer_number_type(char c)
     return number_type;
 }
 
-static struct token *token_make_number_for_value(double val)
+static struct token *token_make_number_for_value(unsigned long val)
 {
     int number_type = lexer_number_type(peekc());
     if (number_type != NUMBER_TYPE_NORMAL)
@@ -490,7 +490,7 @@ static struct token *token_make_number_for_value(double val)
         // that we need to pop off
         nextc();
     }
-    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .dnum = val, .num.type = number_type});
+    return token_create(&(struct token){TOKEN_TYPE_NUMBER, .llnum = val, .num.type = number_type});
 }
 
 static struct token *token_make_number()

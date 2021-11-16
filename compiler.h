@@ -1079,7 +1079,10 @@ enum
     NODE_TYPE_STRUCT,
     NODE_TYPE_UNION,
     NODE_TYPE_BRACKET, // Array brackets i.e [50][20] Two node brackets.
-    NODE_TYPE_CAST
+    NODE_TYPE_CAST,
+    // Blank nodes represent a node that was empty.. NO primary feature
+    // this node type can be ignored when encountered...
+    NODE_TYPE_BLANK,
 };
 
 enum

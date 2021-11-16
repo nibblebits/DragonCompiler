@@ -592,7 +592,7 @@ static void resolver_build_function_call_arguments(struct resolver_process *reso
     {
         resolver_build_function_call_arguments(resolver, argument_node->parenthesis.exp, root_func_call_entity, total_size_out);
     }
-    else
+    else if(argument_node->type != NODE_TYPE_BLANK)
     {
         // We must now push this node to the output vector
         vector_push(root_func_call_entity->func_call_data.arguments, &argument_node);

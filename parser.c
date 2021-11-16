@@ -35,6 +35,10 @@ extern struct node *parser_current_body;
 // The current function we are in.
 extern struct node *parser_current_function;
 
+// NODE_TYPE_BLANK - Represents a node that does nothing, used so that we don't
+// have to check for a NULL. when working with the tree.
+struct node* parser_blank_node;
+
 // The last token parsed by the parser, may be NULL
 extern struct token *parser_last_token;
 
@@ -1807,13 +1811,16 @@ void parse_for_parentheses(struct history *history)
         node_pop();
     }
 
-    // We want a new history for parentheses
-    parse_expressionable_root(history_begin(history, 0));
+    struct node* exp_node = parser_blank_node;
+    if (!token_next_is_symbol(')'))
+    {
+        // We want a new history for parentheses
+        parse_expressionable_root(history_begin(history, 0));
+        exp_node = node_pop();
+    }
     expect_sym(')');
-
-    struct node *exp_node = node_pop();
+    
     make_exp_parentheses_node(exp_node);
-
     // Do we have a left node from earlier before we parsed the parentheses?
     if (left_node)
     {
@@ -2605,6 +2612,7 @@ int parse(struct compile_process *process)
     // This scope will help us generate static offsets to be used during compile time.
     scope_create_root(process);
     current_process = process;
+    parser_blank_node = node_create(&(struct node){.type=NODE_TYPE_BLANK});
     parser_fixup_sys = fixup_sys_new();
 
     vector_set_peek_pointer(process->token_vec, 0);

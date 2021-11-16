@@ -1,11 +1,11 @@
+int test()
+{
+    return 56 + 10;
+}
 
-int printf(const char* s, ...);
 int main()
 {
-    float x;
-    float y;
-    y = 5000;
-
-    int dd = y;
-    printf("%i", dd);
+    int x;
+    x = test();
+    return x - 10;
 }

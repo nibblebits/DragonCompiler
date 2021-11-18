@@ -1,11 +1,27 @@
-int special(int data)
+struct y
 {
-    int k;
-    k = data;
-    return k+5;
+    int dd;
+    int ii;
+    int ee;
+    int bb;
+};
+
+struct dog
+{
+    struct y yy;
+};
+
+// bug exists as we dont align structure when calculating stack size...
+// now ee is integer lets try again... all should work..
+int test( int second, struct y yy)
+{
+    return yy.bb + yy.ii + second;
 }
 
+struct dog dd;
 int main()
 {
-    return special(55);
+    dd.yy.bb = 10;
+    dd.yy.ii = 12;
+    return test(10, dd.yy);
 }

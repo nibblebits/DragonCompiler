@@ -249,16 +249,14 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
         // therefore we cannot trust anything that does not modulo into four.
         // We will have to access everything as an integer and cast it down into
         // the correct data type.
-
-        // The correct offset is 4 bytes since 32 bit arch's PUSH is 4 bytes long.
-        offset = DATA_SIZE_DWORD;
-
         // Are we also the first entity? If so then the offset must start at EIGHT Bytes
-        if (!last_entity)
+
+        offset = DATA_SIZE_DDWORD;
+        if (last_entity)
         {
-            // I don't like this solution think of something better.
-            offset += DATA_SIZE_DWORD;
+            offset = datatype_size(&variable_node(last_entity->node)->var.type);
         }
+ 
     }
 
     if (last_entity)

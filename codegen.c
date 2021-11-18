@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <assert.h>
 
+#define STRUCTURE_PUSH_START_POSITION_ONE 1
+
 static struct compile_process *current_process;
 static struct node *current_function;
 // Returned when we have no expression state.
@@ -112,6 +114,7 @@ enum
     RESPONSE_FLAG_PUSHED_STRUCTURE = 0b00000010,
     RESPONSE_FLAG_RESOLVED_ENTITY = 0b00000100
 };
+
 
 #define RESPONSE_SET(x) (&(struct response){x})
 #define RESPONSE_EMPTY RESPONSE_SET()
@@ -599,6 +602,7 @@ void asm_pop_ebp_no_stack_frame_restore()
     asm_push("pop ebp");
 }
 
+
 void codegen_stack_sub(size_t stack_size)
 {
     if (stack_size != 0)
@@ -673,6 +677,20 @@ void codegen_reduce_register(const char *reg, size_t size, bool is_signed)
         }
 
         asm_push("%s eax, %s", ins, codegen_sub_register("eax", size));
+    }
+}
+
+
+void codegen_plus_or_minus_string_for_value(char* out, int val, size_t len)
+{
+    memset(out, 0, len);
+    if (val < 0)
+    {
+        sprintf(out, "%i", val);
+    }
+    else
+    {
+        sprintf(out, "+%i", val);
     }
 }
 
@@ -1135,32 +1153,9 @@ static bool is_node_array_access(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op);
 }
 
-void codegen_generate_structure_push(struct node *node, struct resolver_entity *entity, struct history *history)
-{
-    asm_push("; STRUCTURE PUSH");
-    size_t structure_size = align_value(entity->dtype.size, DATA_SIZE_DWORD);
-    int pushes = structure_size / DATA_SIZE_DWORD;
-
-    for (int i = pushes - 1; i >= 0; i--)
-    {
-        struct resolver_default_entity_data *private = codegen_entity_private(entity);
-        int chunk_offset = private->offset + (i * DATA_SIZE_DWORD);
-        asm_push_ins_push("dword [%s%i]", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "structure_part_pushed_to_stack", private->base_address, chunk_offset);
-    }
-    asm_push("; END STRUCTURE PUSH");
-
-    codegen_response_acknowledge(RESPONSE_SET(.flags = RESPONSE_FLAG_PUSHED_STRUCTURE));
-}
 
 void codegen_generate_variable_access_for_entity(struct node *node, struct resolver_entity *entity, struct history *history)
 {
-    if (datatype_is_non_pointer_struct(&entity->var_data.dtype) && 
-        history->flags & EXPRESSION_IN_FUNCTION_CALL_ARGUMENTS)
-    {
-        codegen_generate_structure_push(node, entity, history);
-        return;
-    }
-
     codegen_gen_mem_access(node, history->flags, entity);
 }
 
@@ -1361,6 +1356,34 @@ void codegen_apply_unary_access(int amount)
     }
 }
 
+
+/**
+ * @brief Generates a structure to value operation. Pushing an entire structures memory
+ * to the stack. Useful for passing structures to functions....
+ * 
+ * @param entity The entity of the structure variable to be pushed to the stack
+ * @param history Expressionable history
+ * @param start_pos The start position for the strucutre push. Useful for ignoring pushes of the start of the structure, in cases where this may be handled else where....
+ */
+void codegen_generate_structure_push(struct resolver_entity *entity, struct history *history, int start_pos)
+{
+    asm_push("; STRUCTURE PUSH");
+    size_t structure_size = align_value(entity->dtype.size, DATA_SIZE_DWORD);
+    int pushes = structure_size / DATA_SIZE_DWORD;
+
+
+    for (int i = pushes - 1; i >= start_pos; i--)
+    {
+        char fmt[10];
+        int chunk_offset = (i * DATA_SIZE_DWORD);
+        codegen_plus_or_minus_string_for_value(fmt, chunk_offset, sizeof(fmt));
+        asm_push_ins_push("dword [%s%s]", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "structure_part_pushed_to_stack", "ebx", fmt);
+    }
+    asm_push("; END STRUCTURE PUSH");
+
+    codegen_response_acknowledge(RESPONSE_SET(.flags = RESPONSE_FLAG_PUSHED_STRUCTURE));
+}
+
 void codegen_generate_entity_access(struct resolver_result *result, struct resolver_entity *root_assignment_entity, struct node *top_most_node, struct history *history)
 {
     struct resolver_entity *current = root_assignment_entity;
@@ -1378,8 +1401,17 @@ void codegen_generate_entity_access(struct resolver_result *result, struct resol
         current = resolver_result_entity_next(current);
     }
 
+    // Is the variable resolved a non pointer structure
+    // if so then it must be pushed as we are passing by value
+
+    if(datatype_is_non_pointer_struct(&last_entity->dtype))
+    {
+        // We want a start position of 1 because at some point up the call stack
+        // we move [ebx] into EAX...
+        codegen_generate_structure_push(last_entity, history, STRUCTURE_PUSH_START_POSITION_ONE);
+    }
     // Do we have a unary expression?
-    if (top_most_node->type == NODE_TYPE_UNARY)
+    else if (top_most_node->type == NODE_TYPE_UNARY)
     {
         // yes
         codegen_apply_unary_access(top_most_node->unary.indirection.depth);

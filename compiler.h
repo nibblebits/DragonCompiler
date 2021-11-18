@@ -1856,7 +1856,8 @@ int compute_sum_padding_for_body(struct node *node);
  */
 int padding(int val, int to);
 
-bool datatype_is_primitive(const char *type);
+bool datatype_is_primitive_for_string(const char *type);
+bool datatype_is_primitive(struct datatype* dtype);
 
 /**
  * Returns true if the given variable node is a primative variable

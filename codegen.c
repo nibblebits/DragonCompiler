@@ -115,7 +115,6 @@ enum
     RESPONSE_FLAG_RESOLVED_ENTITY = 0b00000100
 };
 
-
 #define RESPONSE_SET(x) (&(struct response){x})
 #define RESPONSE_EMPTY RESPONSE_SET()
 
@@ -602,7 +601,6 @@ void asm_pop_ebp_no_stack_frame_restore()
     asm_push("pop ebp");
 }
 
-
 void codegen_stack_sub(size_t stack_size)
 {
     if (stack_size != 0)
@@ -680,8 +678,7 @@ void codegen_reduce_register(const char *reg, size_t size, bool is_signed)
     }
 }
 
-
-void codegen_plus_or_minus_string_for_value(char* out, int val, size_t len)
+void codegen_plus_or_minus_string_for_value(char *out, int val, size_t len)
 {
     memset(out, 0, len);
     if (val < 0)
@@ -1153,7 +1150,6 @@ static bool is_node_array_access(struct node *node)
     return node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op);
 }
 
-
 void codegen_generate_variable_access_for_entity(struct node *node, struct resolver_entity *entity, struct history *history)
 {
     codegen_gen_mem_access(node, history->flags, entity);
@@ -1356,7 +1352,6 @@ void codegen_apply_unary_access(int amount)
     }
 }
 
-
 /**
  * @brief Generates a structure to value operation. Pushing an entire structures memory
  * to the stack. Useful for passing structures to functions....
@@ -1370,7 +1365,6 @@ void codegen_generate_structure_push(struct resolver_entity *entity, struct hist
     asm_push("; STRUCTURE PUSH");
     size_t structure_size = align_value(entity->dtype.size, DATA_SIZE_DWORD);
     int pushes = structure_size / DATA_SIZE_DWORD;
-
 
     for (int i = pushes - 1; i >= start_pos; i--)
     {
@@ -1404,7 +1398,7 @@ void codegen_generate_entity_access(struct resolver_result *result, struct resol
     // Is the variable resolved a non pointer structure
     // if so then it must be pushed as we are passing by value
 
-    if(datatype_is_non_pointer_struct(&last_entity->dtype))
+    if (datatype_is_non_pointer_struct(&last_entity->dtype))
     {
         // We want a start position of 1 because at some point up the call stack
         // we move [ebx] into EAX...
@@ -1440,6 +1434,11 @@ void codegen_generate_entity_access(struct resolver_result *result, struct resol
         const char *mov_type_keyword =
             codegen_byte_word_or_dword_or_ddword(datatype_element_size(&result->last_entity->dtype), &reg_to_use);
         asm_push("mov eax, [ebx]");
+
+        if (datatype_is_primitive(&last_entity->dtype) && datatype_element_size(&last_entity->dtype) != DATA_SIZE_DWORD)
+        {
+            codegen_reduce_register("eax", datatype_element_size(&last_entity->dtype), last_entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
+        }
         asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     }
     codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = last_entity}));

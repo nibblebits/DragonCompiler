@@ -147,6 +147,9 @@ void make_tenary_node(struct node *true_result_node, struct node *false_result_n
 
 void make_exp_node(struct node *node_left, struct node *node_right, const char *op)
 {
+    // Expressions must have left and right operands..
+    assert(node_left);
+    assert(node_right);
     node_create(&(struct node){NODE_TYPE_EXPRESSION, .exp.op = op, .exp.left = node_left, .exp.right = node_right});
 }
 
@@ -585,3 +588,14 @@ struct node *node_function_get_final_argument(struct node *func_node)
 
     return last_node;
 }
+
+
+bool is_node_assignment(struct node *node)
+{
+    return S_EQ(node->exp.op, "=") ||
+           S_EQ(node->exp.op, "+=") ||
+           S_EQ(node->exp.op, "-=") ||
+           S_EQ(node->exp.op, "*=") ||
+           S_EQ(node->exp.op, "/=");
+}
+

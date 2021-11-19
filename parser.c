@@ -904,7 +904,11 @@ void parser_reorder_expression(struct node **node_out)
         }
     }
 
-    if (node_is_expression(node->exp.left, "()") && node_is_expression(node->exp.right, ","))
+    // Should optimize the priority array rather than statics
+    // Todo...
+    if ((is_array_node(node->exp.left) && is_node_assignment(node->exp.right)) || (
+        node_is_expression(node->exp.left, "()") && 
+        node_is_expression(node->exp.right, ",")))
     {
         // We have a comma here and an expression to the left, therefore left operand
         // of right node must be moved

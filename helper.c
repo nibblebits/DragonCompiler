@@ -645,6 +645,16 @@ bool datatype_is_primitive_for_string(const char *type)
     return S_EQ(type, "void") || S_EQ(type, "char") || S_EQ(type, "short") || S_EQ(type, "int") || S_EQ(type, "long") || S_EQ(type, "float") || S_EQ(type, "double");
 }
 
+bool datatype_is_primitive_non_pointer(struct datatype* dtype)
+{
+    return datatype_is_primitive(dtype) && !(dtype->flags & DATATYPE_FLAG_IS_POINTER);
+}
+
+bool datatype_is_struct_or_union_non_pointer(struct datatype* dtype)
+{
+    return !datatype_is_primitive(dtype) && !(dtype->flags & DATATYPE_FLAG_IS_POINTER);
+}
+
 bool datatype_is_primitive(struct datatype* dtype)
 {
     return datatype_is_primitive_for_string(dtype->type_str);

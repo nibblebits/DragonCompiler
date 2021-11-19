@@ -1,31 +1,27 @@
-struct y
+// Lets implement ability to return strucutres...
+
+// but first ability to set structures to structs
+
+
+struct cat
 {
-    int dd;
-    char ii;
-    int ee;
-    int bb;
+    int x;
+    int y;
+    int d;
 };
 
 struct dog
 {
-    struct y yy;
+    int x;
+    struct cat c;
 };
 
-// bug exists as we dont align structure when calculating stack size...
-// now ee is integer lets try again... all should work..
-int test( int second, struct y yy)
-{
-    return yy.ii;
-}
 
-struct dog dd;
+struct dog abc[5];
 int main()
-{
-    dd.yy.dd = 0xffffffff;
-    dd.yy.ii = 12;
-    dd.yy.ee = 0x44444444;
-    dd.yy.bb = 0x22222222;
+{  
+    int d;
+    abc[3].c.x = 50;
+    return abc[3].c.x;
 
-    // Likely an issue will occur as we fail to recognize its a char.
-    return test(10, dd.yy);
 }

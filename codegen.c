@@ -1023,6 +1023,33 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
     }
 }
 
+/**
+ * @brief Generates a structure to value operation. Pushing an entire structures memory
+ * to the stack. Useful for passing structures to functions....
+ * 
+ * @param entity The entity of the structure variable to be pushed to the stack
+ * @param history Expressionable history
+ * @param start_pos The start position for the strucutre push. Useful for ignoring pushes of the start of the structure, in cases where this may be handled else where....
+ */
+void codegen_generate_structure_push(struct resolver_entity *entity, struct history *history, int start_pos)
+{
+    asm_push("; STRUCTURE PUSH");
+    size_t structure_size = align_value(entity->dtype.size, DATA_SIZE_DWORD);
+    int pushes = structure_size / DATA_SIZE_DWORD;
+
+    for (int i = pushes - 1; i >= start_pos; i--)
+    {
+        char fmt[10];
+        int chunk_offset = (i * DATA_SIZE_DWORD);
+        codegen_plus_or_minus_string_for_value(fmt, chunk_offset, sizeof(fmt));
+        asm_push_ins_push("dword [%s%s]", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", "ebx", fmt);
+    }
+    asm_push("; END STRUCTURE PUSH");
+
+    codegen_response_acknowledge(RESPONSE_SET(.flags = RESPONSE_FLAG_PUSHED_STRUCTURE));
+}
+
+
 static void codegen_gen_mov_for_value(const char *reg, const char *value, const char *datatype, int flags)
 {
     if (register_is_used(reg))
@@ -1105,7 +1132,15 @@ static void codegen_gen_mem_access(struct node *value_node, int flags, struct re
 
     // If the value cannot be pushed directly to the stack
     // we must first strip it down in the EAX register then push that instead..
-    if (datatype_element_size(&entity->dtype) != DATA_SIZE_DWORD)
+
+    if(datatype_is_struct_or_union_non_pointer(&entity->dtype))
+    {
+        struct history history = {};
+        codegen_gen_mem_access_get_address(value_node, 0, entity);
+        asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        codegen_generate_structure_push(entity, &history, 0);
+    }
+    else if (datatype_element_size(&entity->dtype) != DATA_SIZE_DWORD)
     {
         asm_push("mov eax, [%s]", codegen_entity_private(entity)->address);
         codegen_reduce_register("eax", datatype_element_size(&entity->dtype), entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
@@ -1135,16 +1170,6 @@ static bool is_node_mul_or_div(struct node *node)
 {
     return S_EQ(node->exp.op, "*") || S_EQ(node->exp.op, "/");
 }
-
-static bool is_node_assignment(struct node *node)
-{
-    return S_EQ(node->exp.op, "=") ||
-           S_EQ(node->exp.op, "+=") ||
-           S_EQ(node->exp.op, "-=") ||
-           S_EQ(node->exp.op, "*=") ||
-           S_EQ(node->exp.op, "/=");
-}
-
 static bool is_node_array_access(struct node *node)
 {
     return node->type == NODE_TYPE_EXPRESSION && is_array_operator(node->exp.op);
@@ -1352,31 +1377,6 @@ void codegen_apply_unary_access(int amount)
     }
 }
 
-/**
- * @brief Generates a structure to value operation. Pushing an entire structures memory
- * to the stack. Useful for passing structures to functions....
- * 
- * @param entity The entity of the structure variable to be pushed to the stack
- * @param history Expressionable history
- * @param start_pos The start position for the strucutre push. Useful for ignoring pushes of the start of the structure, in cases where this may be handled else where....
- */
-void codegen_generate_structure_push(struct resolver_entity *entity, struct history *history, int start_pos)
-{
-    asm_push("; STRUCTURE PUSH");
-    size_t structure_size = align_value(entity->dtype.size, DATA_SIZE_DWORD);
-    int pushes = structure_size / DATA_SIZE_DWORD;
-
-    for (int i = pushes - 1; i >= start_pos; i--)
-    {
-        char fmt[10];
-        int chunk_offset = (i * DATA_SIZE_DWORD);
-        codegen_plus_or_minus_string_for_value(fmt, chunk_offset, sizeof(fmt));
-        asm_push_ins_push("dword [%s%s]", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "structure_part_pushed_to_stack", "ebx", fmt);
-    }
-    asm_push("; END STRUCTURE PUSH");
-
-    codegen_response_acknowledge(RESPONSE_SET(.flags = RESPONSE_FLAG_PUSHED_STRUCTURE));
-}
 
 void codegen_generate_entity_access(struct resolver_result *result, struct resolver_entity *root_assignment_entity, struct node *top_most_node, struct history *history)
 {
@@ -1398,7 +1398,7 @@ void codegen_generate_entity_access(struct resolver_result *result, struct resol
     // Is the variable resolved a non pointer structure
     // if so then it must be pushed as we are passing by value
 
-    if (datatype_is_non_pointer_struct(&last_entity->dtype))
+    if (datatype_is_struct_or_union_non_pointer(&last_entity->dtype))
     {
         // We want a start position of 1 because at some point up the call stack
         // we move [ebx] into EAX...
@@ -1443,21 +1443,9 @@ void codegen_generate_entity_access(struct resolver_result *result, struct resol
     }
     codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = last_entity}));
 }
-void codegen_generate_assignment_expression(struct node *node, struct history *history)
+
+void codegen_generate_assignment_expression_move_value(struct resolver_entity* left_entity)
 {
-    // Left node = to assign
-    // Right node = value
-
-    // Let's create the value
-    codegen_generate_expressionable(node->exp.right, history_down(history, 0));
-
-    codegen_response_expect();
-    codegen_generate_expressionable(node->exp.left, history_down(history, EXPRESSION_IS_ASSIGNMENT | EXPRESSION_GET_ADDRESS));
-    struct response *res = codegen_response_pull();
-    assert(codegen_response_has_entity(res));
-    // We have an entity in the left node
-    struct resolver_entity *left_entity = res->data.resolved_entity;
-
     const char *reg_to_use = "eax";
     const char *mov_type_keyword = codegen_byte_word_or_dword_or_ddword(datatype_element_size(&left_entity->dtype), &reg_to_use);
 
@@ -1468,6 +1456,45 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     // // All we do now is assign the value..
     asm_push("mov %s [edx], %s", mov_type_keyword, reg_to_use);
+}
+
+void codegen_generate_assignment_expression_move_struct(struct resolver_entity* entity)
+{
+    asm_push("; STRUCT MOVE TO TARGET");
+    asm_push_ins_pop("edx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
+    size_t structure_size = align_value(datatype_size(&entity->dtype), DATA_SIZE_DWORD);
+    int pops = structure_size / DATA_SIZE_DWORD;
+    for(int i = 0; i < pops; i++)
+    {
+        asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        char fmt[10];
+        int chunk_offset = (i * DATA_SIZE_DWORD);
+        codegen_plus_or_minus_string_for_value(fmt, chunk_offset, sizeof(fmt));
+        asm_push("mov [edx%s], eax", fmt);
+    }
+    
+}
+void codegen_generate_assignment_expression(struct node *node, struct history *history)
+{
+    // Left node = to assign
+    // Right node = value
+    codegen_generate_expressionable(node->exp.right, history_down(history, EXPRESSION_IS_ASSIGNMENT));
+
+    // Let's create the value
+    codegen_response_expect();
+    codegen_generate_expressionable(node->exp.left, history_down(history, EXPRESSION_IS_ASSIGNMENT | EXPRESSION_GET_ADDRESS));
+    struct response *res = codegen_response_pull();
+    assert(codegen_response_has_entity(res));
+    // We have an entity in the left node
+    struct resolver_entity *left_entity = res->data.resolved_entity;
+    if (datatype_is_struct_or_union_non_pointer(&left_entity->dtype))
+    {
+        codegen_generate_assignment_expression_move_struct(left_entity);
+        return;
+    }
+
+    codegen_generate_assignment_expression_move_value(left_entity);
 }
 
 void codegen_generate_expressionable_function_arguments(struct node *func_call_args_exp_node, size_t *arguments_size)

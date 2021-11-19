@@ -1858,6 +1858,8 @@ int padding(int val, int to);
 
 bool datatype_is_primitive_for_string(const char *type);
 bool datatype_is_primitive(struct datatype* dtype);
+bool datatype_is_primitive_non_pointer(struct datatype* dtype);
+bool datatype_is_struct_or_union_non_pointer(struct datatype* dtype);
 
 /**
  * Returns true if the given variable node is a primative variable
@@ -2325,6 +2327,8 @@ bool node_is_expression_or_parentheses(struct node *node);
  * Returns true if the given node can be apart of an expression
  */
 bool node_is_value_type(struct node *node);
+
+bool is_node_assignment(struct node *node);
 
 /**
  * Gets the final function argument from the given function node.

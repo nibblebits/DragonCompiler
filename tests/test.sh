@@ -536,5 +536,15 @@ else
     echo -e "Structure pointer casted to another structure test passed"
 fi
 
+
+echo -e "Structure array set test.."
+./build/structure_array_set_test
+if [ $? -ne 50 ]; then
+    echo -e "Structure array set test failed"
+    res_code=1
+else
+    echo -e "Structure array set test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

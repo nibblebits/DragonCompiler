@@ -1,8 +1,3 @@
-// Lets implement ability to return strucutres...
-
-// but first ability to set structures to structs
-
-
 struct cat
 {
     int x;
@@ -25,5 +20,4 @@ int main()
     int c;
     c = 3;
     return abc[c].c.x;
-
 }

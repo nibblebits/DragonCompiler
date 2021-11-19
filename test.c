@@ -10,20 +10,7 @@ struct cat
     int d;
 };
 
-struct dog
+struct cat cat_get()
 {
-    int x;
-    struct cat c;
-};
-
-
-struct dog abc[5];
-int main()
-{  
-    int d;
-    abc[3].c.x = 50;
-    int c;
-    c = 3;
-    return abc[c].c.x;
 
 }

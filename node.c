@@ -229,7 +229,7 @@ void make_return_node(struct node *exp_node)
 
 void make_function_node(struct datatype *ret_type, const char *name, struct vector *arguments, struct node *body)
 {
-    struct node* function_node = node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.argument_vector = arguments, .func.body_n = body});
+    struct node* function_node = node_create(&(struct node){NODE_TYPE_FUNCTION, .func.rtype = *ret_type, .func.name = name, .func.args.vector = arguments, .func.body_n = body});
     function_node->func.frame.elements = vector_create(sizeof(struct stack_frame_element));
 }
 
@@ -577,18 +577,30 @@ struct node *variable_node(struct node *node)
 struct node *node_function_get_final_argument(struct node *func_node)
 {
     assert(func_node->type == NODE_TYPE_FUNCTION);
-    vector_set_peek_pointer(func_node->func.argument_vector, 0);
-    struct node *node = vector_peek_ptr(func_node->func.argument_vector);
+    vector_set_peek_pointer(function_node_argument_vec(func_node), 0);
+    struct node *node = vector_peek_ptr(function_node_argument_vec(func_node));
     struct node *last_node = node;
     while (node)
     {
         last_node = node;
-        node = vector_peek_ptr(func_node->func.argument_vector);
+        node = vector_peek_ptr(function_node_argument_vec(func_node));
     }
 
     return last_node;
 }
 
+
+size_t function_node_argument_stack_addition(struct node* node)
+{
+    assert(node->type == NODE_TYPE_FUNCTION);
+    return node->func.args.stack_addition;
+}
+
+struct vector* function_node_argument_vec(struct node* node)
+{
+    assert(node->type == NODE_TYPE_FUNCTION);
+    return node->func.args.vector;
+}
 
 bool is_node_assignment(struct node *node)
 {

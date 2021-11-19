@@ -138,27 +138,27 @@ enum
 
 };
 
-#define EXPRESSION_GEN_MATHABLE (\
-    EXPRESSION_IS_ADDITION | \
-    EXPRESSION_IS_SUBTRACTION | \
-    EXPRESSION_IS_MULTIPLICATION | \
-    EXPRESSION_IS_DIVISION | \
-    EXPRESSION_IN_FUNCTION_CALL | \
-    EXPRESSION_INDIRECTION | \
-    EXPRESSION_GET_ADDRESS | \
-    EXPRESSION_IS_ABOVE | \
-    EXPRESSION_IS_ABOVE_OR_EQUAL | \
-    EXPRESSION_IS_BELOW | \
-    EXPRESSION_IS_BELOW_OR_EQUAL | \
-    EXPRESSION_IS_EQUAL | \
-    EXPRESSION_IS_NOT_EQUAL | \
-    EXPRESSION_LOGICAL_AND | \
-    EXPRESSION_LOGICAL_OR | \
+#define EXPRESSION_GEN_MATHABLE (      \
+    EXPRESSION_IS_ADDITION |           \
+    EXPRESSION_IS_SUBTRACTION |        \
+    EXPRESSION_IS_MULTIPLICATION |     \
+    EXPRESSION_IS_DIVISION |           \
+    EXPRESSION_IN_FUNCTION_CALL |      \
+    EXPRESSION_INDIRECTION |           \
+    EXPRESSION_GET_ADDRESS |           \
+    EXPRESSION_IS_ABOVE |              \
+    EXPRESSION_IS_ABOVE_OR_EQUAL |     \
+    EXPRESSION_IS_BELOW |              \
+    EXPRESSION_IS_BELOW_OR_EQUAL |     \
+    EXPRESSION_IS_EQUAL |              \
+    EXPRESSION_IS_NOT_EQUAL |          \
+    EXPRESSION_LOGICAL_AND |           \
+    EXPRESSION_LOGICAL_OR |            \
     EXPRESSION_IN_LOGICAL_EXPRESSION | \
-    EXPRESSION_IS_BITSHIFT_LEFT | \
-    EXPRESSION_IS_BITSHIFT_RIGHT | \
-    EXPRESSION_IS_BITWISE_OR | \
-    EXPRESSION_IS_BITWISE_AND | \
+    EXPRESSION_IS_BITSHIFT_LEFT |      \
+    EXPRESSION_IS_BITSHIFT_RIGHT |     \
+    EXPRESSION_IS_BITWISE_OR |         \
+    EXPRESSION_IS_BITWISE_AND |        \
     EXPRESSION_IS_BITWISE_XOR)
 
 #define EXPRESSION_UNINHERITABLE_FLAGS                                                               \
@@ -612,7 +612,7 @@ enum
     // but with no name information at all.
     RESOLVER_ENTITY_TYPE_GENERAL,
     RESOLVER_ENTITY_TYPE_UNSUPPORTED,
-    
+
 };
 
 struct resolver_entity
@@ -732,11 +732,11 @@ typedef void (*RESOLVER_DELETE_SCOPE)(struct resolver_scope *scope);
  */
 typedef void (*RESOLVER_DELETE_ENTITY)(struct resolver_entity *entity);
 
-typedef struct resolver_entity *(*RESOLVER_MERGE_ENTITIES)(struct resolver_process* resolver, struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity);
+typedef struct resolver_entity *(*RESOLVER_MERGE_ENTITIES)(struct resolver_process *resolver, struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity);
 
 typedef void *(*RESOLVER_MAKE_PRIVATE)(struct resolver_entity *entity, struct node *node, int offset, struct resolver_scope *scope);
 
-typedef void (*RESOLVER_SET_RESULT_BASE)(struct resolver_result* result, struct resolver_entity* base_entity);
+typedef void (*RESOLVER_SET_RESULT_BASE)(struct resolver_result *result, struct resolver_entity *base_entity);
 struct resolver_callbacks
 {
     /**
@@ -1259,9 +1259,17 @@ struct node
             // The name of the function
             const char *name;
 
-            // a vector of "variable" nodes that represents the function arguments.
-            // I.e int abc(int a, int b) here we have two arguments in the vector a and b.
-            struct vector *argument_vector;
+            struct function_arguments
+            {
+                // a vector of "variable" nodes that represents the function arguments.
+                // I.e int abc(int a, int b) here we have two arguments in the vector a and b.
+                struct vector *vector;
+                // How much we should add to the stack when accessing function arguments
+                // When we push special elements to the stack this will need to be adjusted
+                // does not include the BASE Pointer or the return address.
+                // those are precaclulated for an upwards stack.
+                size_t stack_addition;
+            } args;
 
             // The body of this function, everything between the { } brackets.
             // This is NULL if this function is just a definition and its a pointer
@@ -1438,7 +1446,7 @@ struct node
         {
             // Datatype of the cast.
             struct datatype dtype;
-            struct node* operand;
+            struct node *operand;
         } cast;
     };
 
@@ -1459,6 +1467,10 @@ enum
     COMPILER_FAILED_WITH_ERRORS,
 };
 
+
+size_t function_node_argument_stack_addition(struct node* node);
+struct vector* function_node_argument_vec(struct node* node);
+
 /**
  * Returns true if this node can be used in an expression
  */
@@ -1470,7 +1482,7 @@ bool node_is_expression(struct node *node, const char *op);
  * Returns true if the node is valid, false if it cannot be used.
  * Returns false if this node is NULL or this node is type NODE_TYPE_BLANK
  */
-bool node_valid(struct node* node);
+bool node_valid(struct node *node);
 
 /**
  * Called to issue a compiler error and terminate the compiler
@@ -1705,7 +1717,7 @@ struct node *node_create(struct node *_node);
 /*
 *Finds the inner node of the given node, returns its self it is an appropiate inner node
 */
-struct node* node_find_inner(struct node* node);
+struct node *node_find_inner(struct node *node);
 
 struct node *node_peek_or_null();
 
@@ -1768,7 +1780,7 @@ void make_else_node(struct node *body_node);
 void make_union_node(const char *struct_name, struct node *body_node);
 void make_struct_node(const char *struct_name, struct node *body_node);
 void make_unary_node(const char *unary_op, struct node *operand_node);
-void make_cast_node(struct datatype* dtype, struct node* operand_node);
+void make_cast_node(struct datatype *dtype, struct node *operand_node);
 
 void make_return_node(struct node *exp_node);
 void make_function_node(struct datatype *ret_type, const char *name, struct vector *arguments, struct node *body);
@@ -1857,9 +1869,9 @@ int compute_sum_padding_for_body(struct node *node);
 int padding(int val, int to);
 
 bool datatype_is_primitive_for_string(const char *type);
-bool datatype_is_primitive(struct datatype* dtype);
-bool datatype_is_primitive_non_pointer(struct datatype* dtype);
-bool datatype_is_struct_or_union_non_pointer(struct datatype* dtype);
+bool datatype_is_primitive(struct datatype *dtype);
+bool datatype_is_primitive_non_pointer(struct datatype *dtype);
+bool datatype_is_struct_or_union_non_pointer(struct datatype *dtype);
 
 /**
  * Returns true if the given variable node is a primative variable
@@ -1912,8 +1924,8 @@ struct node *variable_struct_or_union_largest_variable_node(struct node *var_nod
  */
 struct node *body_largest_variable_node(struct node *body_node);
 
-bool unary_operand_compatiable(struct token* token);
-bool is_parentheses(const char* s);
+bool unary_operand_compatiable(struct token *token);
+bool is_parentheses(const char *s);
 
 /**
  * Array
@@ -1937,7 +1949,6 @@ size_t variable_size_for_list(struct node *var_list_node);
 size_t datatype_size(struct datatype *datatype);
 size_t datatype_element_size(struct datatype *datatype);
 size_t datatype_size_no_ptr(struct datatype *datatype);
-
 
 /**
  * Gets the given return datatype for the provided node.
@@ -1982,7 +1993,7 @@ bool is_logical_node(struct node *node);
 
 int compute_array_offset(struct node *node, size_t single_element_size);
 int array_offset(struct datatype *dtype, int index, int index_value);
-size_t array_brackets_count(struct datatype* dtype);
+size_t array_brackets_count(struct datatype *dtype);
 int array_total_indexes(struct datatype *dtype);
 
 /**
@@ -1996,7 +2007,7 @@ struct resolver_result *resolver_new_result(struct resolver_process *process);
 void resolver_result_free(struct resolver_result *result);
 bool resolver_result_failed(struct resolver_result *result);
 bool resolver_result_ok(struct resolver_result *result);
-struct datatype* resolver_get_datatype(struct resolver_process* resolver, struct node* node);
+struct datatype *resolver_get_datatype(struct resolver_process *resolver, struct node *node);
 /**
  * Returns true if this entity has an array multiplier that must
  * be computed at runtime.
@@ -2028,8 +2039,7 @@ struct resolver_entity *resolver_get_variable(struct resolver_result *result, st
 struct resolver_result *resolver_follow(struct resolver_process *resolver, struct node *node);
 struct resolver_entity *resolver_result_entity_root(struct resolver_result *result);
 struct resolver_entity *resolver_result_entity_next(struct resolver_entity *entity);
-struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *custom_dtype, struct node *node, struct resolver_entity* guided_entity, struct resolver_scope *scope);
-
+struct resolver_entity *resolver_make_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *custom_dtype, struct node *node, struct resolver_entity *guided_entity, struct resolver_scope *scope);
 
 // Code gen
 
@@ -2343,7 +2353,6 @@ struct node *node_function_get_final_argument(struct node *func_node);
  */
 struct node *variable_node(struct node *node);
 struct node *variable_node_or_list(struct node *node);
-
 
 /**
  * Returns true if the given character is a hexadecimal character

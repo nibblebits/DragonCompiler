@@ -2535,8 +2535,8 @@ void parser_get_all_nodes_of_type_for_vector(struct vector *vector_out, struct v
 
 void parser_get_all_nodes_of_type_for_function(struct vector *vector, struct node *node, int type, bool ignore_childtypes_for_type)
 {
-    struct vector *func_args = node->func.argument_vector;
-    parser_get_all_nodes_of_type_for_vector(vector, node->func.argument_vector, type, ignore_childtypes_for_type);
+    struct vector *func_args = function_node_argument_vec(node);
+    parser_get_all_nodes_of_type_for_vector(vector, function_node_argument_vec(node), type, ignore_childtypes_for_type);
     parser_get_all_nodes_of_type_for_vector(vector, node->func.body_n->body.statements, type, ignore_childtypes_for_type);
 }
 

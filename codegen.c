@@ -2611,7 +2611,7 @@ void codegen_generate_function_with_body(struct node *node)
     // Generate scope for function arguments
     codegen_new_scope(RESOLVER_DEFAULT_ENTITY_FLAG_IS_LOCAL_STACK);
 
-    codegen_generate_function_arguments(node->func.argument_vector);
+    codegen_generate_function_arguments(function_node_argument_vec(node));
 
     struct history history;
 

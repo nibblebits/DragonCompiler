@@ -290,6 +290,54 @@ struct resolver_entity *resolver_create_new_unknown_entity(struct resolver_proce
     entity->offset = offset;
     return entity;
 }
+
+struct resolver_entity *resolver_create_new_unary_indirection_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *dtype, struct node *node, struct resolver_scope *scope, int offset, int indirection_depth)
+{
+    struct resolver_entity *entity = resolver_create_new_entity(NULL, RESOLVER_ENTITY_TYPE_UNARY_INDIRECTION, NULL);
+    if (!entity)
+        return NULL;
+
+    entity->flags = RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY | RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY;
+    entity->scope = scope;
+    entity->dtype = *dtype;
+    entity->node = node;
+    entity->offset = offset;
+    entity->indirection.depth = indirection_depth;
+
+    entity->dtype.pointer_depth -= indirection_depth;
+    if (entity->dtype.pointer_depth <= 0)
+    {
+        // We aren't a pointer anymore.. i.e char* a; *a; = (char)
+        entity->dtype.flags &= ~DATATYPE_FLAG_IS_POINTER;
+    }
+    return entity;
+}
+
+struct resolver_entity *resolver_create_new_unary_get_address_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *dtype, struct node *node, struct resolver_scope *scope, int offset)
+{
+    struct resolver_entity *entity = resolver_create_new_entity(NULL, RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS, NULL);
+    if (!entity)
+        return NULL;
+
+    // Address entity should not merge with any entity
+    // once encountered we know we must get the address of the entity
+    // THe stack should look like for &a.b.c
+    // a - b - c - &
+    // Joined to
+    // c - &
+    entity->flags = RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY | RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY;
+    entity->scope = scope;
+    entity->dtype = *dtype;
+    entity->node = node;
+    entity->offset = offset;
+
+    // Since we are a get address entity we need to also turn the datatype into a pointer..
+    // Ideally this should be acheived on the stack, for now it will be achieved here...
+    entity->dtype.flags |= DATATYPE_FLAG_IS_POINTER;
+    entity->dtype.pointer_depth++;
+    return entity;
+}
+
 struct resolver_entity *resolver_create_new_entity_for_var_node_custom_scope(struct resolver_process *process, struct node *var_node, void *private, struct resolver_scope *scope, int offset)
 {
     assert(var_node->type == NODE_TYPE_VARIABLE);
@@ -719,6 +767,52 @@ static struct resolver_entity *resolver_follow_exp_parenthesis(struct resolver_p
     return resolver_follow_part_return_entity(resolver, node->parenthesis.exp, result);
 }
 
+struct resolver_entity *resolver_follow_indirection(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+{
+    // This is an indirection unary i.e **a.b; or *a.b;
+    // Follow the operand
+    resolver_follow_part(resolver, node->unary.operand, result);
+
+    struct resolver_entity *last_entity = resolver_result_peek(result);
+    struct resolver_entity *unary_indirection_entity = resolver_create_new_unary_indirection_entity(resolver, result, &last_entity->dtype, node, last_entity->scope, last_entity->offset, node->unary.indirection.depth);
+    resolver_result_entity_push(result, unary_indirection_entity);
+    return unary_indirection_entity;
+}
+struct resolver_entity *resolver_follow_unary_address(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+{
+    // Okay this is an address unary i.e &a.b.c;
+    resolver_follow_part(resolver, node->unary.operand, result);
+
+    struct resolver_entity *last_entity = resolver_result_peek(result);
+
+    // We have resolved the operand....
+    // We must push to the stack a rule regarding the unary address
+    // that will +1 on the pointer depth of the datatype
+    // I.e
+    // char a; char* x = &a; will produce a char* . char datatype will become char*
+
+    struct resolver_entity *unary_address_entity = resolver_create_new_unary_get_address_entity(resolver, result, &last_entity->dtype, node, last_entity->scope, last_entity->offset);
+    resolver_result_entity_push(result, unary_address_entity);
+    return unary_address_entity;
+}
+
+struct resolver_entity *resolver_follow_unary(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
+{
+
+    struct resolver_entity *result_entity = NULL;
+    // What type of unary is this?
+    if (op_is_indirection(node->unary.op))
+    {
+        result_entity = resolver_follow_indirection(resolver, node, result);
+    }
+    else if (op_is_address(node->unary.op))
+    {
+        result_entity = resolver_follow_unary_address(resolver, node, result);
+    }
+
+    return result_entity;
+}
+
 struct resolver_entity *resolver_follow_cast(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     resolver_follow_part(resolver, node->cast.operand, result);
@@ -785,6 +879,10 @@ static struct resolver_entity *resolver_follow_part_return_entity(struct resolve
 
     case NODE_TYPE_CAST:
         entity = resolver_follow_cast(resolver, node, result);
+        break;
+
+    case NODE_TYPE_UNARY:
+        entity = resolver_follow_unary(resolver, node, result);
         break;
     default:
     {

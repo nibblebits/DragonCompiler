@@ -37,7 +37,7 @@ extern struct node *parser_current_function;
 
 // NODE_TYPE_BLANK - Represents a node that does nothing, used so that we don't
 // have to check for a NULL. when working with the tree.
-struct node* parser_blank_node;
+struct node *parser_blank_node;
 
 // The last token parsed by the parser, may be NULL
 extern struct token *parser_last_token;
@@ -250,13 +250,12 @@ void parser_scope_offset_for_stack(struct node *node, struct history *history)
         // We will have to access everything as an integer and cast it down into
         // the correct data type.
         // Are we also the first entity? If so then the offset must start at EIGHT Bytes
-
-        offset = DATA_SIZE_DDWORD;
+        size_t stack_addition = function_node_argument_stack_addition(parser_current_function);
+        offset = stack_addition;
         if (last_entity)
         {
             offset = datatype_size(&variable_node(last_entity->node)->var.type);
         }
- 
     }
 
     if (last_entity)
@@ -906,9 +905,8 @@ void parser_reorder_expression(struct node **node_out)
 
     // Should optimize the priority array rather than statics
     // Todo...
-    if ((is_array_node(node->exp.left) && is_node_assignment(node->exp.right)) || (
-        node_is_expression(node->exp.left, "()") && 
-        node_is_expression(node->exp.right, ",")))
+    if ((is_array_node(node->exp.left) && is_node_assignment(node->exp.right)) || (node_is_expression(node->exp.left, "()") &&
+                                                                                   node_is_expression(node->exp.right, ",")))
     {
         // We have a comma here and an expression to the left, therefore left operand
         // of right node must be moved
@@ -948,7 +946,7 @@ void parse_for_cast()
     struct history history;
     parse_expressionable(&history);
 
-    struct node* operand_node = node_pop();
+    struct node *operand_node = node_pop();
     make_cast_node(&dtype, operand_node);
 }
 
@@ -1138,7 +1136,6 @@ void parse_struct_or_union(struct datatype *dtype)
         parse_err("What is that your providing.. struct or union only! BUG!");
     };
 }
-
 
 void parse_identifier(struct history *history)
 {
@@ -1598,7 +1595,7 @@ void parse_for_comma(struct history *history)
 int parse_exp(struct history *history)
 {
     // Unary expression may only nest with particular operators.
-    if (history->flags & EXPRESSION_IS_UNARY && 
+    if (history->flags & EXPRESSION_IS_UNARY &&
         !unary_operand_compatiable(token_peek_next()))
     {
         return -1;
@@ -1800,11 +1797,10 @@ void parse_for_parentheses(struct history *history)
         return;
     }
 
-
     struct node *left_node = NULL;
     struct node *tmp_node = node_peek_or_null();
 
-   // We must check to see if we have a left node i.e "test(50+20)". Left node = test
+    // We must check to see if we have a left node i.e "test(50+20)". Left node = test
     // If we have a left node we will have to create an expression
     // otherwise we can just create a parentheses node
     if (tmp_node && node_is_value_type(tmp_node))
@@ -1813,7 +1809,7 @@ void parse_for_parentheses(struct history *history)
         node_pop();
     }
 
-    struct node* exp_node = parser_blank_node;
+    struct node *exp_node = parser_blank_node;
     if (!token_next_is_symbol(')'))
     {
         // We want a new history for parentheses
@@ -1821,7 +1817,7 @@ void parse_for_parentheses(struct history *history)
         exp_node = node_pop();
     }
     expect_sym(')');
-    
+
     make_exp_parentheses_node(exp_node);
     // Do we have a left node from earlier before we parsed the parentheses?
     if (left_node)
@@ -1855,7 +1851,7 @@ void parse_datatype_modifiers(struct datatype *datatype)
         {
             datatype->flags |= DATATYPE_FLAG_IS_SIGNED;
         }
-        else if(S_EQ(token->sval, "unsigned"))
+        else if (S_EQ(token->sval, "unsigned"))
         {
             datatype->flags &= ~DATATYPE_FLAG_IS_SIGNED;
         }
@@ -2242,23 +2238,33 @@ void parse_function(struct datatype *dtype, struct token *name_token, struct his
     // Scope for function arguments
     resolver_default_new_scope(current_process->resolver, 0);
 
+    // Create the function node
+    make_function_node(dtype, name_token->sval, NULL, NULL);
+    struct node *function_node = node_peek();
+    parser_current_function = function_node;
+
+    // Is the return type a structure or union? Then we need to reserve four bytes
+    // for a pointer.... to be accessed when returning the structure from this function
+    if (datatype_is_struct_or_union_non_pointer(dtype))
+    {
+        // Okay lets reserve room for the pointer we will pass. (invisible argument)
+        function_node->func.args.stack_addition += DATA_SIZE_DWORD;
+    }
+
     // We expect a left bracket for functions.
     // Let us not forget we already have the return type and name of the function i.e int abc
     expect_op("(");
     arguments_vector = parse_function_arguments(history_begin(&new_history, 0));
     expect_sym(')');
 
-    // Create the function node
-    make_function_node(dtype, name_token->sval, arguments_vector, NULL);
-    struct node *function_node = node_peek();
+    // Set the arguments vector... Maybe change this to a function..
+    function_node->func.args.vector = arguments_vector;
 
     if (symresolver_get_symbol_for_native_function(current_process, name_token->sval))
     {
         // This is a native function, lets apply that flag
         function_node->func.flags |= FUNCTION_NODE_FLAG_IS_NATIVE;
     }
-
-    parser_current_function = function_node;
 
     // Do we have a function body or is this a declaration?
     if (token_next_is_symbol('{'))
@@ -2614,7 +2620,7 @@ int parse(struct compile_process *process)
     // This scope will help us generate static offsets to be used during compile time.
     scope_create_root(process);
     current_process = process;
-    parser_blank_node = node_create(&(struct node){.type=NODE_TYPE_BLANK});
+    parser_blank_node = node_create(&(struct node){.type = NODE_TYPE_BLANK});
     parser_fixup_sys = fixup_sys_new();
 
     vector_set_peek_pointer(process->token_vec, 0);

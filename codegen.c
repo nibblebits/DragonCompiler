@@ -112,7 +112,8 @@ enum
 {
     RESPONSE_FLAG_ACKNOWLEDGED = 0b00000001,
     RESPONSE_FLAG_PUSHED_STRUCTURE = 0b00000010,
-    RESPONSE_FLAG_RESOLVED_ENTITY = 0b00000100
+    RESPONSE_FLAG_RESOLVED_ENTITY = 0b00000100,
+    RESPONSE_FLAG_UNARY_GET_ADDRESS = 0b00001000
 };
 
 #define RESPONSE_SET(x) (&(struct response){x})
@@ -160,7 +161,11 @@ void codegen_response_acknowledge(struct response *response_in)
     struct response *res = vector_back_ptr_or_null(current_process->generator->responses);
     if (res)
     {
-        memcpy(res, response_in, sizeof(struct response));
+        res->flags |= response_in->flags;
+        if (response_in->data.resolved_entity)
+        {
+            res->data.resolved_entity = response_in->data.resolved_entity;
+        }
         res->flags |= RESPONSE_FLAG_ACKNOWLEDGED;
     }
 }
@@ -1049,6 +1054,24 @@ void codegen_generate_structure_push(struct resolver_entity *entity, struct hist
     codegen_response_acknowledge(RESPONSE_SET(.flags = RESPONSE_FLAG_PUSHED_STRUCTURE));
 }
 
+void codegen_generate_move_struct(struct datatype *dtype, const char *base_address, off_t offset)
+{
+    size_t structure_size = align_value(datatype_size(dtype), DATA_SIZE_DWORD);
+    int pops = structure_size / DATA_SIZE_DWORD;
+    for (int i = 0; i < pops; i++)
+    {
+        asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        char fmt[10];
+        int chunk_offset = offset + (i * DATA_SIZE_DWORD);
+        codegen_plus_or_minus_string_for_value(fmt, chunk_offset, sizeof(fmt));
+        asm_push("mov [%s%s], eax", base_address, fmt);
+    }
+}
+
+void codegen_generate_structure_push_or_return(struct resolver_entity *entity, struct history *history, int start_pos)
+{
+    codegen_generate_structure_push(entity, history, start_pos);
+}
 
 static void codegen_gen_mov_for_value(const char *reg, const char *value, const char *datatype, int flags)
 {
@@ -1133,12 +1156,13 @@ static void codegen_gen_mem_access(struct node *value_node, int flags, struct re
     // If the value cannot be pushed directly to the stack
     // we must first strip it down in the EAX register then push that instead..
 
-    if(datatype_is_struct_or_union_non_pointer(&entity->dtype))
+    if (datatype_is_struct_or_union_non_pointer(&entity->dtype))
     {
         struct history history = {};
+        history.flags = flags;
         codegen_gen_mem_access_get_address(value_node, 0, entity);
         asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
-        codegen_generate_structure_push(entity, &history, 0);
+        codegen_generate_structure_push_or_return(entity, &history, 0);
     }
     else if (datatype_element_size(&entity->dtype) != DATA_SIZE_DWORD)
     {
@@ -1377,7 +1401,6 @@ void codegen_apply_unary_access(int amount)
     }
 }
 
-
 void codegen_generate_entity_access(struct resolver_result *result, struct resolver_entity *root_assignment_entity, struct node *top_most_node, struct history *history)
 {
     struct resolver_entity *current = root_assignment_entity;
@@ -1391,6 +1414,15 @@ void codegen_generate_entity_access(struct resolver_result *result, struct resol
     while (current)
     {
         last_entity = current;
+        if (current->type == RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS || current->type == RESOLVER_ENTITY_TYPE_UNARY_INDIRECTION)
+        {
+            // We are getting the address here? Okay .. we expect this to be 
+            // the last entity for now..
+            assert(current->next == NULL);
+
+            // EBX holds the address..
+            break;
+        }
         codegen_generate_entity_access_for_entity(result, current);
         current = resolver_result_entity_next(current);
     }
@@ -1405,25 +1437,29 @@ void codegen_generate_entity_access(struct resolver_result *result, struct resol
         codegen_generate_structure_push(last_entity, history, STRUCTURE_PUSH_START_POSITION_ONE);
     }
     // Do we have a unary expression?
-    else if (top_most_node->type == NODE_TYPE_UNARY)
+    else if (last_entity->type == RESOLVER_ENTITY_TYPE_UNARY_INDIRECTION)
     {
         // yes
-        codegen_apply_unary_access(top_most_node->unary.indirection.depth);
+        codegen_apply_unary_access(last_entity->indirection.depth);
     }
 
-    if (history->flags & EXPRESSION_GET_ADDRESS)
-    {
-        asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
-    }
-    else if (last_entity->type == RESOLVER_ENTITY_TYPE_FUNCTION_CALL)
+    if (last_entity->type == RESOLVER_ENTITY_TYPE_FUNCTION_CALL)
     {
         // Only if we have a function call that is not on its own i.e test(50) rather than x = test(50)
         // Do we push the EAX to the stack
+        // Hack (fix it)
         if (!(history->flags & IS_ALONE_STATEMENT))
         {
             // Push return value to the stack
             asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
         }
+    }
+    else if(history->flags & EXPRESSION_GET_ADDRESS || 
+            last_entity->type == RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS)
+    {
+        // We are getting the address? well it would have been resolved
+        // Its in EBX push it
+        asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     }
     else
     {
@@ -1444,7 +1480,7 @@ void codegen_generate_entity_access(struct resolver_result *result, struct resol
     codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = last_entity}));
 }
 
-void codegen_generate_assignment_expression_move_value(struct resolver_entity* left_entity)
+void codegen_generate_assignment_expression_move_value(struct resolver_entity *left_entity)
 {
     const char *reg_to_use = "eax";
     const char *mov_type_keyword = codegen_byte_word_or_dword_or_ddword(datatype_element_size(&left_entity->dtype), &reg_to_use);
@@ -1458,22 +1494,11 @@ void codegen_generate_assignment_expression_move_value(struct resolver_entity* l
     asm_push("mov %s [edx], %s", mov_type_keyword, reg_to_use);
 }
 
-void codegen_generate_assignment_expression_move_struct(struct resolver_entity* entity)
+void codegen_generate_assignment_expression_move_struct(struct resolver_entity *entity)
 {
     asm_push("; STRUCT MOVE TO TARGET");
     asm_push_ins_pop("edx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
-
-    size_t structure_size = align_value(datatype_size(&entity->dtype), DATA_SIZE_DWORD);
-    int pops = structure_size / DATA_SIZE_DWORD;
-    for(int i = 0; i < pops; i++)
-    {
-        asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
-        char fmt[10];
-        int chunk_offset = (i * DATA_SIZE_DWORD);
-        codegen_plus_or_minus_string_for_value(fmt, chunk_offset, sizeof(fmt));
-        asm_push("mov [edx%s], eax", fmt);
-    }
-    
+    codegen_generate_move_struct(&entity->dtype, "edx", 0);
 }
 void codegen_generate_assignment_expression(struct node *node, struct history *history)
 {
@@ -1874,14 +1899,12 @@ const char *codegen_choose_ebx_or_edx()
 
 void codegen_generate_identifier(struct node *node, struct history *history)
 {
-
     struct resolver_result *result = resolver_follow(current_process->resolver, node);
     assert(resolver_result_ok(result));
 
     struct resolver_entity *entity = resolver_result_entity(result);
-    codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = entity}));
-
     codegen_generate_variable_access(node, entity, history);
+    codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = entity}));
 }
 
 static bool is_comma_operator(struct node *node)
@@ -1936,6 +1959,8 @@ void codegen_generate_unary_address(struct node *node, struct history *history)
     int flags = history->flags;
     // Generate the operand while passing the indirection flag
     codegen_generate_expressionable(node->unary.operand, history_down(history, flags | EXPRESSION_GET_ADDRESS));
+
+    codegen_response_acknowledge(&((struct response){.flags=RESPONSE_FLAG_UNARY_GET_ADDRESS}));
 }
 
 void codegen_generate_normal_unary(struct node *node, struct history *history)
@@ -1966,6 +1991,15 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
 void codegen_generate_unary(struct node *node, struct history *history)
 {
     int flags = history->flags;
+    
+    // Can we resolve a unary..
+    if(codegen_resolve_node(node, history))
+    {
+        return;
+    }
+    
+
+    // Ignore all below for now..
 
     // Indirection unary should be handled differently to most unaries
     if (op_is_indirection(node->unary.op))
@@ -2268,14 +2302,40 @@ void codegen_generate_scope_variable_for_list(struct node *var_list_node)
     }
 }
 
-void codegen_generate_statement_return(struct node *node)
+void codegen_generate_statement_return_exp(struct node *node)
 {
     struct history history;
+    codegen_response_expect();
     // Let's generate the expression of the return statement
-    codegen_generate_expressionable(node->stmt.ret.exp, history_begin(&history, 0));
+    codegen_generate_expressionable(node->stmt.ret.exp, history_begin(&history, IS_STATEMENT_RETURN));
+
+    struct response *res = codegen_response_pull();
+    if (codegen_response_has_entity(res))
+    {
+        struct resolver_entity *resolved_entity = res->data.resolved_entity;
+        if (datatype_is_struct_or_union_non_pointer(&resolved_entity->dtype))
+        {
+            // Returning a structure from a function? Things must be done differently
+            // Firslty lets access the structure pointer to return.
+            // It will be EBP+8 i.e first argument..
+            asm_push("mov edx, [ebp+8]");
+            // EBX EDX contains the address to the structure.
+            // Now we must make a move
+            codegen_generate_move_struct(&resolved_entity->dtype, "edx", 0);
+            return;
+        }
+    }
+
     // Restore return value from stack
     asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+}
 
+void codegen_generate_statement_return(struct node *node)
+{
+    if (node->stmt.ret.exp)
+    {
+        codegen_generate_statement_return_exp(node);
+    }
     // Generate the stack subtraction.
     codegen_stack_add_no_compile_time_stack_frame_restore(C_ALIGN(function_node_stack_size(node->binded.function)));
 

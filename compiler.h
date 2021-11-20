@@ -134,7 +134,8 @@ enum
     EXPRESSION_IS_NOT_ROOT_NODE = 0b1000000000000000000000000,
     EXPRESSION_IS_ASSIGNMENT = 0b10000000000000000000000000,
     IS_ALONE_STATEMENT = 0b100000000000000000000000000,
-    EXPRESSION_IS_UNARY = 0b1000000000000000000000000000
+    EXPRESSION_IS_UNARY = 0b1000000000000000000000000000,
+    IS_STATEMENT_RETURN = 0b10000000000000000000000000000
 
 };
 
@@ -611,6 +612,8 @@ enum
     // General types are types that specify basic information such as datatype, offset
     // but with no name information at all.
     RESOLVER_ENTITY_TYPE_GENERAL,
+    RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS,
+    RESOLVER_ENTITY_TYPE_UNARY_INDIRECTION,
     RESOLVER_ENTITY_TYPE_UNSUPPORTED,
 
 };
@@ -688,6 +691,11 @@ struct resolver_entity
                 int flags;
             } right;
         } rule;
+
+        struct resolver_indireciton
+        {   
+            int depth;
+        } indirection;
     };
 
     // Information regarding the last resolve of this entity
@@ -1266,8 +1274,8 @@ struct node
                 struct vector *vector;
                 // How much we should add to the stack when accessing function arguments
                 // When we push special elements to the stack this will need to be adjusted
-                // does not include the BASE Pointer or the return address.
-                // those are precaclulated for an upwards stack.
+                // In most circumstances this will equal to 8 to account for the base pointer
+                // and the return address..
                 size_t stack_addition;
             } args;
 

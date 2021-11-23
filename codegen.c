@@ -546,6 +546,20 @@ void asm_push(const char *ins, ...)
     va_end(args);
 }
 
+void asm_push_ins_push_with_flags(const char *fmt, int stack_entity_type, const char *stack_entity_name, int flags, ...)
+{
+    char tmp_buf[200];
+    sprintf(tmp_buf, "push %s", fmt);
+    va_list args;
+    va_start(args, flags);
+    asm_push_args(tmp_buf, args);
+    va_end(args);
+
+    // Let's add it to the stack frame for compiler referencing
+    assert(current_function);
+    stackframe_push(current_function, &(struct stack_frame_element){.flags=flags, .type = stack_entity_type, .name = stack_entity_name});
+}
+
 void asm_push_ins_push(const char *fmt, int stack_entity_type, const char *stack_entity_name, ...)
 {
     char tmp_buf[200];
@@ -560,7 +574,7 @@ void asm_push_ins_push(const char *fmt, int stack_entity_type, const char *stack
     stackframe_push(current_function, &(struct stack_frame_element){.type = stack_entity_type, .name = stack_entity_name});
 }
 
-void asm_push_ins_pop(const char *fmt, int expecting_stack_entity_type, const char *expecting_stack_entity_name, ...)
+int asm_push_ins_pop(const char *fmt, int expecting_stack_entity_type, const char *expecting_stack_entity_name, ...)
 {
     char tmp_buf[200];
     sprintf(tmp_buf, "pop %s", fmt);
@@ -571,14 +585,17 @@ void asm_push_ins_pop(const char *fmt, int expecting_stack_entity_type, const ch
 
     // Let's add it to the stack frame for compiler referencing
     assert(current_function);
+    struct stack_frame_element* element = stackframe_back(current_function);
+    int flags = element->flags;
     stackframe_pop_expecting(current_function, expecting_stack_entity_type, expecting_stack_entity_name);
+    return flags;
 }
 
-void asm_push_ins_pop_or_ignore(const char *fmt, int expecting_stack_entity_type, const char *expecting_stack_entity_name, ...)
+int asm_push_ins_pop_or_ignore(const char *fmt, int expecting_stack_entity_type, const char *expecting_stack_entity_name, ...)
 {
     if (!stackframe_back_expect(current_function, expecting_stack_entity_type, expecting_stack_entity_name))
     {
-        return;
+        return STACK_FRAME_ELEMENT_FLAG_ELEMENT_NOT_FOUND;
     }
 
     char tmp_buf[200];
@@ -588,8 +605,12 @@ void asm_push_ins_pop_or_ignore(const char *fmt, int expecting_stack_entity_type
     asm_push_args(tmp_buf, args);
     va_end(args);
 
+    struct stack_frame_element* element = stackframe_back(current_function);
+    int flags = element->flags;
     stackframe_pop_expecting(current_function, expecting_stack_entity_type, expecting_stack_entity_name);
+    return flags;
 }
+
 
 void asm_push_ebp()
 {
@@ -1099,7 +1120,7 @@ static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, in
 static void codegen_gen_mem_access_get_address(struct node *value_node, int flags, struct resolver_entity *entity)
 {
     asm_push("lea ebx, [%s]", codegen_entity_private(entity)->address);
-    asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    asm_push_ins_push_with_flags("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", STACK_FRAME_ELEMENT_FLAG_IS_PUSHED_ADDRESS);
 }
 
 static void codegen_gen_mem_access_first_for_expression(struct node *value_node, int flags, struct resolver_entity *entity)
@@ -1183,7 +1204,7 @@ static void codegen_gen_mem_access(struct node *value_node, int flags, struct re
 void codegen_generate_number_node(struct node *node, struct history *history)
 {
     const char *reg_to_use = "eax";
-    asm_push_ins_push("dword %i", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", node->llnum);
+    asm_push_ins_push_with_flags("dword %i", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", STACK_FRAME_ELEMENT_FLAG_IS_NUMERICAL, node->llnum);
 }
 
 /**
@@ -1283,12 +1304,19 @@ void codegen_generate_assignment_expression_value_part(struct resolver_result *r
 void codegen_generate_entity_access_array_bracket_pointer(struct resolver_result *result, struct resolver_entity *entity)
 {
     struct history history = {};
+
+    // Restore EBX
+    asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
     // We must first access the pointer from the last entity
     asm_push("mov ebx, [ebx]");
     // Now we have accessed the pointer we may add on the offset
     codegen_generate_expressionable(entity->array.array_index_node, history_begin(&history, 0));
     asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     asm_push("add ebx, eax");
+
+    // Save EBX
+    asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 }
 void codegen_generate_entity_access_array_bracket(struct resolver_result *result, struct resolver_entity *entity)
 {
@@ -1299,6 +1327,9 @@ void codegen_generate_entity_access_array_bracket(struct resolver_result *result
         codegen_generate_entity_access_array_bracket_pointer(result, entity);
         return;
     }
+    
+    // Restore EBX
+    asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
     // Normal array access
     codegen_generate_expressionable(entity->array.array_index_node, history_begin(&history, 0));
@@ -1314,15 +1345,25 @@ void codegen_generate_entity_access_array_bracket(struct resolver_result *result
         asm_push("imul eax, %i", entity->offset);
         asm_push("add ebx, eax");
     }
+
+    // Save EBX
+    asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
 }
 
 void codegen_generate_entity_access_for_variable_or_general(struct resolver_result *result, struct resolver_entity *entity)
 {
+    // Restore EBX
+    asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     if (entity->flags & RESOLVER_ENTITY_FLAG_DO_INDIRECTION)
     {
         asm_push("mov ebx, [ebx]");
     }
     asm_push("add ebx, %i", entity->offset);
+
+    // Save EBX
+    asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
 }
 
 void codegen_generate_entity_access_for_function_call(struct resolver_result *result, struct resolver_entity *entity)
@@ -1331,6 +1372,8 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
     vector_set_peek_pointer_end(entity->func_call_data.arguments);
 
     struct node *node = vector_peek_ptr(entity->func_call_data.arguments);
+
+    asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
     // EBX must be saved for each argument incase its used
     // therefore we will use ECX instead.
@@ -1345,6 +1388,7 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
 
     // Call the function, address is in EBX
     asm_push("call ecx");
+    codegen_stack_add(entity->func_call_data.stack_size);
 
     struct resolver_entity *next_entity = resolver_result_entity_next(entity);
     if (next_entity && datatype_is_struct_or_union(&entity->dtype))
@@ -1352,8 +1396,10 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
         // We have a next entity and the return type is a structure or union
         // therefore we should move the return value EAX Into EBX
         asm_push("mov ebx, eax");
+        asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
     }
-    codegen_stack_add(entity->func_call_data.stack_size);
+
 }
 
 void codegen_generate_entity_access(struct resolver_result *result, struct resolver_entity *root_assignment_entity, struct node *top_most_node, struct history *history);
@@ -1363,11 +1409,45 @@ void codegen_generate_entity_access_for_unsupported(struct resolver_result *resu
     struct history history = {};
     history.flags = EXPRESSION_GET_ADDRESS;
     codegen_generate_expressionable(entity->node, &history);
-    // We have now resolved the unsupported entity.
-    asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    // We have now resolved the unsupported entity it will be on the stack.
 }
 
-void codegen_generate_entity_access_for_entity(struct resolver_result *result, struct resolver_entity *entity)
+void codegen_apply_unary_access(int amount)
+{
+    for (int i = 0; i < amount; i++)
+    {
+        asm_push("mov ebx, [ebx]");
+    }
+}
+
+void codegen_generate_entity_access_for_unary_get_address(struct resolver_result* result, struct resolver_entity* entity)
+{
+    // We don't care about resolving the address as we already assume
+    // that it is in the EBX register at this point in time...
+    asm_push("; PUSH ADDRESS &");
+    //asm_push_ins_push_with_flags("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", STACK_FRAME_ELEMENT_FLAG_IS_PUSHED_ADDRESS);
+}
+
+void codegen_generate_entity_access_for_unary_indirection(struct resolver_result* result, struct resolver_entity* entity, struct history* history)
+{
+    asm_push("; INDIRECTION");
+    // If we have a result value waiting for us we will pop it, otherwise assume EBX is set already..
+    int flags = asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+  
+    int depth = entity->indirection.depth;
+    // We subtract one from the depth because of the final mov eax, [ebx]
+    // later on in the program. THis will only be the case if we are not an assignment
+    if (!(history->flags & EXPRESSION_IS_ASSIGNMENT))
+    {
+        depth--;
+    }
+    codegen_apply_unary_access(depth);
+    
+    // We must push the computed EBX back to the stack
+    asm_push_ins_push_with_flags("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", STACK_FRAME_ELEMENT_FLAG_IS_PUSHED_ADDRESS);
+}
+
+void codegen_generate_entity_access_for_entity(struct resolver_result *result, struct resolver_entity *entity, struct history* history)
 {
     switch (entity->type)
     {
@@ -1384,6 +1464,15 @@ void codegen_generate_entity_access_for_entity(struct resolver_result *result, s
         codegen_generate_entity_access_for_function_call(result, entity);
         break;
 
+    case RESOLVER_ENTITY_TYPE_UNARY_INDIRECTION:
+        codegen_generate_entity_access_for_unary_indirection(result, entity, history);
+        break;
+
+
+    case RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS:
+        codegen_generate_entity_access_for_unary_get_address(result, entity);
+    break;
+
     case RESOLVER_ENTITY_TYPE_UNSUPPORTED:
         // Resolver didnt support this node, we need to break the problem down further.
         codegen_generate_entity_access_for_unsupported(result, entity);
@@ -1393,41 +1482,16 @@ void codegen_generate_entity_access_for_entity(struct resolver_result *result, s
     }
 }
 
-void codegen_apply_unary_access(int amount)
+
+void codegen_generate_additional_for_last_entity(struct resolver_entity* last_entity, struct history* history, bool single_entity_access)
 {
-    for (int i = 0; i < amount; i++)
+    if (!last_entity)
     {
-        asm_push("mov ebx, [ebx]");
-    }
-}
-
-void codegen_generate_entity_access(struct resolver_result *result, struct resolver_entity *root_assignment_entity, struct node *top_most_node, struct history *history)
-{
-    struct resolver_entity *current = root_assignment_entity;
-    struct resolver_entity *last_entity = root_assignment_entity;
-    if (root_assignment_entity->type != RESOLVER_ENTITY_TYPE_UNSUPPORTED)
-    {
-        asm_push("lea ebx, [%s]", result->base.address);
-        current = resolver_result_entity_next(root_assignment_entity);
+        // What we we going to do with NULL..
+        return;
     }
 
-    while (current)
-    {
-        last_entity = current;
-        if (current->type == RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS || current->type == RESOLVER_ENTITY_TYPE_UNARY_INDIRECTION)
-        {
-            // We are getting the address here? Okay .. we expect this to be 
-            // the last entity for now..
-            assert(current->next == NULL);
-
-            // EBX holds the address..
-            break;
-        }
-        codegen_generate_entity_access_for_entity(result, current);
-        current = resolver_result_entity_next(current);
-    }
-
-    // Is the variable resolved a non pointer structure
+      // Is the variable resolved a non pointer structure
     // if so then it must be pushed as we are passing by value
 
     if (datatype_is_struct_or_union_non_pointer(&last_entity->dtype))
@@ -1436,13 +1500,6 @@ void codegen_generate_entity_access(struct resolver_result *result, struct resol
         // we move [ebx] into EAX...
         codegen_generate_structure_push(last_entity, history, STRUCTURE_PUSH_START_POSITION_ONE);
     }
-    // Do we have a unary expression?
-    else if (last_entity->type == RESOLVER_ENTITY_TYPE_UNARY_INDIRECTION)
-    {
-        // yes
-        codegen_apply_unary_access(last_entity->indirection.depth);
-    }
-
     if (last_entity->type == RESOLVER_ENTITY_TYPE_FUNCTION_CALL)
     {
         // Only if we have a function call that is not on its own i.e test(50) rather than x = test(50)
@@ -1454,12 +1511,15 @@ void codegen_generate_entity_access(struct resolver_result *result, struct resol
             asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
         }
     }
-    else if(history->flags & EXPRESSION_GET_ADDRESS || 
-            last_entity->type == RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS)
+    else if(history->flags & EXPRESSION_GET_ADDRESS)
     {
         // We are getting the address? well it would have been resolved
         // Its in EBX push it
-        asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+//        asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    }
+    else if(last_entity->type == RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS)
+    {
+        // Do nothing.. handled earlier..
     }
     else
     {
@@ -1468,15 +1528,71 @@ void codegen_generate_entity_access(struct resolver_result *result, struct resol
         // we should also go and get the value
         const char *reg_to_use = "eax";
         const char *mov_type_keyword =
-            codegen_byte_word_or_dword_or_ddword(datatype_element_size(&result->last_entity->dtype), &reg_to_use);
+            codegen_byte_word_or_dword_or_ddword(datatype_element_size(&last_entity->dtype), &reg_to_use);
+        
+        asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
         asm_push("mov eax, [ebx]");
-
+        
         if (datatype_is_primitive(&last_entity->dtype) && datatype_element_size(&last_entity->dtype) != DATA_SIZE_DWORD)
         {
             codegen_reduce_register("eax", datatype_element_size(&last_entity->dtype), last_entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
         }
         asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     }
+}
+
+void codegen_generate_entity_access_for_single(struct resolver_result* result, struct resolver_entity* entity, struct history* history)
+{
+    asm_push("; SINGLE ENTITY ACCESS");
+    asm_push("lea ebx, [%s]", result->base.address);
+    asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
+    codegen_generate_additional_for_last_entity(entity, history, true);
+    codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = entity}));
+}
+
+void codegen_generate_unsupported_entity(struct resolver_result* result, struct resolver_entity* entity, struct history* history)
+{
+    struct resolver_entity* current = entity;
+    while (current)
+    {
+        codegen_generate_entity_access_for_entity(result, current, history);
+        current = resolver_result_entity_next(current);
+    }
+
+    codegen_generate_additional_for_last_entity(result->last_entity, history, false);
+    codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = result->last_entity}));
+}
+
+void codegen_generate_entity_access(struct resolver_result *result, struct resolver_entity *root_assignment_entity, struct node *top_most_node, struct history *history)
+{
+    struct resolver_entity *current = root_assignment_entity;
+    struct resolver_entity *last_entity = result->last_entity;
+
+    if (root_assignment_entity->type == RESOLVER_ENTITY_TYPE_UNSUPPORTED)
+    {
+        codegen_generate_unsupported_entity(result, root_assignment_entity, history);
+        return;
+    }
+
+    if (current == last_entity)
+    {
+        // Only one entity?
+        codegen_generate_entity_access_for_single(result, current, history);
+        return;
+    }
+    
+    asm_push("lea ebx, [%s]", result->base.address);
+    asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
+    current = resolver_result_entity_next(root_assignment_entity);
+    while (current)
+    {
+        codegen_generate_entity_access_for_entity(result, current, history);
+        current = resolver_result_entity_next(current);
+    }
+
+    codegen_generate_additional_for_last_entity(result->last_entity, history, false);
     codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = last_entity}));
 }
 
@@ -1504,7 +1620,7 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
 {
     // Left node = to assign
     // Right node = value
-    codegen_generate_expressionable(node->exp.right, history_down(history, EXPRESSION_IS_ASSIGNMENT));
+    codegen_generate_expressionable(node->exp.right, history_down(history, 0));
 
     // Let's create the value
     codegen_response_expect();
@@ -1998,8 +2114,6 @@ void codegen_generate_unary(struct node *node, struct history *history)
         return;
     }
     
-
-    // Ignore all below for now..
 
     // Indirection unary should be handled differently to most unaries
     if (op_is_indirection(node->unary.op))

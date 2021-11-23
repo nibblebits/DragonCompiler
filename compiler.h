@@ -1159,11 +1159,21 @@ enum
     STACK_FRAME_ELEMENT_TYPE_UNKNOWN
 };
 
+enum
+{
+    STACK_FRAME_ELEMENT_FLAG_IS_PUSHED_ADDRESS = 0b00000001,
+    STACK_FRAME_ELEMENT_FLAG_ELEMENT_NOT_FOUND = 0b00000010,
+    STACK_FRAME_ELEMENT_FLAG_IS_NUMERICAL = 0b00000100
+
+};
+
 /**
  * Stack frame elements represent 4 bytes of stack memory pushed to the stack
  */
 struct stack_frame_element
 {
+    // Stack frame element flags
+    int flags;
     // The stack frame element type
     int type;
     // The name of the element to expect here

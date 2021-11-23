@@ -218,17 +218,13 @@ struct resolver_entity *resolver_create_new_entity(struct resolver_result *resul
     return entity;
 }
 
-struct resolver_entity *resolver_create_new_entity_for_unsupported_node(struct resolver_result *result, struct node *node, struct resolver_entity *lower_entity)
+struct resolver_entity *resolver_create_new_entity_for_unsupported_node(struct resolver_result *result, struct node *node)
 {
     struct resolver_entity *entity = resolver_create_new_entity(result, RESOLVER_ENTITY_TYPE_UNSUPPORTED, NULL);
     if (!entity)
         return NULL;
 
     entity->node = node;
-    entity->dtype = lower_entity->dtype;
-    entity->array = lower_entity->array;
-    entity->func_call_data = lower_entity->func_call_data;
-
     // We are unsupported, we cannot merge.
     entity->flags = RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY | RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY;
     return entity;
@@ -284,6 +280,7 @@ struct resolver_entity *resolver_create_new_unknown_entity(struct resolver_proce
     if (!entity)
         return NULL;
 
+    entity->flags |= RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY | RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY;
     entity->scope = scope;
     entity->dtype = *dtype;
     entity->node = node;
@@ -291,25 +288,15 @@ struct resolver_entity *resolver_create_new_unknown_entity(struct resolver_proce
     return entity;
 }
 
-struct resolver_entity *resolver_create_new_unary_indirection_entity(struct resolver_process *process, struct resolver_result *result, struct datatype *dtype, struct node *node, struct resolver_scope *scope, int offset, int indirection_depth)
+struct resolver_entity *resolver_create_new_unary_indirection_entity(struct resolver_process *process, struct resolver_result *result, struct node *node, int indirection_depth)
 {
     struct resolver_entity *entity = resolver_create_new_entity(NULL, RESOLVER_ENTITY_TYPE_UNARY_INDIRECTION, NULL);
     if (!entity)
         return NULL;
 
     entity->flags = RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY | RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY;
-    entity->scope = scope;
-    entity->dtype = *dtype;
     entity->node = node;
-    entity->offset = offset;
     entity->indirection.depth = indirection_depth;
-
-    entity->dtype.pointer_depth -= indirection_depth;
-    if (entity->dtype.pointer_depth <= 0)
-    {
-        // We aren't a pointer anymore.. i.e char* a; *a; = (char)
-        entity->dtype.flags &= ~DATATYPE_FLAG_IS_POINTER;
-    }
     return entity;
 }
 
@@ -326,15 +313,8 @@ struct resolver_entity *resolver_create_new_unary_get_address_entity(struct reso
     // Joined to
     // c - &
     entity->flags = RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY | RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY;
-    entity->scope = scope;
-    entity->dtype = *dtype;
     entity->node = node;
-    entity->offset = offset;
 
-    // Since we are a get address entity we need to also turn the datatype into a pointer..
-    // Ideally this should be acheived on the stack, for now it will be achieved here...
-    entity->dtype.flags |= DATATYPE_FLAG_IS_POINTER;
-    entity->dtype.pointer_depth++;
     return entity;
 }
 
@@ -405,7 +385,7 @@ struct resolver_entity *resolver_make_entity(struct resolver_process *process, s
 
     if (entity)
     {
-        entity->flags = flags;
+        entity->flags |= flags;
         if (custom_dtype)
         {
             entity->dtype = *custom_dtype;
@@ -702,6 +682,8 @@ static struct resolver_entity *resolver_follow_parentheses(struct resolver_proce
     return resolver_follow_exp(resolver, node->parenthesis.exp, result);
 }
 
+static struct resolver_entity *resolver_follow_unsupported_node(struct resolver_process *resovler, struct node *node, struct resolver_result *result);
+
 static struct resolver_entity *resolver_follow_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     struct resolver_entity *entity = NULL;
@@ -774,7 +756,7 @@ struct resolver_entity *resolver_follow_indirection(struct resolver_process *res
     resolver_follow_part(resolver, node->unary.operand, result);
 
     struct resolver_entity *last_entity = resolver_result_peek(result);
-    struct resolver_entity *unary_indirection_entity = resolver_create_new_unary_indirection_entity(resolver, result, &last_entity->dtype, node, last_entity->scope, last_entity->offset, node->unary.indirection.depth);
+    struct resolver_entity *unary_indirection_entity = resolver_create_new_unary_indirection_entity(resolver, result, node, node->unary.indirection.depth);
     resolver_result_entity_push(result, unary_indirection_entity);
     return unary_indirection_entity;
 }
@@ -819,8 +801,10 @@ struct resolver_entity *resolver_follow_cast(struct resolver_process *resolver, 
     struct resolver_entity *operand_entity = resolver_result_pop(result);
     if (!operand_entity)
     {
-        // Not something we can handle, lets go...
-        return NULL;
+        // Since we have no entity this is unsupported..
+        // Half decent solution (could be revised..)
+        resolver_follow_unsupported_node(resolver, node->cast.operand, result);
+        operand_entity = resolver_result_pop(result);
     }
 
     operand_entity->flags |= RESOLVER_ENTITY_FLAG_WAS_CASTED;
@@ -835,22 +819,24 @@ struct resolver_entity *resolver_follow_unsupported_unary_node(struct resolver_p
 static struct resolver_entity *resolver_follow_unsupported_node(struct resolver_process *resovler, struct node *node, struct resolver_result *result)
 {
     // We still need to know the type of this unsupported node so we should continue to follow it
+    bool followed = false;
     switch (node->type)
     {
     case NODE_TYPE_UNARY:
         resolver_follow_unsupported_unary_node(resovler, node, result);
+        followed = true;
         break;
 
     default:
-        return NULL;
+        followed = false;
     }
 
-    struct resolver_entity *lower_entity = resolver_result_pop(result);
-    struct resolver_entity *unsupported_entity = resolver_create_new_entity_for_unsupported_node(result, node, lower_entity);
+    struct resolver_entity *unsupported_entity = resolver_create_new_entity_for_unsupported_node(result, node);
     assert(unsupported_entity);
 
     // Push the unsupported entity to the result stack
     resolver_result_entity_push(result, unsupported_entity);
+    return unsupported_entity;
 }
 
 static struct resolver_entity *resolver_follow_part_return_entity(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
@@ -1029,6 +1015,53 @@ void resolver_execute_rules(struct resolver_process *resolver, struct resolver_r
     }
     resolver_push_vector_of_entities(result, saved_entities);
 }
+
+void resolver_finalize_unary(struct resolver_process *resolver, struct resolver_result *result, struct resolver_entity *entity)
+{
+    // We must finalize the unary, this is acomplished by taking the entity  previous to this entity
+    // then merging the datatypes
+    struct resolver_entity *previous_entity = entity->prev;
+    if (!previous_entity)
+    {
+        // What are we going to do..
+        return;
+    }
+
+    entity->scope = previous_entity->scope;
+    entity->dtype = previous_entity->dtype;
+    entity->offset = previous_entity->offset;
+
+    if (entity->type == RESOLVER_ENTITY_TYPE_UNARY_INDIRECTION)
+    {
+        int indirection_depth = entity->indirection.depth;
+        entity->dtype.pointer_depth -= indirection_depth;
+        if (entity->dtype.pointer_depth <= 0)
+        {
+            //     // We aren't a pointer anymore.. i.e char* a; *a; = (char)
+            entity->dtype.flags &= ~DATATYPE_FLAG_IS_POINTER;
+        }
+    }
+    else if (entity->type == RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS)
+    {
+        // Since we are a get address entity we need to also turn the datatype into a pointer..
+        // Ideally this should be acheived on the stack, for now it will be achieved here...
+        entity->dtype.flags |= DATATYPE_FLAG_IS_POINTER;
+        entity->dtype.pointer_depth++;
+    }
+}
+
+void resolver_finalize_last_entity(struct resolver_process *resolver, struct resolver_result *result)
+{
+    struct resolver_entity *last_entity = resolver_result_peek(result);
+    switch (last_entity->type)
+    {
+    case RESOLVER_ENTITY_TYPE_UNARY_INDIRECTION:
+    case RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS:
+        resolver_finalize_unary(resolver, result, last_entity);
+        break;
+    }
+}
+
 void resolver_finalize_result(struct resolver_process *resolver, struct resolver_result *result)
 {
     struct resolver_entity *first_entity = resolver_result_entity_root(result);
@@ -1038,6 +1071,7 @@ void resolver_finalize_result(struct resolver_process *resolver, struct resolver
         return;
     }
     resolver->callbacks.set_result_base(result, first_entity);
+    resolver_finalize_last_entity(resolver, result);
 }
 
 struct resolver_result *resolver_follow(struct resolver_process *resolver, struct node *node)

@@ -645,19 +645,28 @@ bool datatype_is_primitive_for_string(const char *type)
     return S_EQ(type, "void") || S_EQ(type, "char") || S_EQ(type, "short") || S_EQ(type, "int") || S_EQ(type, "long") || S_EQ(type, "float") || S_EQ(type, "double");
 }
 
-bool datatype_is_primitive_non_pointer(struct datatype* dtype)
+bool datatype_is_primitive_non_pointer(struct datatype *dtype)
 {
     return datatype_is_primitive(dtype) && !(dtype->flags & DATATYPE_FLAG_IS_POINTER);
 }
 
-bool datatype_is_struct_or_union_non_pointer(struct datatype* dtype)
+bool datatype_is_struct_or_union_non_pointer(struct datatype *dtype)
 {
     return !datatype_is_primitive(dtype) && !(dtype->flags & DATATYPE_FLAG_IS_POINTER);
 }
 
-bool datatype_is_primitive(struct datatype* dtype)
+bool datatype_is_primitive(struct datatype *dtype)
 {
     return datatype_is_primitive_for_string(dtype->type_str);
+}
+
+void datatype_decrement_pointer(struct datatype *dtype)
+{
+    dtype->pointer_depth--;
+    if (dtype->pointer_depth <= 0)
+    {
+        dtype->flags &= ~DATATYPE_FLAG_IS_POINTER;
+    }
 }
 
 bool variable_node_is_primative(struct node *node)
@@ -691,6 +700,20 @@ size_t datatype_element_size(struct datatype *datatype)
         return DATA_SIZE_DWORD;
 
     return datatype->size;
+}
+
+/**
+ * @brief Returns a numerical datatype for the default datatype of "int" for numerical numbers.
+ * 
+ * @return struct datatype The "int" datatype with a size of 4 bytes.
+ */
+struct datatype datatype_for_numeric()
+{
+    struct datatype dtype = {};
+    dtype.type = DATA_TYPE_INTEGER;
+    dtype.type_str = "int";
+    dtype.size = DATA_SIZE_DWORD;
+    return dtype;
 }
 
 size_t variable_size(struct node *var_node)

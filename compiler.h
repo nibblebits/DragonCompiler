@@ -135,7 +135,9 @@ enum
     EXPRESSION_IS_ASSIGNMENT = 0b10000000000000000000000000,
     IS_ALONE_STATEMENT = 0b100000000000000000000000000,
     EXPRESSION_IS_UNARY = 0b1000000000000000000000000000,
-    IS_STATEMENT_RETURN = 0b10000000000000000000000000000
+    IS_STATEMENT_RETURN = 0b10000000000000000000000000000,
+    IS_RIGHT_OPERAND_OF_ASSIGNMENT = 0b100000000000000000000000000000,
+    IS_LEFT_OPERAND_OF_ASSIGNMENT = 0b1000000000000000000000000000000
 
 };
 
@@ -615,6 +617,7 @@ enum
     RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS,
     RESOLVER_ENTITY_TYPE_UNARY_INDIRECTION,
     RESOLVER_ENTITY_TYPE_UNSUPPORTED,
+    RESOLVER_ENTITY_TYPE_CAST
 
 };
 
@@ -693,7 +696,7 @@ struct resolver_entity
         } rule;
 
         struct resolver_indireciton
-        {   
+        {
             int depth;
         } indirection;
     };
@@ -788,7 +791,12 @@ enum
 
     // True if we are currently resolving an array in this part of the expression
     RESOLVER_RESULT_FLAG_PROCESSING_ARRAY_ENTITIES = 0b00000100,
-    RESOLVER_RESULT_FLAG_HAS_POINTER_ARRAY_ACCESS = 0b00001000
+    RESOLVER_RESULT_FLAG_HAS_POINTER_ARRAY_ACCESS = 0b00001000,
+    RESOLVER_RESULT_FLAG_FIRST_ENTITY_LOAD_TO_EBX = 0b00010000,
+    RESOLVER_RESULT_FLAG_FIRST_ENTITY_PUSH_VALUE = 0b00100000,
+
+    // Set if we must perform indirection to access the final value.
+    RESOLVER_RESULT_FLAG_FINAL_INDIRECTION_REQUIRED_FOR_VALUE = 0b01000000
 };
 
 /**
@@ -1163,8 +1171,20 @@ enum
 {
     STACK_FRAME_ELEMENT_FLAG_IS_PUSHED_ADDRESS = 0b00000001,
     STACK_FRAME_ELEMENT_FLAG_ELEMENT_NOT_FOUND = 0b00000010,
-    STACK_FRAME_ELEMENT_FLAG_IS_NUMERICAL = 0b00000100
+    STACK_FRAME_ELEMENT_FLAG_IS_NUMERICAL = 0b00000100,
+    STACK_FRAME_ELEMENT_FLAG_HAS_DATATYPE = 0b00001000
 
+};
+
+struct stack_frame_data
+{
+    // The datatype of this pushed entity.
+    // If the datatype is a structure then you should expect to do additional pops
+    // to pop the entire structure off the stack..
+    struct datatype dtype;
+    union
+    {
+    };
 };
 
 /**
@@ -1182,6 +1202,8 @@ struct stack_frame_element
 
     // The offset from the stack pointer this element can be located.
     int offset_from_bp;
+
+    struct stack_frame_data data;
 };
 
 void stackframe_push(struct node *func_node, struct stack_frame_element *element);
@@ -1485,9 +1507,8 @@ enum
     COMPILER_FAILED_WITH_ERRORS,
 };
 
-
-size_t function_node_argument_stack_addition(struct node* node);
-struct vector* function_node_argument_vec(struct node* node);
+size_t function_node_argument_stack_addition(struct node *node);
+struct vector *function_node_argument_vec(struct node *node);
 
 /**
  * Returns true if this node can be used in an expression
@@ -1890,6 +1911,20 @@ bool datatype_is_primitive_for_string(const char *type);
 bool datatype_is_primitive(struct datatype *dtype);
 bool datatype_is_primitive_non_pointer(struct datatype *dtype);
 bool datatype_is_struct_or_union_non_pointer(struct datatype *dtype);
+/**
+ * @brief Returns a numerical datatype for the default datatype of "int" for numerical numbers.
+ * 
+ * @return struct datatype The "int" datatype with a size of 4 bytes.
+ */
+struct datatype datatype_for_numeric();
+
+/**
+ * @brief Decrements the pointer of this datatype for example "int*" would become "int"
+ * 
+ * @param dtype 
+ */
+void datatype_decrement_pointer(struct datatype *dtype);
+
 
 /**
  * Returns true if the given variable node is a primative variable

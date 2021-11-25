@@ -2428,6 +2428,14 @@ void parse_keyword_return(struct history *history)
 {
     expect_keyword("return");
 
+    if (token_next_is_symbol(';'))
+    {
+        // We don't have an expression for this return statement. We are finished
+        expect_sym(';');
+        make_return_node(NULL);
+        return;
+    }
+
     // Ok we parsed the return keyword, lets now parse the expression of the return
     // keyword and then we expect a semicolon ;)
     parse_expressionable_root(history);

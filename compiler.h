@@ -501,9 +501,17 @@ struct compile_process
     // Vector of <struct node*> node pointers
     struct vector *node_vec;
 
-    // The symbol table that holds things like function names, global variables
-    // data can point to the node in question, along with other relevant information
-    struct vector *symbol_tbl;
+    struct symbols
+    {
+        // The current active symbol table that holds things like function names, global variables
+        // data can point to the node in question, along with other relevant information
+        struct vector *table;
+
+        // Contains a vector of vectors of the symbol table in variable "table"
+        struct vector* tables;
+    } symbols;
+  
+
 
     // Vector of const char* represents include directories.
     struct vector *include_dirs;
@@ -988,9 +996,16 @@ enum
 
 enum
 {
+    VALIDATION_ALL_OK,
+    VALIDATION_GENERAL_ERROR
+};
+
+enum
+{
     CODEGEN_ALL_OK,
     CODEGEN_GENERAL_ERROR
 };
+
 
 enum
 {
@@ -1529,6 +1544,16 @@ bool node_valid(struct node *node);
 void compiler_error(struct compile_process *compiler, const char *msg, ...);
 
 /**
+ * @brief Called to issue a compiler error and terminate the compiler. Node is used
+ * as positioning information.
+ * 
+ * @param node 
+ * @param msg 
+ * @param ... 
+ */
+void compiler_node_error(struct node *node, const char *msg, ...);
+
+/**
  * Called to issue a compiler warning but continue execution
  */
 void compiler_warning(struct compile_process *compiler, const char *msg, ...);
@@ -1578,6 +1603,12 @@ struct vector *lex_process_tokens(struct lex_process *process);
  * Parses the tree provided from lexical analysis
  */
 int parse(struct compile_process *process);
+
+/**
+ * Validates the abstract syntax tree ensuring your not setting variables that dont even exist.
+ * or calling non-existant functions and other validation error related stuff
+ */
+int validate(struct compile_process* process);
 
 /**
  * Generates the assembly output for the given AST
@@ -1651,6 +1682,22 @@ void scope_iteration_end(struct scope *scope);
  * Returns the current scope for the code generator
  */
 struct scope *scope_current(struct compile_process *process);
+
+
+void symresolver_initialize(struct compile_process* process);
+
+/**
+ * @brief Creates a new symbol table. Setting it as the active symbol table.
+ * 
+ * @param compiler 
+ */
+void symresolver_new_table(struct compile_process* compiler);
+/**
+ * @brief Ends the current symbol table, restoring the previous one on the table stack
+ * 
+ * @param compiler 
+ */
+void symresolver_end_table(struct compile_process* compiler);
 
 /**
  * Registers a symbol to the symbol table
@@ -1907,6 +1954,8 @@ int compute_sum_padding_for_body(struct node *node);
  */
 int padding(int val, int to);
 
+bool datatype_is_void_no_ptr(struct datatype* dtype);
+
 bool datatype_is_primitive_for_string(const char *type);
 bool datatype_is_primitive(struct datatype *dtype);
 bool datatype_is_primitive_non_pointer(struct datatype *dtype);
@@ -2089,6 +2138,13 @@ struct resolver_entity *resolver_new_entity_for_var_node(struct resolver_process
 struct resolver_entity *resolver_register_function(struct resolver_process *process, struct node *func_node, void *private);
 struct resolver_entity *resolver_get_variable_in_scope(const char *var_name, struct resolver_scope *scope);
 struct resolver_entity *resolver_get_variable(struct resolver_result *result, struct resolver_process *resolver, const char *var_name);
+/**
+ * @brief Gets the variable with the given name from the local scope, does not look higher
+ * than the current scope.
+ */
+struct resolver_entity* resolver_get_variable_from_local_scope(struct resolver_process* resolver, const char* var_name);
+
+
 struct resolver_result *resolver_follow(struct resolver_process *resolver, struct node *node);
 struct resolver_entity *resolver_result_entity_root(struct resolver_result *result);
 struct resolver_entity *resolver_result_entity_next(struct resolver_entity *entity);

@@ -7,6 +7,17 @@ struct lex_process_functions compiler_lex_functions = {
     .peek_char = compile_process_peek_char,
     .push_char = compile_process_push_char};
 
+void compiler_node_error(struct node *node, const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vfprintf(stderr, msg, args);
+    va_end(args);
+
+    fprintf(stderr, " on line %i, col %i in file %s\n", node->pos.line, node->pos.col, node->pos.filename);
+
+    exit(-1);
+}
 void compiler_error(struct compile_process *compiler, const char *msg, ...)
 {
     va_list args;
@@ -124,9 +135,9 @@ struct compile_process *compile_include_for_include_dir(const char *include_dir,
  */
 struct compile_process *compile_include(const char *filename, struct compile_process *parent_process)
 {
-    struct compile_process* new_process = NULL;
-    const char* include_dir = compiler_include_dir_begin(parent_process);
-    while(include_dir && !new_process)
+    struct compile_process *new_process = NULL;
+    const char *include_dir = compiler_include_dir_begin(parent_process);
+    while (include_dir && !new_process)
     {
         new_process = compile_include_for_include_dir(include_dir, filename, parent_process);
         include_dir = compiler_include_dir_next(parent_process);
@@ -158,6 +169,11 @@ int compile_file(const char *filename, const char *out_filename, int flags)
 
     // Symbol resolution is now done during parsing..
     if (parse(process) != PARSE_ALL_OK)
+        return COMPILER_FAILED_WITH_ERRORS;
+
+    // We must validate the tree to ensure people aren't setting variables that dont exist
+    // ect..
+    if (validate(process) != VALIDATION_ALL_OK)
         return COMPILER_FAILED_WITH_ERRORS;
 
     for (int i = 0; i < vector_count(process->node_tree_vec); i++)

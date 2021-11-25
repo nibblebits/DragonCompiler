@@ -65,9 +65,16 @@ struct compile_process *compile_process_create(const char *filename, const char 
     process->token_vec_original = vector_create(sizeof(struct token));
     process->node_vec = vector_create(sizeof(struct node *));
     process->node_tree_vec = vector_create(sizeof(struct node *));
-    process->symbol_tbl = vector_create(sizeof(struct symbol *));
     process->resolver = resolver_default_new_process(process);
     process->generator = codegenerator_new(process);
+
+    // Initialize the symbol resolver.
+    symresolver_initialize(process);
+
+    // Create a new symbol table for the compiler to use throughout its entire
+    // duration.
+    symresolver_new_table(process);
+
 
 
     // We have a parent processor? THen they should share the same preprocessor

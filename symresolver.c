@@ -4,15 +4,45 @@
 
 static void symresolver_push_symbol(struct compile_process* process, struct symbol* sym)
 {
-    vector_push(process->symbol_tbl, &sym);
+    vector_push(process->symbols.table, &sym);
 }
 
+void symresolver_initialize(struct compile_process* process)
+{
+    process->symbols.tables = vector_create(sizeof(struct vector*));
+}
+
+/**
+ * @brief Creates a new symbol table. Setting it as the active symbol table.
+ * 
+ * @param compiler 
+ */
+void symresolver_new_table(struct compile_process* compiler)
+{
+    // Okay we must save the current table.
+    vector_push(compiler->symbols.tables, &compiler->symbols.table);
+
+    // Now overwrite the active table
+    compiler->symbols.table = vector_create(sizeof(struct symbol*));
+}
+
+/**
+ * @brief Ends the current symbol table, restoring the previous one on the table stack
+ * 
+ * @param compiler 
+ */
+void symresolver_end_table(struct compile_process* compiler)
+{
+    struct vector* last_table = vector_back_ptr(compiler->symbols.tables);
+    compiler->symbols.table = last_table;
+    vector_pop(compiler->symbols.tables);
+}
 
 struct symbol* symresolver_get_symbol(struct compile_process* process, const char* name)
 {    
-    vector_set_peek_pointer(process->symbol_tbl, 0);
+    vector_set_peek_pointer(process->symbols.table, 0);
 
-    struct symbol* symbol = vector_peek_ptr(process->symbol_tbl);
+    struct symbol* symbol = vector_peek_ptr(process->symbols.table);
     while(symbol)
     {
 
@@ -21,7 +51,7 @@ struct symbol* symresolver_get_symbol(struct compile_process* process, const cha
             break;
         }
 
-        symbol = vector_peek_ptr(process->symbol_tbl);
+        symbol = vector_peek_ptr(process->symbols.table);
     }
 
     return symbol;

@@ -1,5 +1,5 @@
 INCLUDES= -I ./ -I ./helpers
-OBJECTS= ./build/misc.o ./build/lexer.o  ./build/lex_process.o ./build/token.o ./build/expressionable.o ./build/parser.o ./build/symresolver.o ./build/scope.o ./build/resolver.o ./build/rdefault.o ./build/helper.o ./build/codegen.o ./build/helpers/vector.o ./build/helpers/buffer.o ./build/helpers/hashmap.o ./build/compiler.o ./build/cprocess.o ./build/preprocessor/preprocessor.o ./build/preprocessor/native.o ./build/array.o ./build/node.o ./build/preprocessor/static-includes.o ./build/preprocessor/static-includes/stddef.o ./build/preprocessor/static-includes/stdarg.o  ./build/fixup.o ./build/native.o ./build/stackframe.o
+OBJECTS= ./build/misc.o ./build/lexer.o  ./build/lex_process.o ./build/token.o ./build/expressionable.o ./build/parser.o ./build/validator.o ./build/symresolver.o ./build/scope.o ./build/resolver.o ./build/rdefault.o ./build/helper.o ./build/codegen.o ./build/helpers/vector.o ./build/helpers/buffer.o ./build/helpers/hashmap.o ./build/compiler.o ./build/cprocess.o ./build/preprocessor/preprocessor.o ./build/preprocessor/native.o ./build/array.o ./build/node.o ./build/preprocessor/static-includes.o ./build/preprocessor/static-includes/stddef.o ./build/preprocessor/static-includes/stdarg.o  ./build/fixup.o ./build/native.o ./build/stackframe.o
 all: ${OBJECTS}
 	gcc main.c -o main ${OBJECTS} -g
 	cd ./tests && ./test.sh
@@ -37,6 +37,9 @@ all: ${OBJECTS}
 
 ./build/parser.o: ./parser.c
 	gcc parser.c ${INCLUDES} -o ./build/parser.o -g -c
+
+./build/validator.o: ./validator.c
+	gcc validator.c ${INCLUDES} -o ./build/validator.o -g -c
 
 ./build/symresolver.o: ./symresolver.c
 	gcc symresolver.c ${INCLUDES} -o ./build/symresolver.o -g -c

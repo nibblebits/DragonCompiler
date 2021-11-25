@@ -159,8 +159,12 @@ static struct history *history_begin(struct history *history_out, int flags)
 #define parser_scope_last_entity() \
     scope_last_entity(current_process)
 
+#define parser_scope_last_entity_stop_global_scope() \
+    scope_last_entity_stop_at(current_process, current_process->scope.root)
+
 #define parser_scope_current() \
     scope_current(current_process)
+
 
 int size_of_struct(const char *struct_name);
 void parse_variable(struct datatype *dtype, struct token *name_token, struct history *history);
@@ -239,7 +243,7 @@ struct parser_scope_entity *parser_new_scope_entity(struct node *node, int stack
 
 void parser_scope_offset_for_stack(struct node *node, struct history *history)
 {
-    struct parser_scope_entity *last_entity = parser_scope_last_entity();
+    struct parser_scope_entity *last_entity = parser_scope_last_entity_stop_global_scope();
     bool upward_stack = history->flags & HISTORY_FLAG_IS_UPWARD_STACK;
     int offset = -variable_size(node);
     if (upward_stack)
@@ -2237,6 +2241,7 @@ void parse_function(struct datatype *dtype, struct token *name_token, struct his
 
     // Scope for function arguments
     resolver_default_new_scope(current_process->resolver, 0);
+    parser_scope_new();
 
     // Create the function node
     make_function_node(dtype, name_token->sval, NULL, NULL);
@@ -2284,6 +2289,7 @@ void parse_function(struct datatype *dtype, struct token *name_token, struct his
     parser_current_function = NULL;
     // We are done with function arguments scope
     resolver_finish_scope(current_process->resolver);
+    parser_scope_finish();
 }
 
 void parse_forward_declaration_struct(struct datatype *dtype)

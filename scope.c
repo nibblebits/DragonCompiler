@@ -84,32 +84,44 @@ void *scope_last_entity_at_scope(struct scope *scope)
 {
     if (!vector_count(scope->entities))
     {
-        if (scope->parent)
-        {
-            return scope_last_entity_at_scope(scope->parent);
-        }
-
         return NULL;
     }
 
     return *(void **)(vector_back(scope->entities));
 }
 
-void *scope_last_entity(struct compile_process *process)
+void* scope_last_entity_from_scope_stop_at(struct scope* scope, struct scope* stop_scope)
 {
-    void *last = scope_last_entity_at_scope(process->scope.current);
+    if (scope == stop_scope)
+    {
+        // Nothing to be done
+        return NULL;
+    }
+
+    void *last = scope_last_entity_at_scope(scope);
     if (last)
     {
         return last;
     }
 
-    struct scope *parent = process->scope.current->parent;
+    struct scope *parent = scope->parent;
     if (!last && parent)
     {
-        return scope_last_entity_at_scope(parent);
+        return scope_last_entity_from_scope_stop_at(parent, stop_scope);
     }
 
-    return NULL;
+    return NULL; 
+
+}
+
+void* scope_last_entity_stop_at(struct compile_process* process, struct scope* stop_scope)
+{
+   return scope_last_entity_from_scope_stop_at(process->scope.current, stop_scope);
+}
+
+void *scope_last_entity(struct compile_process *process)
+{
+    return scope_last_entity_stop_at(process, NULL);
 }
 
 void scope_push(struct compile_process *process, void *ptr, size_t elem_size)

@@ -1661,6 +1661,8 @@ void scope_finish(struct compile_process *process);
 
 struct scope *scope_create_root(struct compile_process *process);
 void scope_free_root(struct compile_process *process);
+void *scope_last_entity_at_scope(struct scope *scope);
+
 
 /**
  * Pushes an element to the current scope
@@ -1683,6 +1685,14 @@ void scope_iteration_end(struct scope *scope);
  */
 struct scope *scope_current(struct compile_process *process);
 
+/**
+ * @brief Gets the last entity and stops at the stop_scope. Provide NULL to not stop.
+ * 
+ * @param process 
+ * @param stop_scope 
+ * @return void* 
+ */
+void* scope_last_entity_stop_at(struct compile_process* process, struct scope* stop_scope);
 
 void symresolver_initialize(struct compile_process* process);
 

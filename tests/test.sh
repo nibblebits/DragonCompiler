@@ -546,5 +546,15 @@ else
     echo -e "Structure array set test passed"
 fi
 
+
+echo -e "Pointer cast test.."
+./build/pointer_cast_test
+if [ $? -ne 50 ]; then
+    echo -e "Pointer cast test failed"
+    res_code=1
+else
+    echo -e "Pointer cast test passed"
+fi
+
 echo -e "All tests finished"
 exit $res_code

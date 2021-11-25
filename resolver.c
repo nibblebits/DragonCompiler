@@ -391,7 +391,6 @@ struct resolver_entity *resolver_make_entity(struct resolver_process *process, s
         entity = resolver_new_entity_for_var_node_no_push(process, node, NULL, offset, scope);
         break;
 
-
     default:
         entity = resolver_create_new_unknown_entity(process, result, custom_dtype, node, scope, offset);
     }
@@ -522,7 +521,7 @@ struct resolver_entity *resolver_get_variable(struct resolver_result *result, st
     return entity;
 }
 
-struct resolver_entity* resolver_get_variable_from_local_scope(struct resolver_process* resolver, const char* var_name)
+struct resolver_entity *resolver_get_variable_from_local_scope(struct resolver_process *resolver, const char *var_name)
 {
     struct resolver_result *result = resolver_new_result(resolver);
     return resolver_get_entity_in_scope(result, resolver, resolver_scope_current(resolver), var_name);
@@ -1091,9 +1090,22 @@ void resolver_finalize_result_flags(struct resolver_process *resolver, struct re
     int flags = RESOLVER_RESULT_FLAG_FIRST_ENTITY_PUSH_VALUE;
     // We must iterate through all of the results
     struct resolver_entity *entity = result->entity;
-    if (entity == result->last_entity)
+    struct resolver_entity *last_entity = result->last_entity;
+
+    if (entity == last_entity)
     {
-        // One entity? then nothing to do.
+        // One entity?
+        // Is it a structure?
+        if (last_entity->type == RESOLVER_ENTITY_TYPE_VARIABLE &&
+            datatype_is_struct_or_union_non_pointer(&last_entity->dtype))
+        {
+            // Last variable is a structure non pointer..
+            // therefore it must be pushed to the stack which may require loading the first entity
+            // into the EBX register.
+            flags |= RESOLVER_RESULT_FLAG_FIRST_ENTITY_LOAD_TO_EBX;
+            flags &= ~RESOLVER_RESULT_FLAG_FIRST_ENTITY_PUSH_VALUE;
+        } 
+        
         result->flags = flags;
         return;
     }
@@ -1131,7 +1143,7 @@ void resolver_finalize_result_flags(struct resolver_process *resolver, struct re
                 flags |= RESOLVER_RESULT_FLAG_FINAL_INDIRECTION_REQUIRED_FOR_VALUE;
             }
         }
-        
+
         if (entity->type == RESOLVER_ENTITY_TYPE_GENERAL)
         {
             flags |= RESOLVER_RESULT_FLAG_FIRST_ENTITY_LOAD_TO_EBX | RESOLVER_RESULT_FLAG_FINAL_INDIRECTION_REQUIRED_FOR_VALUE;
@@ -1141,7 +1153,6 @@ void resolver_finalize_result_flags(struct resolver_process *resolver, struct re
         entity = entity->next;
     }
 
-    struct resolver_entity* last_entity = result->last_entity;
     if (last_entity->type == RESOLVER_ENTITY_TYPE_VARIABLE)
     {
         flags |= RESOLVER_RESULT_FLAG_FINAL_INDIRECTION_REQUIRED_FOR_VALUE;

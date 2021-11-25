@@ -1207,8 +1207,8 @@ static void codegen_gen_mov_or_math(const char *reg, struct node *value_node, in
 
 static void codegen_gen_mem_access_get_address(struct node *value_node, int flags, struct resolver_entity *entity)
 {
-    //  asm_push("lea ebx, [%s]", codegen_entity_private(entity)->address);
-    // asm_push_ins_push_with_flags("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", STACK_FRAME_ELEMENT_FLAG_IS_PUSHED_ADDRESS);
+    asm_push("lea ebx, [%s]", codegen_entity_private(entity)->address);
+    asm_push_ins_push_with_flags("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", STACK_FRAME_ELEMENT_FLAG_IS_PUSHED_ADDRESS);
 }
 
 static void codegen_gen_mem_access_first_for_expression(struct node *value_node, int flags, struct resolver_entity *entity)
@@ -1689,6 +1689,7 @@ void codegen_generate_code_for_result_base(struct resolver_result *result, struc
 {
     // Do we have to load the address of EBX or are we going to push the value directly.
     // Assignments need this to happen and would have set the EXPRESSION_GET_ADDRESS flag
+
     if (history->flags & EXPRESSION_GET_ADDRESS ||
         result->flags & RESOLVER_RESULT_FLAG_FIRST_ENTITY_LOAD_TO_EBX)
     {
@@ -1809,10 +1810,18 @@ void codegen_generate_assignment_part(struct node *node, struct history *history
     struct resolver_entity *next_entity = resolver_result_entity_next(root_assignment_entity);
     if (!next_entity)
     {
-        asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        struct datatype last_dtype = result->last_entity->dtype;
+        if (datatype_is_struct_or_union_non_pointer(&last_dtype))
+        {
+            codegen_generate_move_struct(&last_dtype, result->base.address, 0);
+        }
+        else
+        {
+            asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
-        // No further entities then set the value..
-        asm_push("mov %s [%s], %s", mov_type, result->base.address, reg_to_use);
+            // No further entities then set the value..
+            asm_push("mov %s [%s], %s", mov_type, result->base.address, reg_to_use);
+        }
     }
     else
     {
@@ -2136,10 +2145,14 @@ bool codegen_resolve_node_for_value(struct node *node, struct history *history)
         return false;
     }
 
-    // If the last entity is not a pointer then it must be accessed as a value.
-    // therefore it must be reduced in size to its actual size.
-    if (!(result->last_entity->dtype.flags & DATATYPE_FLAG_IS_POINTER))
+    if (datatype_is_struct_or_union_non_pointer(&result->last_entity->dtype))
     {
+        codegen_generate_structure_push(result->last_entity, history, 0);
+    }
+    else if (!(result->last_entity->dtype.flags & DATATYPE_FLAG_IS_POINTER))
+    {
+        // If the last entity is not a pointer then it must be accessed as a value.
+        // therefore it must be reduced in size to its actual size.
         asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
         // As this is a value we may have to dive a bit deeper to resolve the final computed address.

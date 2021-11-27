@@ -1513,8 +1513,17 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
     codegen_stack_add(stack_size);
 
     // We have to put EAX back to the stack for receivers of this function
-    asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = entity->dtype});
-
+    if (datatype_is_struct_or_union_non_pointer(&entity->dtype))
+    {
+        // This is a structure/union return type, therefore push all to the stack
+        struct history history = {};
+        asm_push("mov ebx, eax");
+        codegen_generate_structure_push(entity, &history, 0);
+    }
+    else
+    {
+        asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = entity->dtype});
+    }
     struct resolver_entity *next_entity = resolver_result_entity_next(entity);
     if (next_entity && datatype_is_struct_or_union(&entity->dtype))
     {
@@ -1834,7 +1843,6 @@ void codegen_generate_assignment_part(struct node *node, struct history *history
 {
     // Pop the value of the right operand
     struct datatype right_operand_dtype;
-    //  assert(asm_datatype_back(&right_operand_dtype));
 
     struct resolver_result *result = resolver_follow(current_process->resolver, node);
     assert(resolver_result_ok(result));

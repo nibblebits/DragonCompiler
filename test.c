@@ -20,5 +20,8 @@ struct abc test()
 
 int main()
 {
-   test();
+   abc1.x = 20;
+   abc1.y = 34;
+   abc2 = test();
+   return abc2.x + abc2.y;
 }

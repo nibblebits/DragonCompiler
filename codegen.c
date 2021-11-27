@@ -643,6 +643,16 @@ struct stack_frame_element *asm_stack_back()
     return stackframe_back(current_function);
 }
 
+struct stack_frame_element* asm_stack_peek()
+{
+    return stackframe_peek(current_function);
+}
+
+void asm_stack_peek_start()
+{
+    stackframe_peek_start(current_function);
+}
+
 /**
  * @brief Gets the datatype from the last pushed element to the stack. True is returned
  * if the last element on the stack has a datatype, if not then false.
@@ -715,13 +725,18 @@ void asm_pop_ebp_no_stack_frame_restore()
     asm_push("pop ebp");
 }
 
-void codegen_stack_sub(size_t stack_size)
+void codegen_stack_sub_with_name(size_t stack_size, const char *name)
 {
     if (stack_size != 0)
     {
-        stackframe_sub(current_function, STACK_FRAME_ELEMENT_TYPE_UNKNOWN, "stack_subtraction", stack_size);
+        stackframe_sub(current_function, STACK_FRAME_ELEMENT_TYPE_UNKNOWN, name, stack_size);
         asm_push("sub esp, %lld", stack_size);
     }
+}
+
+void codegen_stack_sub(size_t stack_size)
+{
+    codegen_stack_sub_with_name(stack_size, "stack_subtraction");
 }
 
 void codegen_stack_add_no_compile_time_stack_frame_restore(size_t stack_size)
@@ -1465,6 +1480,20 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
     // therefore we will use ECX instead.
     asm_push("mov ecx,ebx");
 
+    // Is this a structure return type?
+    if (datatype_is_struct_or_union_non_pointer(&entity->dtype))
+    {
+        struct history history = {};
+
+        asm_push("; SUBTRACT ROOM FOR RETURNED STRUCTURE/UNION DATATYPE ");
+        // Make room for the returned structure
+        codegen_stack_sub_with_name(align_value(datatype_size(&entity->dtype), DATA_SIZE_DWORD), "result_value");
+
+        // Now we must pass a pointer to the data we just created
+        // which will be the current stack pointer
+        asm_push_ins_push("esp", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    }
+    // If we have a structure return type then we need to push the address of the left operand.
     while (node)
     {
         struct history history;
@@ -1474,10 +1503,17 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
 
     // Call the function, address is in EBX
     asm_push("call ecx");
-    codegen_stack_add(entity->func_call_data.stack_size);
+    size_t stack_size = entity->func_call_data.stack_size;
+    if (datatype_is_struct_or_union_non_pointer(&entity->dtype))
+    {
+        // We returned a datatype? Then we need to account for
+        // "push esp" where we passed the pointer to the structure data
+        stack_size += DATA_SIZE_DWORD;
+    }
+    codegen_stack_add(stack_size);
 
     // We have to put EAX back to the stack for receivers of this function
-    asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = entity->dtype});
 
     struct resolver_entity *next_entity = resolver_result_entity_next(entity);
     if (next_entity && datatype_is_struct_or_union(&entity->dtype))
@@ -2145,7 +2181,11 @@ bool codegen_resolve_node_for_value(struct node *node, struct history *history)
         return false;
     }
 
-    if (datatype_is_struct_or_union_non_pointer(&result->last_entity->dtype))
+    if (result->last_entity->type == RESOLVER_ENTITY_TYPE_FUNCTION_CALL &&
+        datatype_is_struct_or_union_non_pointer(&result->last_entity->dtype))
+    {
+    }
+    else if (datatype_is_struct_or_union_non_pointer(&result->last_entity->dtype))
     {
         codegen_generate_structure_push(result->last_entity, history, 0);
     }
@@ -2655,6 +2695,8 @@ void codegen_generate_statement_return_exp(struct node *node)
             // EBX EDX contains the address to the structure.
             // Now we must make a move
             codegen_generate_move_struct(&resolved_entity->dtype, "edx", 0);
+            // Eax should also contain a pointer to this structure
+            asm_push("mov eax, [ebp+8]");
             return;
         }
     }
@@ -2886,6 +2928,22 @@ void codegen_generate_goto_stmt(struct node *node)
     asm_push("jmp label_%s", node->stmt._goto.label->sval);
 }
 
+void codegen_discard_unused_stack()
+{
+    asm_stack_peek_start();
+    struct stack_frame_element *element = asm_stack_peek();
+    size_t stack_adjustment = 0;
+    while (element)
+    {
+        if (!S_EQ(element->name, "result_value"))
+            break;
+
+        stack_adjustment += DATA_SIZE_DWORD;
+        element = asm_stack_peek();
+    }
+
+    codegen_stack_add(stack_adjustment);
+}
 void codegen_generate_statement(struct node *node, struct history *history)
 {
     switch (node->type)
@@ -2956,9 +3014,7 @@ void codegen_generate_statement(struct node *node, struct history *history)
         break;
     }
 
-    // Did we end up with a value on the stack? We don't need it as we are the statement.
-    // discard it.. Better implementation would work this out before it gets to this point
-    asm_push_ins_pop_or_ignore("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    codegen_discard_unused_stack();
 }
 
 void codegen_generate_scope_no_new_scope(struct vector *statements, struct history *history)

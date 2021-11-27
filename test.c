@@ -13,10 +13,12 @@ struct abc
 struct abc abc1;
 struct abc abc2;
 
-struct abc test(int x)
+struct abc test()
 {
-    x = 50;
+    return abc1;
 }
+
 int main()
 {
+   test();
 }

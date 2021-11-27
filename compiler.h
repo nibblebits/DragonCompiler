@@ -27,7 +27,7 @@
 
 // Macro's make life cleaner..
 #define S_EQ(str, str2) \
-    str &&str2 && (strcmp(str, str2) == 0)
+    (str && str2 && (strcmp(str, str2) == 0))
 
 /**
  * Note: we do not include ")" as an operator only "(". ")" is classed as a symbol.
@@ -1231,6 +1231,9 @@ struct stack_frame_element *stackframe_get_for_tag_name(struct node *func_node, 
 void stackframe_assert_empty(struct node *func_node);
 void stackframe_sub(struct node *func_node, int type, const char *name, size_t amount);
 void stackframe_add(struct node *func_node, size_t amount);
+
+void stackframe_peek_start(struct node* func_node);
+struct stack_frame_element* stackframe_peek(struct node* func_node);
 
 struct node
 {

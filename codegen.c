@@ -643,7 +643,7 @@ struct stack_frame_element *asm_stack_back()
     return stackframe_back(current_function);
 }
 
-struct stack_frame_element* asm_stack_peek()
+struct stack_frame_element *asm_stack_peek()
 {
     return stackframe_peek(current_function);
 }
@@ -1130,12 +1130,12 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
     }
     else if (flags & EXPRESSION_IS_BITSHIFT_LEFT)
     {
-        value = codegen_sub_register(value, DATA_TYPE_CHAR);
+        value = codegen_sub_register(value, DATA_SIZE_BYTE);
         asm_push("sal %s, %s", reg, value);
     }
     else if (flags & EXPRESSION_IS_BITSHIFT_RIGHT)
     {
-        value = codegen_sub_register(value, DATA_TYPE_CHAR);
+        value = codegen_sub_register(value, DATA_SIZE_BYTE);
         asm_push("sar %s, %s", reg, value);
     }
     else if (flags & EXPRESSION_IS_BITWISE_AND)
@@ -1419,7 +1419,7 @@ void codegen_generate_entity_access_array_bracket_pointer(struct resolver_result
     asm_push("add ebx, eax");
 
     // Save EBX
-    asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype=entity->dtype});
 }
 void codegen_generate_entity_access_array_bracket(struct resolver_result *result, struct resolver_entity *entity)
 {
@@ -1450,7 +1450,7 @@ void codegen_generate_entity_access_array_bracket(struct resolver_result *result
     }
 
     // Save EBX
-    asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype=entity->dtype});
 }
 
 void codegen_generate_entity_access_for_variable_or_general(struct resolver_result *result, struct resolver_entity *entity)
@@ -1854,10 +1854,9 @@ void codegen_generate_assignment_part(struct node *node, struct history *history
     struct resolver_entity *next_entity = resolver_result_entity_next(root_assignment_entity);
     if (!next_entity)
     {
-        struct datatype last_dtype = result->last_entity->dtype;
-        if (datatype_is_struct_or_union_non_pointer(&last_dtype))
+        if (datatype_is_struct_or_union_non_pointer(&result->last_entity->dtype))
         {
-            codegen_generate_move_struct(&last_dtype, result->base.address, 0);
+            codegen_generate_move_struct(&result->last_entity->dtype, result->base.address, 0);
         }
         else
         {
@@ -2127,6 +2126,12 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     int op_flags = codegen_set_flag_for_operator(node->exp.op);
     codegen_generate_expressionable(left_node, history_down(history, flags));
     codegen_generate_expressionable(right_node, history_down(history, flags));
+
+    // What datatype are we dealing with
+    // Default as numeric datatype.
+    struct datatype last_dtype = datatype_for_numeric();
+    asm_datatype_back(&last_dtype);
+
     if (codegen_can_gen_math(op_flags))
     {
         // Pop off right value
@@ -2136,8 +2141,9 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
         // Add together, subtract, multiply ect...
         codegen_gen_math_for_value("eax", "ecx", op_flags);
     }
+
     // Caller always expects a response from us..
-    asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
 }
 
 bool codegen_should_push_function_call_argument(struct response *res)
@@ -2199,6 +2205,7 @@ bool codegen_resolve_node_for_value(struct node *node, struct history *history)
     }
     else if (!(result->last_entity->dtype.flags & DATATYPE_FLAG_IS_POINTER))
     {
+
         // If the last entity is not a pointer then it must be accessed as a value.
         // therefore it must be reduced in size to its actual size.
         asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
@@ -2214,7 +2221,7 @@ bool codegen_resolve_node_for_value(struct node *node, struct history *history)
 
         // The register must be broken down into the correct size
         codegen_reduce_register("eax", datatype_element_size(&result->last_entity->dtype), result->last_entity->flags & DATATYPE_FLAG_IS_SIGNED);
-        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = result->last_entity->dtype});
     }
 
     // Now push the result back
@@ -2350,6 +2357,10 @@ void codegen_generate_unary_address(struct node *node, struct history *history)
 void codegen_generate_normal_unary(struct node *node, struct history *history)
 {
     codegen_generate_expressionable(node->unary.operand, history);
+
+    struct datatype last_dtype;
+    assert(asm_datatype_back(&last_dtype));
+
     asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
     // We have generated the value for the operand
@@ -2358,12 +2369,12 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
     {
         // We have negation operator, so negate.
         asm_push("neg eax");
-        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
     }
     else if (S_EQ(node->unary.op, "~"))
     {
         asm_push("not eax");
-        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
     }
     else if (S_EQ(node->unary.op, "*"))
     {
@@ -2406,7 +2417,7 @@ void codegen_generate_string(struct node *node, struct history *history)
 {
     const char *label = codegen_register_string(node->sval);
     codegen_gen_mov_for_value("eax", label, "dword", history->flags);
-    asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype=datatype_for_string()});
 }
 
 void codegen_generate_cast(struct node *node, struct history *history)
@@ -2429,6 +2440,9 @@ void codegen_generate_tenary(struct node *node, struct history *history)
     int true_label_id = codegen_label_count();
     int false_label_id = codegen_label_count();
     int tenary_end_label_id = codegen_label_count();
+
+    struct datatype last_dtype;
+    assert(asm_datatype_back(&last_dtype));
 
     // Pop off the result for the tenary
     asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");

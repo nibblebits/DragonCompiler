@@ -658,7 +658,7 @@ bool datatype_is_primitive_non_pointer(struct datatype *dtype)
 
 bool datatype_is_struct_or_union_non_pointer(struct datatype *dtype)
 {
-    return !datatype_is_primitive(dtype) && !(dtype->flags & DATATYPE_FLAG_IS_POINTER);
+    return dtype->type != DATA_TYPE_UNKNOWN && !datatype_is_primitive(dtype) && !(dtype->flags & DATATYPE_FLAG_IS_POINTER);
 }
 
 bool datatype_is_primitive(struct datatype *dtype)
@@ -721,6 +721,23 @@ struct datatype datatype_for_numeric()
     dtype.size = DATA_SIZE_DWORD;
     return dtype;
 }
+
+/**
+ * @brief Returns a datatype for strings.
+ * 
+ * @return struct datatype The "char*" datatype with pointer flag on
+ */
+struct datatype datatype_for_string()
+{
+    struct datatype dtype = {};
+    dtype.type = DATA_TYPE_INTEGER;
+    dtype.type_str = "char";
+    dtype.flags |= DATATYPE_FLAG_IS_POINTER;
+    dtype.pointer_depth = 1;
+    dtype.size = DATA_SIZE_DWORD;
+    return dtype;
+}
+
 
 size_t variable_size(struct node *var_node)
 {

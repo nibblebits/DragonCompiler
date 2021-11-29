@@ -781,6 +781,10 @@ struct resolver_entity *resolver_follow_indirection(struct resolver_process *res
     resolver_follow_part(resolver, node->unary.operand, result);
 
     struct resolver_entity *last_entity = resolver_result_peek(result);
+    if (!last_entity)
+    {
+        last_entity = resolver_follow_unsupported_node(resolver, node->unary.operand, result);
+    }
     struct resolver_entity *unary_indirection_entity = resolver_create_new_unary_indirection_entity(resolver, result, node, node->unary.indirection.depth);
     resolver_result_entity_push(result, unary_indirection_entity);
     return unary_indirection_entity;
@@ -1104,8 +1108,8 @@ void resolver_finalize_result_flags(struct resolver_process *resolver, struct re
             // into the EBX register.
             flags |= RESOLVER_RESULT_FLAG_FIRST_ENTITY_LOAD_TO_EBX;
             flags &= ~RESOLVER_RESULT_FLAG_FIRST_ENTITY_PUSH_VALUE;
-        } 
-        
+        }
+
         result->flags = flags;
         return;
     }

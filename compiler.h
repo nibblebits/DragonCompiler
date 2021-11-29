@@ -1032,6 +1032,7 @@ enum
     DATA_TYPE_LONG,
     DATA_TYPE_STRUCT,
     DATA_TYPE_UNION,
+    DATA_TYPE_UNKNOWN,
 };
 
 enum
@@ -1979,6 +1980,8 @@ bool datatype_is_struct_or_union_non_pointer(struct datatype *dtype);
  * @return struct datatype The "int" datatype with a size of 4 bytes.
  */
 struct datatype datatype_for_numeric();
+
+struct datatype datatype_for_string();
 
 /**
  * @brief Decrements the pointer of this datatype for example "int*" would become "int"

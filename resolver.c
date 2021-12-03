@@ -314,7 +314,11 @@ struct resolver_entity *resolver_create_new_unary_get_address_entity(struct reso
     // c - &
     entity->flags = RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY | RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_LEFT_ENTITY;
     entity->node = node;
+    entity->scope = scope;
 
+    entity->dtype = *dtype;
+    entity->dtype.flags |= DATATYPE_FLAG_IS_POINTER;
+    entity->dtype.pointer_depth++;
     return entity;
 }
 

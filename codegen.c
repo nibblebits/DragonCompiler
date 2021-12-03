@@ -1419,7 +1419,7 @@ void codegen_generate_entity_access_array_bracket_pointer(struct resolver_result
     asm_push("add ebx, eax");
 
     // Save EBX
-    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype=entity->dtype});
+    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = entity->dtype});
 }
 void codegen_generate_entity_access_array_bracket(struct resolver_result *result, struct resolver_entity *entity)
 {
@@ -1450,7 +1450,7 @@ void codegen_generate_entity_access_array_bracket(struct resolver_result *result
     }
 
     // Save EBX
-    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype=entity->dtype});
+    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = entity->dtype});
 }
 
 void codegen_generate_entity_access_for_variable_or_general(struct resolver_result *result, struct resolver_entity *entity)
@@ -1464,7 +1464,7 @@ void codegen_generate_entity_access_for_variable_or_general(struct resolver_resu
     asm_push("add ebx, %i", entity->offset);
 
     // Save EBX
-    asm_push_ins_push("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype=entity->dtype});
 }
 
 void codegen_generate_entity_access_for_function_call(struct resolver_result *result, struct resolver_entity *entity)
@@ -1558,13 +1558,23 @@ void codegen_generate_entity_access_for_unary_get_address(struct resolver_result
 {
     // We don't care about resolving the address as we already assume
     // that it is in the EBX register at this point in time...
+
+    // Pop off the RPARAM as we dont need it right now
+    asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     asm_push("; PUSH ADDRESS &");
-    //asm_push_ins_push_with_flags("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", STACK_FRAME_ELEMENT_FLAG_IS_PUSHED_ADDRESS);
+
+    // Let's push the datatype
+    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype=entity->dtype});
+
 }
 
 void codegen_generate_entity_access_for_unary_indirection(struct resolver_result *result, struct resolver_entity *entity, struct history *history)
 {
     asm_push("; INDIRECTION");
+
+    struct datatype operand_datatype;
+    assert(asm_datatype_back(&operand_datatype));
+
     // If we have a result value waiting for us we will pop it, otherwise assume EBX is set already..
     int flags = asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
@@ -1573,7 +1583,7 @@ void codegen_generate_entity_access_for_unary_indirection(struct resolver_result
     codegen_apply_unary_access(depth);
 
     // We must push the computed EBX back to the stack
-    asm_push_ins_push_with_flags("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", STACK_FRAME_ELEMENT_FLAG_IS_PUSHED_ADDRESS);
+    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", STACK_FRAME_ELEMENT_FLAG_IS_PUSHED_ADDRESS, &(struct stack_frame_data){.dtype = operand_datatype});
 }
 
 void codegen_generate_entity_access_for_unary_indirection_for_assignment_left_operand(struct resolver_result *result, struct resolver_entity *entity, struct history *history)
@@ -2131,13 +2141,20 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     // Default as numeric datatype.
     struct datatype last_dtype = datatype_for_numeric();
     asm_datatype_back(&last_dtype);
-
     if (codegen_can_gen_math(op_flags))
     {
         // Pop off right value
         asm_push_ins_pop("ecx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
+        if (last_dtype.flags & DATATYPE_FLAG_IS_LITERAL)
+        {
+            // We are looking for the real datatype here
+            // i.e a+5 a would be the type we care about not integer 5.
+            asm_datatype_back(&last_dtype);
+        }
         // Pop off left value
         asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+
         // Add together, subtract, multiply ect...
         codegen_gen_math_for_value("eax", "ecx", op_flags);
     }
@@ -2195,15 +2212,18 @@ bool codegen_resolve_node_for_value(struct node *node, struct history *history)
         return false;
     }
 
+    struct datatype dtype;
+    assert(asm_datatype_back(&dtype));
+
     if (result->last_entity->type == RESOLVER_ENTITY_TYPE_FUNCTION_CALL &&
         datatype_is_struct_or_union_non_pointer(&result->last_entity->dtype))
     {
     }
-    else if (datatype_is_struct_or_union_non_pointer(&result->last_entity->dtype))
+    else if (datatype_is_struct_or_union_non_pointer(&dtype))
     {
         codegen_generate_structure_push(result->last_entity, history, 0);
     }
-    else if (!(result->last_entity->dtype.flags & DATATYPE_FLAG_IS_POINTER))
+    else if (!(dtype.flags & DATATYPE_FLAG_IS_POINTER))
     {
 
         // If the last entity is not a pointer then it must be accessed as a value.
@@ -2220,8 +2240,8 @@ bool codegen_resolve_node_for_value(struct node *node, struct history *history)
         }
 
         // The register must be broken down into the correct size
-        codegen_reduce_register("eax", datatype_element_size(&result->last_entity->dtype), result->last_entity->flags & DATATYPE_FLAG_IS_SIGNED);
-        asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = result->last_entity->dtype});
+        codegen_reduce_register("eax", datatype_element_size(&dtype), dtype.flags & DATATYPE_FLAG_IS_SIGNED);
+        asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = dtype});
     }
 
     // Now push the result back
@@ -2315,6 +2335,9 @@ void codegen_generate_unary_indirection(struct node *node, struct history *histo
     struct response *res = codegen_response_pull();
     assert(codegen_response_has_entity(res));
 
+    struct datatype operand_datatype;
+    assert(asm_datatype_back(&operand_datatype));
+
     // Lets pop off the value
     asm_push_ins_pop(reg_to_use, STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
@@ -2337,10 +2360,10 @@ void codegen_generate_unary_indirection(struct node *node, struct history *histo
     {
         // Seems like it as the depth equals total pointer depth
         // so in this senario we will be pointing directly on the datatype size..
-        codegen_reduce_register(reg_to_use, datatype_size_no_ptr(&res->data.resolved_entity->dtype), res->data.resolved_entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
+        codegen_reduce_register(reg_to_use, datatype_size_no_ptr(&operand_datatype), operand_datatype.flags & DATATYPE_FLAG_IS_SIGNED);
     }
 
-    asm_push_ins_push(reg_to_use, STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    asm_push_ins_push_with_data(reg_to_use, STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = operand_datatype});
     // Acknowledge it again incase someone else is waiting for a response..
     codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = res->data.resolved_entity}));
 }
@@ -2417,7 +2440,7 @@ void codegen_generate_string(struct node *node, struct history *history)
 {
     const char *label = codegen_register_string(node->sval);
     codegen_gen_mov_for_value("eax", label, "dword", history->flags);
-    asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype=datatype_for_string()});
+    asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = datatype_for_string()});
 }
 
 void codegen_generate_cast(struct node *node, struct history *history)
@@ -2704,23 +2727,21 @@ void codegen_generate_statement_return_exp(struct node *node)
     // Let's generate the expression of the return statement
     codegen_generate_expressionable(node->stmt.ret.exp, history_begin(&history, IS_STATEMENT_RETURN));
 
-    struct response *res = codegen_response_pull();
-    if (codegen_response_has_entity(res))
+    struct datatype dtype;
+    assert(asm_datatype_back(&dtype));
+
+    if (datatype_is_struct_or_union_non_pointer(&dtype))
     {
-        struct resolver_entity *resolved_entity = res->data.resolved_entity;
-        if (datatype_is_struct_or_union_non_pointer(&resolved_entity->dtype))
-        {
-            // Returning a structure from a function? Things must be done differently
-            // Firslty lets access the structure pointer to return.
-            // It will be EBP+8 i.e first argument..
-            asm_push("mov edx, [ebp+8]");
-            // EBX EDX contains the address to the structure.
-            // Now we must make a move
-            codegen_generate_move_struct(&resolved_entity->dtype, "edx", 0);
-            // Eax should also contain a pointer to this structure
-            asm_push("mov eax, [ebp+8]");
-            return;
-        }
+        // Returning a structure from a function? Things must be done differently
+        // Firslty lets access the structure pointer to return.
+        // It will be EBP+8 i.e first argument..
+        asm_push("mov edx, [ebp+8]");
+        // EBX EDX contains the address to the structure.
+        // Now we must make a move
+        codegen_generate_move_struct(&dtype, "edx", 0);
+        // Eax should also contain a pointer to this structure
+        asm_push("mov eax, [ebp+8]");
+        return;
     }
 
     // Restore return value from stack

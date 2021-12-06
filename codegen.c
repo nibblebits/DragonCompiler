@@ -1351,6 +1351,10 @@ void codegen_generate_assignment_instruction_for_operator(const char *mov_type_k
     {
         asm_push("add %s [%s], %s", mov_type_keyword, address, reg_to_use);
     }
+    else if (S_EQ(op, "-="))
+    {
+        asm_push("sub %s [%s], %s", mov_type_keyword, address, reg_to_use);
+    }
     else if (S_EQ(op, "*="))
     {
         if (is_signed)
@@ -1849,7 +1853,7 @@ void codegen_generate_assignment_expression_move_struct(struct resolver_entity *
     codegen_generate_move_struct(&entity->dtype, "edx", 0);
 }
 
-void codegen_generate_assignment_part(struct node *node, struct history *history)
+void codegen_generate_assignment_part(struct node *node, const char* op, struct history *history)
 {
     // Pop the value of the right operand
     struct datatype right_operand_dtype;
@@ -1873,7 +1877,8 @@ void codegen_generate_assignment_part(struct node *node, struct history *history
             asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
             // No further entities then set the value..
-            asm_push("mov %s [%s], %s", mov_type, result->base.address, reg_to_use);
+            codegen_generate_assignment_instruction_for_operator(mov_type, result->base.address, reg_to_use, op, result->last_entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
+          //  asm_push("mov %s [%s], %s", mov_type, result->base.address, reg_to_use);
         }
     }
     else
@@ -1898,7 +1903,7 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
     // Right node = value
     codegen_generate_expressionable(node->exp.right, history_down(history, EXPRESSION_IS_ASSIGNMENT | IS_RIGHT_OPERAND_OF_ASSIGNMENT));
 
-    codegen_generate_assignment_part(node->exp.left, history);
+    codegen_generate_assignment_part(node->exp.left, node->exp.op, history);
 
     //codegen_generate_assignment_expression_move_value(left_entity);
 }

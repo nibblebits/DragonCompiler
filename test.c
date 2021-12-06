@@ -3,5 +3,5 @@
 int main()
 {
     int x;
-    int y = x;
+    x-=1;
 }   

@@ -2703,6 +2703,8 @@ void codegen_generate_scope_variable(struct node *node)
     // Scope variables have values, lets compute that
     if (node->var.val)
     {
+        // We have a value, okay full EBX with the address of the variable.
+        asm_push("lea ebx, [%s]", codegen_entity_private(entity)->address);
         struct history history;
         codegen_generate_assignment_expression_value_part(entity->result, entity, node, node->var.val, "=", history_begin(&history, 0));
     }

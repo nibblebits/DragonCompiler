@@ -2164,17 +2164,18 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
         asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
         
         struct datatype* pointer_datatype = datatype_thats_a_pointer(&left_dtype, &right_dtype);
-        if(pointer_datatype && datatype_size_no_ptr(pointer_datatype) > DATA_SIZE_BYTE)
+        
+        if(pointer_datatype && datatype_size(datatype_pointer_reduce(pointer_datatype, 1)) > DATA_SIZE_BYTE)
         {
             // We have a pointer in this expression which means we need to multiply the value
-            // that is not a pointer by four.
+            // that is not a pointer by the size of the pointer datatype .
             const char* reg = "ecx";
             if (pointer_datatype == &right_dtype)
             {
                 reg = "eax";
             }
 
-            asm_push("imul %s, %i", reg, datatype_size_no_ptr(pointer_datatype));
+            asm_push("imul %s, %i", reg, datatype_size(datatype_pointer_reduce(pointer_datatype, 1)));
         }
         // Add together, subtract, multiply ect...
         codegen_gen_math_for_value("eax", "ecx", op_flags);

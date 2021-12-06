@@ -683,6 +683,19 @@ bool variable_node_is_primative(struct node *node)
     return datatype_is_primitive(&node->var.type);
 }
 
+struct datatype* datatype_pointer_reduce(struct datatype* datatype, int by)
+{
+    struct datatype* new_datatype = calloc(1, sizeof(struct datatype));
+    memcpy(new_datatype, datatype, sizeof(struct datatype));
+    new_datatype->pointer_depth -= by;
+    if (new_datatype->pointer_depth <= 0)
+    {
+        new_datatype->flags &= ~DATATYPE_FLAG_IS_POINTER;
+        new_datatype->pointer_depth = 0;
+    }
+    return new_datatype;
+}
+
 size_t datatype_size_no_ptr(struct datatype *datatype)
 {
     if (datatype->flags & DATATYPE_FLAG_IS_ARRAY)

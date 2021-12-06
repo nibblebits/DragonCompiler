@@ -1979,6 +1979,14 @@ bool datatype_is_void_no_ptr(struct datatype* dtype);
  * @return struct datatype* either d1 or d2 or NULL is returned.
  */
 struct datatype* datatype_thats_a_pointer(struct datatype* d1, struct datatype* d2);
+/**
+ * @brief Reduces the datatype provided by x pointer size. The equivilant of doing *abc
+ * 
+ * @param datatype The datatype to reduce
+ * @param by The amount of depth to remove from the pointer
+ * @return struct datatype* returns a new copy of the datatype reduced.
+ */
+struct datatype* datatype_pointer_reduce(struct datatype* datatype, int by);
 
 bool datatype_is_primitive_for_string(const char *type);
 bool datatype_is_primitive(struct datatype *dtype);

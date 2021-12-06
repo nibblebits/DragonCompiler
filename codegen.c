@@ -1877,7 +1877,6 @@ void codegen_generate_assignment_part(struct node *node, const char *op, struct 
 
             // No further entities then set the value..
             codegen_generate_assignment_instruction_for_operator(mov_type, result->base.address, reg_to_use, op, result->last_entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
-            //  asm_push("mov %s [%s], %s", mov_type, result->base.address, reg_to_use);
         }
     }
     else
@@ -2162,14 +2161,14 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
         struct datatype left_dtype = datatype_for_numeric();
         asm_datatype_back(&left_dtype);
         asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
-        
-        struct datatype* pointer_datatype = datatype_thats_a_pointer(&left_dtype, &right_dtype);
-        
-        if(pointer_datatype && datatype_size(datatype_pointer_reduce(pointer_datatype, 1)) > DATA_SIZE_BYTE)
+
+        struct datatype *pointer_datatype = datatype_thats_a_pointer(&left_dtype, &right_dtype);
+
+        if (pointer_datatype && datatype_size(datatype_pointer_reduce(pointer_datatype, 1)) > DATA_SIZE_BYTE)
         {
             // We have a pointer in this expression which means we need to multiply the value
             // that is not a pointer by the size of the pointer datatype .
-            const char* reg = "ecx";
+            const char *reg = "ecx";
             if (pointer_datatype == &right_dtype)
             {
                 reg = "eax";
@@ -2725,10 +2724,12 @@ void codegen_generate_scope_variable(struct node *node)
     // Scope variables have values, lets compute that
     if (node->var.val)
     {
-        // We have a value, okay full EBX with the address of the variable.
-        asm_push("lea ebx, [%s]", codegen_entity_private(entity)->address);
         struct history history;
-        codegen_generate_assignment_expression_value_part(entity->result, entity, node, node->var.val, "=", history_begin(&history, 0));
+        codegen_generate_expressionable(node->var.val, history_down(&history, EXPRESSION_IS_ASSIGNMENT | IS_RIGHT_OPERAND_OF_ASSIGNMENT));
+        asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        const char *reg_to_use = "eax";
+        const char *mov_type = codegen_byte_word_or_dword_or_ddword(datatype_element_size(&entity->dtype), &reg_to_use);
+        codegen_generate_assignment_instruction_for_operator(mov_type, codegen_entity_private(entity)->address, reg_to_use, "=", entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
     }
 }
 

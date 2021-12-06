@@ -567,5 +567,15 @@ else
     echo -e "Structure access with pointers and array test passed"
 fi
 
+echo -e "Pointer addition test"
+./build/pointer_addition_test
+if [ $? -ne 20 ]; then
+    echo -e "Pointer addition test failed"
+    res_code=1
+else
+    echo -e "Pointer addition test passed"
+fi
+
+
 echo -e "All tests finished"
 exit $res_code

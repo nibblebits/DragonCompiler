@@ -1468,7 +1468,7 @@ void codegen_generate_entity_access_for_variable_or_general(struct resolver_resu
     asm_push("add ebx, %i", entity->offset);
 
     // Save EBX
-    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype=entity->dtype});
+    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = entity->dtype});
 }
 
 void codegen_generate_entity_access_for_function_call(struct resolver_result *result, struct resolver_entity *entity)
@@ -1568,8 +1568,7 @@ void codegen_generate_entity_access_for_unary_get_address(struct resolver_result
     asm_push("; PUSH ADDRESS &");
 
     // Let's push the datatype
-    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype=entity->dtype});
-
+    asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = entity->dtype});
 }
 
 void codegen_generate_entity_access_for_unary_indirection(struct resolver_result *result, struct resolver_entity *entity, struct history *history)
@@ -1853,7 +1852,7 @@ void codegen_generate_assignment_expression_move_struct(struct resolver_entity *
     codegen_generate_move_struct(&entity->dtype, "edx", 0);
 }
 
-void codegen_generate_assignment_part(struct node *node, const char* op, struct history *history)
+void codegen_generate_assignment_part(struct node *node, const char *op, struct history *history)
 {
     // Pop the value of the right operand
     struct datatype right_operand_dtype;
@@ -1878,7 +1877,7 @@ void codegen_generate_assignment_part(struct node *node, const char* op, struct 
 
             // No further entities then set the value..
             codegen_generate_assignment_instruction_for_operator(mov_type, result->base.address, reg_to_use, op, result->last_entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
-          //  asm_push("mov %s [%s], %s", mov_type, result->base.address, reg_to_use);
+            //  asm_push("mov %s [%s], %s", mov_type, result->base.address, reg_to_use);
         }
     }
     else
@@ -2149,6 +2148,8 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
     if (codegen_can_gen_math(op_flags))
     {
         // Pop off right value
+        struct datatype right_dtype = datatype_for_numeric();
+        asm_datatype_back(&right_dtype);
         asm_push_ins_pop("ecx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
         if (last_dtype.flags & DATATYPE_FLAG_IS_LITERAL)
@@ -2158,8 +2159,23 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
             asm_datatype_back(&last_dtype);
         }
         // Pop off left value
+        struct datatype left_dtype = datatype_for_numeric();
+        asm_datatype_back(&left_dtype);
         asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        
+        struct datatype* pointer_datatype = datatype_thats_a_pointer(&left_dtype, &right_dtype);
+        if(pointer_datatype)
+        {
+            // We have a pointer in this expression which means we need to multiply the value
+            // that is not a pointer by four.
+            const char* reg = "ecx";
+            if (pointer_datatype == &right_dtype)
+            {
+                reg = "eax";
+            }
 
+            asm_push("imul %s, %i", reg, DATA_SIZE_DWORD);
+        }
         // Add together, subtract, multiply ect...
         codegen_gen_math_for_value("eax", "ecx", op_flags);
     }

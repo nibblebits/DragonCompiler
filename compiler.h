@@ -1971,6 +1971,15 @@ int padding(int val, int to);
 
 bool datatype_is_void_no_ptr(struct datatype* dtype);
 
+/**
+ * @brief Returns the datatype that is a pointer, if neither are pointer datatypes then NULL is returend
+ * 
+ * @param d1 The first datatype to check for a pointer
+ * @param d2 The second datatype to check for a pointer
+ * @return struct datatype* either d1 or d2 or NULL is returned.
+ */
+struct datatype* datatype_thats_a_pointer(struct datatype* d1, struct datatype* d2);
+
 bool datatype_is_primitive_for_string(const char *type);
 bool datatype_is_primitive(struct datatype *dtype);
 bool datatype_is_primitive_non_pointer(struct datatype *dtype);

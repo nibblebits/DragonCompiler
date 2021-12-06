@@ -723,6 +723,20 @@ struct datatype datatype_for_numeric()
     return dtype;
 }
 
+struct datatype* datatype_thats_a_pointer(struct datatype* d1, struct datatype* d2)
+{
+    if (d1->flags & DATATYPE_FLAG_IS_POINTER)
+    {
+        return d1; 
+    }
+    else if(d2->flags & DATATYPE_FLAG_IS_POINTER)
+    {
+        return d2;
+    }
+
+    return NULL;
+}
+
 /**
  * @brief Returns a datatype for strings.
  * 

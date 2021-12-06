@@ -1,11 +1,11 @@
 
 int main(int argc, char** argv)
 {
-    int e;
+    char e;
     e = 20;
-    int y;
+    char y;
     y = 50;
-    int* x;
+    char* x;
     x = &y;
 
     return *(x+1);

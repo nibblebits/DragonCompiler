@@ -1,5 +1,5 @@
 int main() {
-  int x = 57;
-  x = x % 2;
-  return x;
+  int y = 50;
+  y *= 2;
+  return y;
 }

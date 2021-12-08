@@ -1337,6 +1337,8 @@ void codegen_generate_assignment_instruction_for_operator(const char *mov_type_k
     }
     else if (S_EQ(op, "*="))
     {
+        asm_push("mov ecx, eax");
+        asm_push("mov eax, [%s]", address);
         if (is_signed)
         {
             asm_push("imul %s", reg_to_use);
@@ -1349,13 +1351,16 @@ void codegen_generate_assignment_instruction_for_operator(const char *mov_type_k
     }
     else if (S_EQ(op, "/="))
     {
+        asm_push("mov ecx, eax");
+        asm_push("mov eax, [%s]", address);
+        asm_push("cdq");
         if (is_signed)
         {
-            asm_push("idiv %s", reg_to_use);
+            asm_push("idiv ecx");
         }
         else
         {
-            asm_push("div %s", reg_to_use);
+            asm_push("div ecx");
         }
 
         asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use);
@@ -1885,7 +1890,8 @@ void codegen_generate_assignment_part(struct node *node, const char *op, struct 
         asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
         // Make the move
-        asm_push("mov %s [%s], %s", mov_type, "edx", "eax");
+        codegen_generate_assignment_instruction_for_operator(mov_type, "edx", reg_to_use, op, result->last_entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
+
     }
 
     codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = result->last_entity}));

@@ -279,15 +279,8 @@ static void lex_handle_escape_number(struct buffer *buf)
     buffer_write(buf, number);
 }
 
-static void lex_handle_escape(struct buffer *buf)
+char lex_get_escaped_char(char c)
 {
-    char c = peekc();
-    if (isdigit(c))
-    {
-        // We have a number?
-        lex_handle_escape_number(buf);
-        return;
-    }
 
     char co = 0x00;
     switch (c)
@@ -302,9 +295,27 @@ static void lex_handle_escape(struct buffer *buf)
     case 't':
         co = '\t';
     break;
+
+    case '\'':
+        co = '\'';
+    break;
+
     default:
         error("Unknown escape token %c\n", c);
     }
+    return co;
+}
+static void lex_handle_escape(struct buffer *buf)
+{
+    char c = peekc();
+    if (isdigit(c))
+    {
+        // We have a number?
+        lex_handle_escape_number(buf);
+        return;
+    }
+
+    char co = lex_get_escaped_char(c);
 
     buffer_write(buf, co);
     // Pop off the char
@@ -622,9 +633,9 @@ static struct token *token_make_quote()
     char c = nextc();
     if (c == '\\')
     {
-        // We have an escape here.. For now we shall ignore it. This must be handled
-        // in the future!
+        // We have an escape here.
         c = nextc();
+        c = lex_get_escaped_char(c);
     }
 
     assert_next_char('\'');

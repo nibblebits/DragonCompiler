@@ -1,4 +1,5 @@
 #include <stdio.h>
 int main() {
-  char c = 'A';
+  char c = '\t';
+  return c;
 }

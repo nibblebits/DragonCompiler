@@ -26,6 +26,7 @@
         "_g_config.h": "c",
         "wchar.h": "c",
         "__mbstate_t.h": "c",
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "typeinfo": "c"
     }
 }

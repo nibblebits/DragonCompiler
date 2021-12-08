@@ -618,9 +618,13 @@ static struct resolver_entity *resolver_follow_array_bracket(struct resolver_pro
         index = last_entity->array.index + 1;
     }
 
-    // We must readjust the datatype size because we have accessed a deeper part of the array
-    dtype.array.size = array_brackets_calculate_size_from_index(&dtype, dtype.array.brackets, index+1);
-    // We must reduce the dtype 
+    // It is not always an array maybe its a pointer?
+    if (dtype.flags & DATATYPE_FLAG_IS_ARRAY)
+    {
+        // We must readjust the datatype size because we have accessed a deeper part of the array
+        dtype.array.size = array_brackets_calculate_size_from_index(&dtype, dtype.array.brackets, index + 1);
+    }
+    // We must reduce the dtype
     void *private = resolver->callbacks.new_array_entity(result, node);
     struct resolver_entity *array_bracket_entity = resolver_create_new_entity_for_array_bracket(result, resolver, node, node->bracket.inner, index, &dtype, private, scope);
     struct resolver_entity_rule rule = {};
@@ -671,7 +675,7 @@ static void resolver_build_function_call_arguments(struct resolver_process *reso
         if (dtype)
         {
             // It will use 4 bytes on the stack unless its a structure
-            stack_change = datatype_size(dtype);
+            stack_change = datatype_element_size(dtype);
             if (stack_change < DATA_SIZE_DWORD)
             {
                 stack_change = DATA_SIZE_DWORD;
@@ -1102,9 +1106,9 @@ void resolver_finalize_result_flags(struct resolver_process *resolver, struct re
     int flags = RESOLVER_RESULT_FLAG_FIRST_ENTITY_PUSH_VALUE;
     // We must iterate through all of the results
     struct resolver_entity *entity = result->entity;
-    struct resolver_entity* first_entity = entity;
+    struct resolver_entity *first_entity = entity;
     struct resolver_entity *last_entity = result->last_entity;
-
+    bool does_get_address = false;
     if (entity == last_entity)
     {
         // One entity?
@@ -1135,8 +1139,9 @@ void resolver_finalize_result_flags(struct resolver_process *resolver, struct re
 
         if (entity->type == RESOLVER_ENTITY_TYPE_UNARY_GET_ADDRESS)
         {
-            flags |= RESOLVER_RESULT_FLAG_FIRST_ENTITY_LOAD_TO_EBX;
+            flags |= RESOLVER_RESULT_FLAG_FIRST_ENTITY_LOAD_TO_EBX | RESOLVER_RESULT_FLAG_DOES_GET_ADDRESS;
             flags &= ~RESOLVER_RESULT_FLAG_FIRST_ENTITY_PUSH_VALUE | RESOLVER_RESULT_FLAG_FINAL_INDIRECTION_REQUIRED_FOR_VALUE;
+            does_get_address = true;
         }
 
         if (entity->type == RESOLVER_ENTITY_TYPE_FUNCTION_CALL)
@@ -1159,7 +1164,7 @@ void resolver_finalize_result_flags(struct resolver_process *resolver, struct re
 
         if (entity->type == RESOLVER_ENTITY_TYPE_GENERAL)
         {
-            flags |= RESOLVER_RESULT_FLAG_FIRST_ENTITY_LOAD_TO_EBX | RESOLVER_RESULT_FLAG_FINAL_INDIRECTION_REQUIRED_FOR_VALUE;
+            flags |= RESOLVER_RESULT_FLAG_FIRST_ENTITY_LOAD_TO_EBX;
             flags &= ~RESOLVER_RESULT_FLAG_FIRST_ENTITY_PUSH_VALUE;
         }
 
@@ -1171,6 +1176,11 @@ void resolver_finalize_result_flags(struct resolver_process *resolver, struct re
         flags |= RESOLVER_RESULT_FLAG_FINAL_INDIRECTION_REQUIRED_FOR_VALUE;
     }
 
+    if (does_get_address)
+    {
+        // Getting address does not require indirection
+        flags &= ~RESOLVER_RESULT_FLAG_FINAL_INDIRECTION_REQUIRED_FOR_VALUE;
+    }
     result->flags |= flags;
 }
 void resolver_finalize_result(struct resolver_process *resolver, struct resolver_result *result)

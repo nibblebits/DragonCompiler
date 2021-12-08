@@ -192,6 +192,7 @@ void validate_destruct(struct compile_process* process)
 
 int validate(struct compile_process* process)
 {
+    return 0;
     int res = 0;
     validate_initialize(process);
     res = validate_tree(process);

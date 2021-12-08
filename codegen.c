@@ -2264,7 +2264,12 @@ bool codegen_resolve_node_for_value(struct node *node, struct history *history)
     struct datatype dtype;
     assert(asm_datatype_back(&dtype));
 
-    if (result->last_entity->type == RESOLVER_ENTITY_TYPE_FUNCTION_CALL &&
+    if (result->flags & RESOLVER_RESULT_FLAG_DOES_GET_ADDRESS)
+    {
+        // Since we are getting the address we already have it in EAX theres nothing
+        // for us to do.
+    }
+    else if (result->last_entity->type == RESOLVER_ENTITY_TYPE_FUNCTION_CALL &&
         datatype_is_struct_or_union_non_pointer(&result->last_entity->dtype))
     {
     }

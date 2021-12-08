@@ -2,6 +2,7 @@
 #define STDIO_H
 #include <stddef.h>
 #include <stdarg.h>
+#include <stdlib.h>
 
 typedef size_t fpos_t;
 

@@ -225,7 +225,8 @@ static bool op_valid(const char *op)
            S_EQ(op, ".") ||
            S_EQ(op, "...") ||
            S_EQ(op, "~") ||
-           S_EQ(op, "?");
+           S_EQ(op, "?") ||
+           S_EQ(op, "%");
 }
 
 static struct lex_process *lex_get_process()

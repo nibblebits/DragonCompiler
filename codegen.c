@@ -1090,7 +1090,6 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
     }
     else if (flags & EXPRESSION_IS_MULTIPLICATION)
     {
-        codegen_use_register("ecx");
         asm_push("mov ecx, %s", value);
 
         // Need a way to know if its signed in the future.. Assumed all signed for now.
@@ -1098,11 +1097,19 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
     }
     else if (flags & EXPRESSION_IS_DIVISION)
     {
-        codegen_use_register("ecx");
         asm_push("mov ecx, %s", value);
         asm_push("cdq");
         // Assuming signed, check for unsigned in the future, check for float in the future..
         asm_push("idiv ecx");
+    }
+    else if (flags & EXPRESSION_IS_MODULAS)
+    {
+        asm_push("mov ecx, %s", value);
+        asm_push("cdq");
+        // Assuming signed, check for unsigned in the future, check for float in the future..
+        asm_push("idiv ecx");
+        // Remainder stored in EDX
+        asm_push("mov eax, edx");
     }
     else if (flags & EXPRESSION_IS_ABOVE)
     {
@@ -1199,12 +1206,6 @@ void codegen_generate_structure_push_or_return(struct resolver_entity *entity, s
 
 static void codegen_gen_mov_for_value(const char *reg, const char *value, const char *datatype, int flags)
 {
-    if (register_is_used(reg))
-    {
-        codegen_gen_math_for_value(reg, value, flags);
-        return;
-    }
-
     asm_push("mov %s, %s", reg, value);
 }
 
@@ -1246,27 +1247,6 @@ static void codegen_gen_mem_access_first_for_expression(struct node *value_node,
     }
 
     codegen_gen_mov_or_math(reg_to_use, value_node, flags, entity);
-}
-
-static void codegen_gen_mem_access_for_continueing_expression(struct node *value_node, int flags, struct resolver_entity *entity)
-{
-    const char *new_reg_to_use = codegen_sub_register("ecx", datatype_element_size(&entity->node->var.type));
-    if (!S_EQ(new_reg_to_use, "ecx"))
-    {
-        // Okay we are not using the full 32 bit, lets XOR this thing we need 0s.
-        // No corruption that way
-        //asm_push("xor eax, eax");
-
-        // Okay lets use ECX here and we will need to preform the operation later.
-        asm_push("xor ecx, ecx");
-        asm_push("mov %s, %s", new_reg_to_use, codegen_get_fmt_for_value(value_node, entity));
-        codegen_gen_math_for_value("eax", "ecx", flags);
-        return;
-    }
-
-    // Is this a full 4 byte value, then their is no need to do anything special
-    // generate a normal expression
-    codegen_gen_mov_or_math("eax", value_node, flags, entity);
 }
 
 static void codegen_gen_mem_access(struct node *value_node, int flags, struct resolver_entity *entity)
@@ -1963,6 +1943,10 @@ int codegen_set_flag_for_operator(const char *op)
     {
         flag |= EXPRESSION_IS_DIVISION;
     }
+    else if (S_EQ(op, "%"))
+    {
+        flag |= EXPRESSION_IS_MODULAS;
+    }
     else if (S_EQ(op, ">"))
     {
         flag |= EXPRESSION_IS_ABOVE;
@@ -1983,7 +1967,7 @@ int codegen_set_flag_for_operator(const char *op)
     {
         flag |= EXPRESSION_IS_NOT_EQUAL;
     }
-    else if(S_EQ(op, "=="))
+    else if (S_EQ(op, "=="))
     {
         flag |= EXPRESSION_IS_EQUAL;
     }

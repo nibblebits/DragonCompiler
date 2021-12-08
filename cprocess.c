@@ -3,7 +3,7 @@
 
 #include <memory.h>
 
-const char* default_include_dirs[] = {"./dc_includes", "/usr/include/dragon-compiler", "/usr/include"};
+const char* default_include_dirs[] = {"./dc_includes", "../dc_includes", "/usr/include/dragon-compiler", "/usr/include"};
 
 void compile_process_destroy(struct compile_process *process)
 {

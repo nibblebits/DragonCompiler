@@ -562,7 +562,11 @@ struct datatype
     {
         struct array_brackets *brackets;
         // This datatype size for the full array its self.
-        // Calculation is datatype.size * EACH_INDEX.
+        // Calculation is datatype.size * EACH_INDEX
+        // Note the array size of a datatype can be changed depending on the expression it was involved in.
+        // for example int abc[50]; and then you go int x = abc[4]; the size will become 4 bytes because
+        // we have now resolved an integer. The original "abc" variable will maintain a datatype with a size
+        // of 50 * 4 
         size_t size;
     } array;
 };
@@ -2072,6 +2076,7 @@ struct array_brackets *array_brackets_new();
 void array_brackets_free(struct array_brackets *brackets);
 void array_brackets_add(struct array_brackets *brackets, struct node *bracket_node);
 size_t array_brackets_calculate_size(struct datatype *type, struct array_brackets *brackets);
+size_t array_brackets_calculate_size_from_index(struct datatype* type, struct array_brackets* brackets, int index);
 
 /**
  * Returns the full variable size for the given var_node. The full size in memory

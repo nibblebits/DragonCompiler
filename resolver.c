@@ -617,6 +617,10 @@ static struct resolver_entity *resolver_follow_array_bracket(struct resolver_pro
     {
         index = last_entity->array.index + 1;
     }
+
+    // We must readjust the datatype size because we have accessed a deeper part of the array
+    dtype.array.size = array_brackets_calculate_size_from_index(&dtype, dtype.array.brackets, index+1);
+    // We must reduce the dtype 
     void *private = resolver->callbacks.new_array_entity(result, node);
     struct resolver_entity *array_bracket_entity = resolver_create_new_entity_for_array_bracket(result, resolver, node, node->bracket.inner, index, &dtype, private, scope);
     struct resolver_entity_rule rule = {};
@@ -1098,6 +1102,7 @@ void resolver_finalize_result_flags(struct resolver_process *resolver, struct re
     int flags = RESOLVER_RESULT_FLAG_FIRST_ENTITY_PUSH_VALUE;
     // We must iterate through all of the results
     struct resolver_entity *entity = result->entity;
+    struct resolver_entity* first_entity = entity;
     struct resolver_entity *last_entity = result->last_entity;
 
     if (entity == last_entity)

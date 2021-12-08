@@ -705,7 +705,7 @@ size_t datatype_size_no_ptr(struct datatype *datatype)
 
 size_t datatype_size(struct datatype *datatype)
 {
-    if (datatype->flags & DATATYPE_FLAG_IS_POINTER)
+    if (datatype->flags & DATATYPE_FLAG_IS_POINTER && datatype->pointer_depth > 0)
         return DATA_SIZE_DWORD;
 
     if (datatype->flags & DATATYPE_FLAG_IS_ARRAY)

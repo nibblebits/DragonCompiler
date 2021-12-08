@@ -1415,13 +1415,21 @@ void codegen_generate_entity_access_array_bracket_pointer(struct resolver_result
     // Restore EBX
     asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
 
-    // We must first access the pointer from the last entity
-    asm_push("mov ebx, [ebx]");
     // Now we have accessed the pointer we may add on the offset
     codegen_generate_expressionable(entity->array.array_index_node, history_begin(&history, 0));
     asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    // We must multiply the index by the element size
+    if (datatype_element_size(&entity->dtype) > DATA_SIZE_BYTE)
+    {
+        asm_push("imul eax, %i", datatype_size(&entity->dtype));
+    }
     asm_push("add ebx, eax");
 
+    // Indirect
+    if (entity->dtype.flags & DATATYPE_FLAG_IS_POINTER)
+    {
+        asm_push("mov ebx, [ebx]");
+    }
     // Save EBX
     asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = entity->dtype});
 }
@@ -1801,7 +1809,14 @@ void codegen_generate_entity_access_start(struct resolver_result *result, struct
     }
     else if (result->flags & RESOLVER_RESULT_FLAG_FIRST_ENTITY_LOAD_TO_EBX)
     {
-        asm_push("lea ebx, [%s]", result->base.address);
+        if (root_assignment_entity->next && root_assignment_entity->next->flags & RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY_ENTITY)
+        {
+            asm_push("mov ebx, [%s]", result->base.address);
+        }
+        else
+        {
+            asm_push("lea ebx, [%s]", result->base.address);
+        }
         asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = root_assignment_entity->dtype});
     }
 }
@@ -1967,6 +1982,10 @@ int codegen_set_flag_for_operator(const char *op)
     else if (S_EQ(op, "!="))
     {
         flag |= EXPRESSION_IS_NOT_EQUAL;
+    }
+    else if(S_EQ(op, "=="))
+    {
+        flag |= EXPRESSION_IS_EQUAL;
     }
     else if (S_EQ(op, "&&"))
     {

@@ -26,11 +26,21 @@ struct vector* array_brackets_node_vector(struct array_brackets* brackets)
     return brackets->n_brackets;
 }
 
-size_t array_brackets_calculate_size(struct datatype* type, struct array_brackets* brackets)
+
+size_t array_brackets_calculate_size_from_index(struct datatype* type, struct array_brackets* brackets, int index)
 {
-    size_t sum = type->size;
     struct vector* array_vec = array_brackets_node_vector(brackets);
-    vector_set_peek_pointer(array_vec, 0);
+    size_t sum = type->size;
+    // Index above array count then the size should be the single data type.
+    // This would then work for senarios where we have pointer arrays and also for normal arrays
+    // the size should obviously change depending on the index accesed
+    // for example int x[50][20]; x[30] would be different size from just x.
+    if (index >= vector_count(array_vec))
+    {
+        return sum;
+    }
+    
+    vector_set_peek_pointer(array_vec, index);
     struct node* array_bracket_node = vector_peek_ptr(array_vec);
     if (!array_bracket_node)
         return 0;
@@ -46,6 +56,11 @@ size_t array_brackets_calculate_size(struct datatype* type, struct array_bracket
     }
 
     return sum;
+}
+
+size_t array_brackets_calculate_size(struct datatype* type, struct array_brackets* brackets)
+{
+    return array_brackets_calculate_size_from_index(type, brackets, 0);
 }
 
 int array_total_indexes(struct datatype* dtype)

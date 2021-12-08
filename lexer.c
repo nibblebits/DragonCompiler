@@ -627,6 +627,7 @@ static struct token *token_make_quote()
         c = nextc();
     }
 
+    assert_next_char('\'');
     // Characters are basically just small numbers. Treat it as such.
     return token_create(&(struct token){TOKEN_TYPE_NUMBER, .cval = c});
 }
@@ -744,7 +745,6 @@ static struct token *read_next_token()
     case '"':
         token = token_make_string('"', '"');
         break;
-
     case '\n':
         token = token_make_newline();
         break;

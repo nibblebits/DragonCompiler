@@ -2038,6 +2038,12 @@ void parser_datatype_init(struct token *datatype_token, struct token *datatype_s
 {
     parser_datatype_init_type_and_size(datatype_token, datatype_secondary_token, datatype_out, pointer_depth, expected_type);
     datatype_out->type_str = datatype_token->sval;
+
+    if (S_EQ(datatype_token->sval, "long") && datatype_secondary_token && S_EQ(datatype_secondary_token->sval, "long"))
+    {
+        compiler_warning(current_process, "Our compiler does not support 64 bit long long so it will be treated as a 32 bit type not 64 bit\n");
+        datatype_out->size = DATA_SIZE_DWORD;
+    }
 }
 
 int parser_datatype_expected_for_type_string(const char *s)
@@ -2069,8 +2075,6 @@ void parser_get_datatype_tokens(struct token **datatype_token_out, struct token 
 /**
  * Parses the type part of the datatype. I.e "int", "long"
  * 
- * "long long", "int long" ect ect will need to be implemented but for now
- * we support only one datatype for a series of tokens.
  */
 void parse_datatype_type(struct datatype *datatype)
 {

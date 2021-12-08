@@ -1078,7 +1078,7 @@ bool codegen_can_gen_math(int flags)
     return flags & EXPRESSION_GEN_MATHABLE;
 }
 
-void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
+void codegen_gen_math_for_value(const char *reg, const char *value, int flags, bool is_signed)
 {
     if (flags & EXPRESSION_IS_ADDITION)
     {
@@ -1093,21 +1093,41 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags)
         asm_push("mov ecx, %s", value);
 
         // Need a way to know if its signed in the future.. Assumed all signed for now.
-        asm_push("imul ecx");
+        if (is_signed)
+        {
+            asm_push("imul ecx");
+        }
+        else
+        {
+            asm_push("mul ecx");
+        }
     }
     else if (flags & EXPRESSION_IS_DIVISION)
     {
         asm_push("mov ecx, %s", value);
         asm_push("cdq");
-        // Assuming signed, check for unsigned in the future, check for float in the future..
-        asm_push("idiv ecx");
+        if (is_signed)
+        {
+            asm_push("idiv ecx");
+        }
+        else
+        {
+            asm_push("div ecx");
+        }
     }
     else if (flags & EXPRESSION_IS_MODULAS)
     {
         asm_push("mov ecx, %s", value);
         asm_push("cdq");
         // Assuming signed, check for unsigned in the future, check for float in the future..
-        asm_push("idiv ecx");
+        if (is_signed)
+        {
+            asm_push("idiv ecx");
+        }
+        else
+        {
+            asm_push("div ecx");
+        }
         // Remainder stored in EDX
         asm_push("mov eax, edx");
     }
@@ -1891,7 +1911,6 @@ void codegen_generate_assignment_part(struct node *node, const char *op, struct 
 
         // Make the move
         codegen_generate_assignment_instruction_for_operator(mov_type, "edx", reg_to_use, op, result->last_entity->dtype.flags & DATATYPE_FLAG_IS_SIGNED);
-
     }
 
     codegen_response_acknowledge((&(struct response){.flags = RESPONSE_FLAG_RESOLVED_ENTITY, .data.resolved_entity = result->last_entity}));
@@ -2186,7 +2205,7 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
             asm_push("imul %s, %i", reg, datatype_size(datatype_pointer_reduce(pointer_datatype, 1)));
         }
         // Add together, subtract, multiply ect...
-        codegen_gen_math_for_value("eax", "ecx", op_flags);
+        codegen_gen_math_for_value("eax", "ecx", op_flags, last_dtype.flags & DATATYPE_FLAG_IS_SIGNED);
     }
 
     // Caller always expects a response from us..

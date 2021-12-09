@@ -795,7 +795,7 @@ static struct node *codegen_node_next()
 
 void codegen_reduce_register(const char *reg, size_t size, bool is_signed)
 {
-    if (size != DATA_SIZE_DWORD)
+    if (size != DATA_SIZE_DWORD && size > 0)
     {
         const char *ins = "movsx";
         if (!is_signed)
@@ -2218,10 +2218,6 @@ void codegen_generate_function_call_for_native(struct symbol *native_func_sym, s
     struct native_function *func = native_func_sym->data;
     x86_generator_private(&x86_codegen)->remembered.history = history;
     func->callbacks.call(&x86_codegen, node->binded.function, func, entity->func_call_data.arguments);
-}
-
-void codegen_generate_function_call(struct node *node, struct resolver_entity *entity, struct history *history)
-{
 }
 
 bool codegen_resolve_node_return_result(struct node *node, struct history *history, struct resolver_result **result_out)

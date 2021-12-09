@@ -1,5 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
+
 #define BOOK_NAME_SIZE 20
 struct book
 {
@@ -7,13 +6,12 @@ struct book
     int year;
 };
 
-struct book b[2];
+int test(char* fmt, char* s, int a)
+{
+    return a;
+}
+struct book book;
 int main() {
-
-    b[1].year = 20;
     struct book* books;
-    books = &b;
-    struct book* book = &books[1];
-    
-    return book->year;
+    return test("%s published %i\n", books[0].name, 2000);
 }

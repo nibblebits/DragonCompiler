@@ -1,5 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
+
 #define BOOK_NAME_SIZE 20
 struct book
 {

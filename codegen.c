@@ -1426,15 +1426,10 @@ void codegen_generate_entity_access_array_bracket_pointer(struct resolver_result
     // We must multiply the index by the element size
     if (datatype_element_size(&entity->dtype) > DATA_SIZE_BYTE)
     {
-        asm_push("imul eax, %i", datatype_size(&entity->dtype));
+        asm_push("imul eax, %i", datatype_size_for_array_access(&entity->dtype));
     }
     asm_push("add ebx, eax");
 
-    // Indirect
-    if (entity->dtype.flags & DATATYPE_FLAG_IS_POINTER)
-    {
-        asm_push("mov ebx, [ebx]");
-    }
     // Save EBX
     asm_push_ins_push_with_data("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = entity->dtype});
 }

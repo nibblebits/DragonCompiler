@@ -307,9 +307,8 @@ struct node *struct_for_access(struct resolver_process *process, struct node *no
     return _struct_for_access(process, node, type_str, flags, details_out);
 }
 
-
-bool datatype_is_void_no_ptr(struct datatype* dtype)
-{   
+bool datatype_is_void_no_ptr(struct datatype *dtype)
+{
     return S_EQ(dtype->type_str, "void") && !(dtype->flags & DATATYPE_FLAG_IS_POINTER);
 }
 
@@ -683,9 +682,9 @@ bool variable_node_is_primative(struct node *node)
     return datatype_is_primitive(&node->var.type);
 }
 
-struct datatype* datatype_pointer_reduce(struct datatype* datatype, int by)
+struct datatype *datatype_pointer_reduce(struct datatype *datatype, int by)
 {
-    struct datatype* new_datatype = calloc(1, sizeof(struct datatype));
+    struct datatype *new_datatype = calloc(1, sizeof(struct datatype));
     memcpy(new_datatype, datatype, sizeof(struct datatype));
     new_datatype->pointer_depth -= by;
     if (new_datatype->pointer_depth <= 0)
@@ -701,6 +700,18 @@ size_t datatype_size_no_ptr(struct datatype *datatype)
     if (datatype->flags & DATATYPE_FLAG_IS_ARRAY)
         return datatype->array.size;
     return datatype->size;
+}
+
+size_t datatype_size_for_array_access(struct datatype *datatype)
+{
+    if (datatype_is_struct_or_union(datatype) && datatype->flags & DATATYPE_FLAG_IS_POINTER && datatype->pointer_depth == 1)
+    {
+        // We have something like this struct dog* abc; abc[1]
+        // We should return the datatype size even though its a pointer.
+        return datatype->size;
+    }
+
+    return datatype_size(datatype);
 }
 
 size_t datatype_size(struct datatype *datatype)
@@ -736,13 +747,13 @@ struct datatype datatype_for_numeric()
     return dtype;
 }
 
-struct datatype* datatype_thats_a_pointer(struct datatype* d1, struct datatype* d2)
+struct datatype *datatype_thats_a_pointer(struct datatype *d1, struct datatype *d2)
 {
     if (d1->flags & DATATYPE_FLAG_IS_POINTER)
     {
-        return d1; 
+        return d1;
     }
-    else if(d2->flags & DATATYPE_FLAG_IS_POINTER)
+    else if (d2->flags & DATATYPE_FLAG_IS_POINTER)
     {
         return d2;
     }
@@ -765,7 +776,6 @@ struct datatype datatype_for_string()
     dtype.size = DATA_SIZE_DWORD;
     return dtype;
 }
-
 
 size_t variable_size(struct node *var_node)
 {

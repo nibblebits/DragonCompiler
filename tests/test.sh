@@ -575,7 +575,14 @@ if [ $? -ne 20 ]; then
 else
     echo -e "Pointer addition test passed"
 fi
-
+echo -e "Array get pointer test"
+./build/array_get_pointer_test
+if [ $? -ne 20 ]; then
+    echo -e "Array get pointer test failed"
+    res_code=1
+else
+    echo -e "Array get pointer test passed"
+fi
 
 echo -e "All tests finished"
 exit $res_code

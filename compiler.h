@@ -2093,6 +2093,8 @@ size_t variable_size(struct node *var_node);
 size_t variable_size_for_list(struct node *var_list_node);
 
 size_t datatype_size(struct datatype *datatype);
+size_t datatype_size_for_array_access(struct datatype *datatype);
+
 size_t datatype_element_size(struct datatype *datatype);
 size_t datatype_size_no_ptr(struct datatype *datatype);
 

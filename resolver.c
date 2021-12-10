@@ -629,6 +629,8 @@ static struct resolver_entity *resolver_follow_array_bracket(struct resolver_pro
     struct resolver_entity *array_bracket_entity = resolver_create_new_entity_for_array_bracket(result, resolver, node, node->bracket.inner, index, &dtype, private, scope);
     struct resolver_entity_rule rule = {};
     resolver_array_bracket_set_flags(array_bracket_entity, &dtype, node, index);
+    // Last entity uses an array bracket
+    last_entity->flags |= RESOLVER_ENTITY_FLAG_USES_ARRAY_BRACKETS;
 
     if (array_bracket_entity->flags & RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY_ENTITY)
     {
@@ -1179,7 +1181,15 @@ void resolver_finalize_result_flags(struct resolver_process *resolver, struct re
         entity = entity->next;
     }
 
-    if (last_entity->type == RESOLVER_ENTITY_TYPE_VARIABLE)
+    if(last_entity->dtype.flags & DATATYPE_FLAG_IS_ARRAY && (!does_get_address && last_entity->type == RESOLVER_ENTITY_TYPE_VARIABLE && !(last_entity->flags & RESOLVER_ENTITY_FLAG_USES_ARRAY_BRACKETS)))
+    {
+        // Here we need to deal with circumstances such as
+        // char abc[50]; char* p = abc; Without handling this senario abc[0] will go into the p variable
+        // rather than the address of abc.
+
+        flags &= ~RESOLVER_RESULT_FLAG_FINAL_INDIRECTION_REQUIRED_FOR_VALUE;
+    }
+    else if (last_entity->type == RESOLVER_ENTITY_TYPE_VARIABLE)
     {
         flags |= RESOLVER_RESULT_FLAG_FINAL_INDIRECTION_REQUIRED_FOR_VALUE;
     }

@@ -612,7 +612,11 @@ enum
     RESOLVER_ENTITY_FLAG_IS_POINTER_ARRAY_ENTITY = 0b00100000,
     // This flag is set if the datatype of an entity
     // was changed due to a cast of some kind.
-    RESOLVER_ENTITY_FLAG_WAS_CASTED = 0b01000000
+    RESOLVER_ENTITY_FLAG_WAS_CASTED = 0b01000000,
+    // Gets set to the previous entity of an array bracket
+    // i.e abc[5] will cause the abc entity to have this flag, signifying it uses
+    // array brackets.
+    RESOLVER_ENTITY_FLAG_USES_ARRAY_BRACKETS = 0b10000000
 };
 
 enum

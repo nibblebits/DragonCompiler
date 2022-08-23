@@ -584,5 +584,15 @@ else
     echo -e "Array get pointer test passed"
 fi
 
+echo -e "Logical Operator Test"
+./build/logical_operator_test
+if [ $? -ne 1 ]; then
+    echo -e "Logical operator test failed"
+    res_code=1
+else
+    echo -e "Logical operator test passed"
+fi
+
+
 echo -e "All tests finished"
 exit $res_code

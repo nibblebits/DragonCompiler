@@ -162,13 +162,6 @@ void resolver_default_delete_scope(struct resolver_scope *scope)
     free(scope->private);
 }
 
-static void resolver_default_merge_array_calculate_out_offset(struct datatype *dtype, struct resolver_entity *entity, int *out_offset)
-{
-    assert(entity->array.array_index_node->type == NODE_TYPE_NUMBER);
-    int index_val = entity->array.array_index_node->llnum;
-    *(out_offset) += array_offset(dtype, entity->array.index, index_val);
-}
-
 struct resolver_entity *resolver_default_merge_entities(struct resolver_process *process, struct resolver_result *result, struct resolver_entity *left_entity, struct resolver_entity *right_entity)
 {
     int new_pos = left_entity->offset + right_entity->offset;

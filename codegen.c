@@ -2112,12 +2112,11 @@ void codegen_generate_exp_node_for_logical_arithmetic(struct node *node, struct 
         codegen_setup_new_logical_expression(history, node);
     }
 
-    history->flags |= EXPRESSION_IN_LOGICAL_EXPRESSION;
-    codegen_generate_expressionable(node->exp.left, history);
+    codegen_generate_expressionable(node->exp.left, history_down(history, history->flags | EXPRESSION_IN_LOGICAL_EXPRESSION));
     asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     codegen_generate_logical_cmp(node->exp.op, history->exp.logical_end_label, history->exp.logical_end_label_positive);
     register_unset_flag(REGISTER_EAX_IS_USED);
-    codegen_generate_expressionable(node->exp.right, history);
+    codegen_generate_expressionable(node->exp.right, history_down(history, history->flags | EXPRESSION_IN_LOGICAL_EXPRESSION));
     register_unset_flag(REGISTER_EAX_IS_USED);
     if (!is_logical_node(node->exp.right))
     {

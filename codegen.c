@@ -2901,10 +2901,10 @@ void codegen_generate_do_while_stmt(struct node *node)
 void codegen_generate_for_stmt(struct node *node)
 {
     struct for_stmt *for_stmt = &node->stmt._for;
-    struct history history;
-    codegen_begin_entry_exit_point();
     int for_loop_start_id = codegen_label_count();
     int for_loop_end_id = codegen_label_count();
+    struct history history;
+
     if (for_stmt->init)
     {
         // We have our FOR loop initialization, lets initialize.
@@ -2912,6 +2912,13 @@ void codegen_generate_for_stmt(struct node *node)
         asm_push_ins_pop_or_ignore("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     }
 
+    asm_push("jmp .for_loop%i", for_loop_start_id);
+    codegen_begin_entry_exit_point();
+    if (for_stmt->loop)
+    {
+        codegen_generate_brand_new_expression(for_stmt->loop, history_begin(&history, 0));
+        asm_push_ins_pop_or_ignore("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    }
     asm_push(".for_loop%i:", for_loop_start_id);
     if (for_stmt->cond)
     {

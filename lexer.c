@@ -385,7 +385,14 @@ static const char *read_op()
     struct buffer *buffer = buffer_create();
     buffer_write(buffer, op);
 
-    if (!op_treated_as_one(op))
+    if (op == '*' && peekc() == '=')
+    {
+        // This is *= so even though its treated as one operator, in this case its two.
+        buffer_write(buffer, peekc());
+        // Skip the "=" we just wrote it.
+        nextc();
+    }
+    else if (!op_treated_as_one(op))
     {
         for (int i = 0; i < 2; i++)
         {

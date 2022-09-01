@@ -1387,15 +1387,20 @@ void codegen_generate_assignment_instruction_for_operator(const char *mov_type_k
     }
     else if (S_EQ(op, "<<="))
     {
-        // not tested.
-        asm_push("shl eax, ", reg_to_use);
-        asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use);
+        asm_push("mov ecx, %s", reg_to_use);
+        asm_push("sal %s [%s], cl", mov_type_keyword, address);
     }
     else if (S_EQ(op, ">>="))
     {
-        // not tested.
-        asm_push("shr eax, ", reg_to_use);
-        asm_push("mov %s [%s], %s", mov_type_keyword, address, reg_to_use);
+        asm_push("mov ecx, %s", reg_to_use);
+        if (is_signed)
+        {
+            asm_push("sar %s [%s], cl", mov_type_keyword, address);
+        }
+        else
+        {
+            asm_push("shr %s [%s], cl", mov_type_keyword, address);
+        }
     }
 }
 

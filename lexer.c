@@ -198,6 +198,8 @@ static bool op_valid(const char *op)
            S_EQ(op, "+=") ||
            S_EQ(op, "-=") ||
            S_EQ(op, "*=") ||
+           S_EQ(op, ">>=") ||
+           S_EQ(op, "<<=") ||
            S_EQ(op, "/=") ||
            S_EQ(op, ">>") ||
            S_EQ(op, "<<") ||
@@ -212,7 +214,6 @@ static bool op_valid(const char *op)
            S_EQ(op, "++") ||
            S_EQ(op, "--") ||
            S_EQ(op, "=") ||
-           S_EQ(op, "/=") ||
            S_EQ(op, "*=") ||
            S_EQ(op, "^=") ||
            S_EQ(op, "==") ||
@@ -386,13 +387,17 @@ static const char *read_op()
 
     if (!op_treated_as_one(op))
     {
-        op = peekc();
-        if (is_single_operator(op))
+        for (int i = 0; i < 2; i++)
         {
-            buffer_write(buffer, op);
-            nextc();
-            single_operator = false;
+            op = peekc();
+            if (is_single_operator(op))
+            {
+                buffer_write(buffer, op);
+                nextc();
+                single_operator = false;
+            }
         }
+
     }
 
     char *ptr = buffer_ptr(buffer);

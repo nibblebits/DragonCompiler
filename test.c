@@ -1,10 +1,8 @@
 #include <stdio.h>
+int printf(const char* c, ...);
 int main()
-{
-   int x = 0;
-   for (x = 0; x < 50; x+=1)
-   {
-      continue;
-   }
+{  
+   int x = 1;
+   x <<= 1;
    printf("%i\n", x);
 }

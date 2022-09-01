@@ -1163,7 +1163,15 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags, b
     else if (flags & EXPRESSION_IS_BITSHIFT_RIGHT)
     {
         value = codegen_sub_register(value, DATA_SIZE_BYTE);
-        asm_push("sar %s, %s", reg, value);
+        if (is_signed)
+        {
+            asm_push("sar %s, %s", reg, value);
+        }
+        else
+        {
+            asm_push("shr %s, %s", reg, value);
+        }
+
     }
     else if (flags & EXPRESSION_IS_BITWISE_AND)
     {

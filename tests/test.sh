@@ -594,5 +594,16 @@ else
 fi
 
 
+echo -e "Decrement Operator Test"
+./build/decrement_operator_test
+if [ $? -ne 0 ]; then
+    echo -e "Decrement operator test failed"
+    res_code=1
+else
+    echo -e "Decrement operator test passed"
+fi
+
+
+
 echo -e "All tests finished"
 exit $res_code

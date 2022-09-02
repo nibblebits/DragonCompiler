@@ -1166,9 +1166,14 @@ enum
     FUNCTION_NODE_FLAG_IS_NATIVE = 0b00000001
 };
 
+enum
+{
+    UNARY_FLAG_IS_RIGHT_OPERANDED_UNARY = 0b00000001
+};
 struct node;
 struct unary
 {
+    int flags;
     // In the case of indirection the "op" variable will only equal to one "*"
     // you can find the depth in the indirection structure within.
     const char *op;
@@ -1892,7 +1897,7 @@ void make_do_while_node(struct node *body_node, struct node *cond_node);
 void make_else_node(struct node *body_node);
 void make_union_node(const char *struct_name, struct node *body_node);
 void make_struct_node(const char *struct_name, struct node *body_node);
-void make_unary_node(const char *unary_op, struct node *operand_node);
+void make_unary_node(const char *unary_op, struct node *operand_node, int flags);
 void make_cast_node(struct datatype *dtype, struct node *operand_node);
 
 void make_return_node(struct node *exp_node);

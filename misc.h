@@ -30,4 +30,6 @@ bool file_exists(const char* filename);
 
 // Move to a better place
 bool is_unary_operator(const char* op);
+
+bool is_right_operanded_unary_operator(const char* op);
 #endif

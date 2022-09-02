@@ -212,9 +212,9 @@ void make_struct_node(const char *struct_name, struct node *body_node)
     node_create(&(struct node){NODE_TYPE_STRUCT, .flags = flags, ._struct.name = struct_name, ._struct.body_n = body_node});
 }
 
-void make_unary_node(const char *unary_op, struct node *operand_node)
+void make_unary_node(const char *unary_op, struct node *operand_node, int flags)
 {
-    node_create(&(struct node){NODE_TYPE_UNARY, .unary.op = unary_op, .unary.operand = operand_node});
+    node_create(&(struct node){NODE_TYPE_UNARY, .unary.op = unary_op, .unary.operand = operand_node, .unary.flags=flags});
 }
 
 void make_cast_node(struct datatype* dtype, struct node* operand_node)

@@ -2463,6 +2463,49 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
         // We are accessing a pointer
         codegen_generate_unary_indirection(node, history);
     }
+    else if(S_EQ(node->unary.op, "++"))
+    {
+        if (node->unary.flags & UNARY_FLAG_IS_RIGHT_OPERANDED_UNARY)
+        {
+            // Save the value as this is a "x++" i.e we should return x before incrementing
+            asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
+            asm_push("inc eax");
+            asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
+            codegen_generate_assignment_part(node->unary.operand, "=", history);
+            // No need to pop EAX back off that we did above the "inc" as the receiver expects to pop from the stack
+            // anyway..
+
+        }
+        else
+        {
+            asm_push("inc eax");
+            asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
+            codegen_generate_assignment_part(node->unary.operand, "=", history);
+            asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
+        }
+    }
+    else if(S_EQ(node->unary.op, "--"))
+    {
+        if (node->unary.flags & UNARY_FLAG_IS_RIGHT_OPERANDED_UNARY)
+        {
+            // Save the value as this is a "x--" i.e we should return x before decerementing
+            asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
+            asm_push("dec eax");
+            asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
+            codegen_generate_assignment_part(node->unary.operand, "=", history);
+            // No need to pop EAX back off that we did above the "inc" as the receiver expects to pop from the stack
+            // anyway..
+
+        }
+        else
+        {
+            asm_push("dec eax");
+            asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
+            codegen_generate_assignment_part(node->unary.operand, "=", history);
+            asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
+        }
+    }
+
 }
 
 void codegen_generate_unary(struct node *node, struct history *history)

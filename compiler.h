@@ -413,6 +413,9 @@ struct code_generator
     // This will allow a loop to restart.
     struct vector *entry_points;
 
+    // Vector of const char* that is put into the data section
+    struct vector* custom_data_section;
+    
     // Vector of struct response*
     struct vector *responses;
 };

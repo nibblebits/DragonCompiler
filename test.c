@@ -1,7 +1,10 @@
+int printf(const char* s, ...);
+
+int special(int x, int y)
+{
+    return x * y;
+}
 int main()
 {
-    int i = 0;
-    int y = 0;
-    y = i--;
-    return y;
+    printf("%i\n", special(50, 20));
 }

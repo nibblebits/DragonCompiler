@@ -142,6 +142,7 @@ enum
     CODEGEN_ENTITY_RULE_WILL_PEEK_AT_EBX = 0b00001000
 };
 
+
 void codegen_response_expect()
 {
     struct response *res = calloc(sizeof(struct response), 1);
@@ -587,6 +588,16 @@ void asm_push_args(const char *ins, va_list args)
         fprintf(current_process->ofile, "\n");
     }
 }
+
+void codegen_data_section_add(const char* data, ...)
+{
+    va_list args;
+    va_start(args, data);
+    char* new_data = malloc(256);
+    vsprintf(new_data, data, args);
+    vector_push(current_process->generator->custom_data_section, &new_data);
+}
+
 void asm_push(const char *ins, ...)
 {
     va_list args;
@@ -1498,12 +1509,12 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
     vector_set_peek_pointer_end(entity->func_call_data.arguments);
 
     struct node *node = vector_peek_ptr(entity->func_call_data.arguments);
+    int function_call_label_id = codegen_label_count();
+    // Function address
+    codegen_data_section_add("function_call_%i: dd 0", function_call_label_id);
 
     asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
-
-    // EBX must be saved for each argument incase its used
-    // therefore we will use ECX instead.
-    asm_push("mov ecx,ebx");
+    asm_push("mov dword [function_call_%i], ebx", function_call_label_id);
 
     // Is this a structure return type?
     if (datatype_is_struct_or_union_non_pointer(&entity->dtype))
@@ -1527,7 +1538,7 @@ void codegen_generate_entity_access_for_function_call(struct resolver_result *re
     }
 
     // Call the function, address is in EBX
-    asm_push("call ecx");
+    asm_push("call [function_call_%i]", function_call_label_id);
     size_t stack_size = entity->func_call_data.stack_size;
     if (datatype_is_struct_or_union_non_pointer(&entity->dtype))
     {
@@ -3339,6 +3350,17 @@ void codegen_generate_root()
     }
 }
 
+void codegen_generate_data_section_add_ons()
+{
+    asm_push("section .data");
+    vector_set_peek_pointer(current_process->generator->custom_data_section, 0);
+    const char* str= vector_peek_ptr(current_process->generator->custom_data_section);
+    while(str)
+    {
+        asm_push(str);
+        str = vector_peek_ptr(current_process->generator->custom_data_section);
+    }
+}
 int codegen(struct compile_process *process)
 {
     current_process = process;
@@ -3347,13 +3369,17 @@ int codegen(struct compile_process *process)
     // Create the root scope for this process
     scope_create_root(process);
 
-    vector_set_peek_pointer(process->node_tree_vec, 0);
+     vector_set_peek_pointer(process->node_tree_vec, 0);
     // Global variables and down the tree locals... Global scope lets create it.
     codegen_new_scope(0);
     codegen_generate_data_section();
     vector_set_peek_pointer(process->node_tree_vec, 0);
+
+
     codegen_generate_root();
     codegen_finish_scope();
+
+    codegen_generate_data_section_add_ons();
 
     // Finally generate read only data
     codegen_generate_rod();
@@ -3370,5 +3396,6 @@ struct code_generator *codegenerator_new(struct compile_process *process)
     generator->entry_points = vector_create(sizeof(struct entry_point *));
     generator->responses = vector_create(sizeof(struct response *));
     generator->_switch.switches = vector_create(sizeof(struct generator_switch_stmt_entity));
+    generator->custom_data_section = vector_create(sizeof(const char*));
     return generator;
 }

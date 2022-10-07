@@ -1717,11 +1717,28 @@ struct node *parser_evaluate_exp_to_numerical_node(struct node *node)
 struct node *parser_evaluate_identifier_to_numerical_node(struct node *node)
 {
     assert(node->type == NODE_TYPE_IDENTIFIER);
-    if (node_is_constant(current_process->resolver, node))
+
+    struct resolver_result *result = resolver_follow(current_process->resolver, node);
+    if (!resolver_result_ok(result))
     {
-        long val = node_pull_literal(current_process->resolver, node);
-        node_create(&(struct node){.type = NODE_TYPE_NUMBER, .llnum = val});
-        return node_pop();
+        return node;
+    }
+
+    struct resolver_entity *entity = NULL;
+    entity = resolver_result_entity(result);
+    struct variable *var = &variable_node(entity->node)->var;
+    // Only if the constant is not a pointer will we pull a literal and push a number node
+    // this is to prevent const char* ptr being interpreted as a literal number.
+    if (var->type.flags & DATATYPE_FLAG_IS_CONST && !(var->type.flags & DATATYPE_FLAG_IS_POINTER))
+    {
+        // Okay its constant
+        long literal_val = var->val->llnum;
+        if (node_is_constant(current_process->resolver, node) && !(node->flags & DATATYPE_FLAG_IS_POINTER))
+        {
+            long val = node_pull_literal(current_process->resolver, node);
+            node_create(&(struct node){.type = NODE_TYPE_NUMBER, .llnum = literal_val});
+            return node_pop();
+        }
     }
 
     return node;

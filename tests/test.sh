@@ -604,6 +604,15 @@ else
 fi
 
 
+echo -e "Const Char pointer Test"
+./build/const_char_pointer_test
+if [ $? -ne 104 ]; then
+    echo -e "Const Char pointer test failed"
+    res_code=1
+else
+    echo -e "Const Char pointer test passed"
+fi
+
 
 echo -e "All tests finished"
 exit $res_code

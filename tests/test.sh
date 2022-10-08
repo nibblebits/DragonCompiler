@@ -613,6 +613,15 @@ else
     echo -e "Const Char pointer test passed"
 fi
 
+echo -e "Macro string test Test"
+./build/preprocessor_macro_string_test
+if [ $? -ne 1 ]; then
+    echo -e "Macro string test failed"
+    res_code=1
+else
+    echo -e "Macro string test passed"
+fi
+
 
 echo -e "All tests finished"
 exit $res_code

@@ -30,6 +30,7 @@ static struct lex_process *lex_process;
 
 const char *read_number_str();
 unsigned long long read_number();
+static struct token *lexer_last_token();
 
 void error(const char *fmt, ...)
 {
@@ -47,6 +48,16 @@ void lex_new_expression()
         // This is the first expression in series? Then we must initialize the buffer
         lex_process->parentheses_buffer = buffer_create();
     }
+
+    // If the last token is a comma or identifier then this is a new argument string buffer.
+    struct token* last_token = lexer_last_token();
+    if (last_token && (last_token->type == TOKEN_TYPE_IDENTIFIER || token_is_operator(last_token, ",")))
+    {
+        // The last token was an identifier.. This means this is some sort of function call i.e
+        //ABC(
+        // Where we are at the left bracket.
+        lex_process->argument_string_buffer = buffer_create();
+    }
 }
 
 void lex_finish_expression()
@@ -56,6 +67,7 @@ void lex_finish_expression()
     {
         error("You closed an expression before opening one");
     }
+    
 }
 
 bool lex_is_in_expression()
@@ -91,6 +103,10 @@ static char nextc()
     if (lex_is_in_expression())
     {
         buffer_write(lex_process->parentheses_buffer, c);
+        if (lex_process->argument_string_buffer)
+        {
+            buffer_write(lex_process->argument_string_buffer, c);
+        }
     }
     lex_process->pos.col++;
     if (c == '\n')
@@ -266,7 +282,13 @@ static struct token *token_create(struct token *_token)
     tmp_token.pos = lex_file_position();
     if (lex_is_in_expression())
     {
+        assert(lex_process->parentheses_buffer);
         tmp_token.between_brackets = buffer_ptr(lex_process->parentheses_buffer);
+        
+        if (lex_process->argument_string_buffer)
+        {
+            tmp_token.between_arguments = buffer_ptr(lex_process->argument_string_buffer);
+        }
     }
     return &tmp_token;
 }
@@ -797,7 +819,7 @@ int lex(struct lex_process *process)
 {
     process->current_expression_count = 0;
     process->parentheses_buffer = NULL;
-
+    process->argument_string_buffer = NULL;
     lex_process = process;
     // Copy filename to the lex process
     lex_process->pos.filename = process->compiler->cfile.abs_path;

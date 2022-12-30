@@ -457,6 +457,10 @@ struct lex_process
     int current_expression_count;
     struct buffer *parentheses_buffer;
 
+    // Stores the entire string between function arguments or anything between commas
+    // for example ABC(hello world, testing). Would result in Hello world being in this buffer for tokens hello and world
+    struct buffer* argument_string_buffer;
+
     struct lex_process_functions *function;
 
     // Private data that the creator of the lex process can use to store.
@@ -936,6 +940,9 @@ struct token
     // I.e if we have abc(50+20+40) then for numerical token 20 between_brackets
     // will point to the string 50+20+40
     const char *between_brackets;
+
+    // Holds the string between function arguments. IF any
+    const char* between_arguments;
 };
 
 struct sizeable_node

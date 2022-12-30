@@ -1,12 +1,11 @@
-#define TEST_FUNC(x) #x
+#include <stdio.h>
 
-int memcmp(const void *str1, const void *str2, int n);
+
+#define TEST_FUNC(x) #x
 int main()
 {
-     if(memcmp("hello", TEST_FUNC(hello), 5) == 0)
-     {
-        return 1;
-     }
+    const char* s = TEST_FUNC(hello world);
 
-     return 0;
+    printf("%s", s);
+    // printf("%s", TEST_FUNC((hello world)));
 }

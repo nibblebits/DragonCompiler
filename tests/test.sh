@@ -623,5 +623,15 @@ else
 fi
 
 
+echo -e "Logical not test "
+./build/logical_not_test
+if [ $? -ne 1 ]; then
+    echo -e "Logical not test failed"
+    res_code=1
+else
+    echo -e "Logical not test passed"
+fi
+
+
 echo -e "All tests finished"
 exit $res_code

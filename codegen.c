@@ -142,7 +142,6 @@ enum
     CODEGEN_ENTITY_RULE_WILL_PEEK_AT_EBX = 0b00001000
 };
 
-
 void codegen_response_expect()
 {
     struct response *res = calloc(sizeof(struct response), 1);
@@ -273,10 +272,10 @@ struct resolver_default_scope_data *codegen_scope_private(struct resolver_scope 
 
 /**
  * @brief Returns additional rules about the entity that only the code generator needs to understand
- * 
- * @param last_entity 
- * @param history 
- * @return int 
+ *
+ * @param last_entity
+ * @param history
+ * @return int
  */
 int codegen_entity_rules(struct resolver_entity *last_entity, struct history *history)
 {
@@ -314,9 +313,9 @@ int codegen_entity_rules(struct resolver_entity *last_entity, struct history *hi
 
 /**
  * Finds the correct sub register to use for the original register provided.
- * 
+ *
  * I.e if the size is one byte and you provide eax as the original register then al will be returned
- * 
+ *
  * \attention The original register must be a 32-bit wide general purpose register i.e eax, ecx, edx, or ebx
  */
 const char *codegen_sub_register(const char *original_register, size_t size)
@@ -405,11 +404,11 @@ const char *codegen_sub_register(const char *original_register, size_t size)
 
 /**
  * Finds weather this is a byte operation, word operation or double word operation based on the size provided
- * Returns either "byte", "word", or "dword" 
- * 
+ * Returns either "byte", "word", or "dword"
+ *
  * Note: the reg_to_use pointer should be pointing to the register you intend to use. I.e "eax", "ebx". Only 32 bit registers accepted.
  * \param size The size of the data you are accessing
- * \param reg_to_use pointer to a const char pointer, this will be set to the register you should use for this operation. 32 bit register, 16 bit register or 8 bit register for full register eax, ebx, ecx, edx will be returned 
+ * \param reg_to_use pointer to a const char pointer, this will be set to the register you should use for this operation. 32 bit register, 16 bit register or 8 bit register for full register eax, ebx, ecx, edx will be returned
  */
 const char *codegen_byte_word_or_dword_or_ddword(size_t size, const char **reg_to_use)
 {
@@ -589,11 +588,11 @@ void asm_push_args(const char *ins, va_list args)
     }
 }
 
-void codegen_data_section_add(const char* data, ...)
+void codegen_data_section_add(const char *data, ...)
 {
     va_list args;
     va_start(args, data);
-    char* new_data = malloc(256);
+    char *new_data = malloc(256);
     vsprintf(new_data, data, args);
     vector_push(current_process->generator->custom_data_section, &new_data);
 }
@@ -1182,7 +1181,6 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags, b
         {
             asm_push("shr %s, %s", reg, value);
         }
-
     }
     else if (flags & EXPRESSION_IS_BITWISE_AND)
     {
@@ -1201,7 +1199,7 @@ void codegen_gen_math_for_value(const char *reg, const char *value, int flags, b
 /**
  * @brief Generates a structure to value operation. Pushing an entire structures memory
  * to the stack. Useful for passing structures to functions....
- * 
+ *
  * @param entity The entity of the structure variable to be pushed to the stack
  * @param history Expressionable history
  * @param start_pos The start position for the strucutre push. Useful for ignoring pushes of the start of the structure, in cases where this may be handled else where....
@@ -1942,7 +1940,7 @@ void codegen_generate_assignment_expression(struct node *node, struct history *h
 
     codegen_generate_assignment_part(node->exp.left, node->exp.op, history);
 
-    //codegen_generate_assignment_expression_move_value(left_entity);
+    // codegen_generate_assignment_expression_move_value(left_entity);
 }
 
 void codegen_generate_expressionable_function_arguments(struct node *func_call_args_exp_node, size_t *arguments_size)
@@ -2147,10 +2145,8 @@ void codegen_generate_exp_node_for_logical_arithmetic(struct node *node, struct 
         asm_push_ins_pop("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
         codegen_generate_logical_cmp(node->exp.op, history->exp.logical_end_label, history->exp.logical_end_label_positive);
         codegen_generate_end_labels_for_logical_expression(node->exp.op, history->exp.logical_end_label, history->exp.logical_end_label_positive);
-        asm_push_ins_push("eax",STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+        asm_push_ins_push("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
     }
-
-
 }
 
 void codegen_handle_expression_with_pointer(struct resolver_entity *left_entity, struct node *right_node, struct history *history)
@@ -2176,7 +2172,7 @@ void codegen_generate_exp_node_for_arithmetic(struct node *node, struct history 
 
     if (is_logical_operator(node->exp.op))
     {
-        codegen_generate_exp_node_for_logical_arithmetic(node,history);
+        codegen_generate_exp_node_for_logical_arithmetic(node, history);
         return;
     }
 
@@ -2286,7 +2282,7 @@ bool codegen_resolve_node_for_value(struct node *node, struct history *history)
         // for us to do.
     }
     else if (result->last_entity->type == RESOLVER_ENTITY_TYPE_FUNCTION_CALL &&
-        datatype_is_struct_or_union_non_pointer(&result->last_entity->dtype))
+             datatype_is_struct_or_union_non_pointer(&result->last_entity->dtype))
     {
     }
     else if (datatype_is_struct_or_union_non_pointer(&dtype))
@@ -2474,7 +2470,7 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
         // We are accessing a pointer
         codegen_generate_unary_indirection(node, history);
     }
-    else if(S_EQ(node->unary.op, "++"))
+    else if (S_EQ(node->unary.op, "++"))
     {
         if (node->unary.flags & UNARY_FLAG_IS_RIGHT_OPERANDED_UNARY)
         {
@@ -2485,7 +2481,6 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
             codegen_generate_assignment_part(node->unary.operand, "=", history);
             // No need to pop EAX back off that we did above the "inc" as the receiver expects to pop from the stack
             // anyway..
-
         }
         else
         {
@@ -2495,7 +2490,7 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
             asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
         }
     }
-    else if(S_EQ(node->unary.op, "--"))
+    else if (S_EQ(node->unary.op, "--"))
     {
         if (node->unary.flags & UNARY_FLAG_IS_RIGHT_OPERANDED_UNARY)
         {
@@ -2506,7 +2501,6 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
             codegen_generate_assignment_part(node->unary.operand, "=", history);
             // No need to pop EAX back off that we did above the "inc" as the receiver expects to pop from the stack
             // anyway..
-
         }
         else
         {
@@ -2516,7 +2510,14 @@ void codegen_generate_normal_unary(struct node *node, struct history *history)
             asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
         }
     }
-
+    else if (S_EQ(node->unary.op, "!"))
+    {
+        // We have a logical not so preform it
+        asm_push("cmp eax, 0");
+        asm_push("sete al");
+        asm_push("movzx eax, al");
+        asm_push_ins_push_with_data("eax", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value", 0, &(struct stack_frame_data){.dtype = last_dtype});
+    }
 }
 
 void codegen_generate_unary(struct node *node, struct history *history)
@@ -3354,8 +3355,8 @@ void codegen_generate_data_section_add_ons()
 {
     asm_push("section .data");
     vector_set_peek_pointer(current_process->generator->custom_data_section, 0);
-    const char* str= vector_peek_ptr(current_process->generator->custom_data_section);
-    while(str)
+    const char *str = vector_peek_ptr(current_process->generator->custom_data_section);
+    while (str)
     {
         asm_push(str);
         str = vector_peek_ptr(current_process->generator->custom_data_section);
@@ -3369,12 +3370,11 @@ int codegen(struct compile_process *process)
     // Create the root scope for this process
     scope_create_root(process);
 
-     vector_set_peek_pointer(process->node_tree_vec, 0);
+    vector_set_peek_pointer(process->node_tree_vec, 0);
     // Global variables and down the tree locals... Global scope lets create it.
     codegen_new_scope(0);
     codegen_generate_data_section();
     vector_set_peek_pointer(process->node_tree_vec, 0);
-
 
     codegen_generate_root();
     codegen_finish_scope();
@@ -3396,6 +3396,6 @@ struct code_generator *codegenerator_new(struct compile_process *process)
     generator->entry_points = vector_create(sizeof(struct entry_point *));
     generator->responses = vector_create(sizeof(struct response *));
     generator->_switch.switches = vector_create(sizeof(struct generator_switch_stmt_entity));
-    generator->custom_data_section = vector_create(sizeof(const char*));
+    generator->custom_data_section = vector_create(sizeof(const char *));
     return generator;
 }

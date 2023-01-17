@@ -145,6 +145,7 @@ bool is_keyword(const char *str)
            S_EQ(str, "return") ||
            S_EQ(str, "include") ||
            S_EQ(str, "sizeof") ||
+           S_EQ(str, "offsetof") ||
            S_EQ(str, "if") ||
            S_EQ(str, "else") ||
            S_EQ(str, "while") ||

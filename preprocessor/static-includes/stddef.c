@@ -102,5 +102,5 @@ void preprocessor_stddef_include(struct preprocessor *preprocessor, struct prepr
 {
     // We must create some macro functions for stddef.h
     //offsetof(type, member-designator)
-    preprocessor_definition_create_native("offsetof", preprocessor_stddef_include_offsetof_evaluate, preprocessor_stddef_include_offsetof_value, preprocessor);
+   // preprocessor_definition_create_native("offsetof", preprocessor_stddef_include_offsetof_evaluate, preprocessor_stddef_include_offsetof_value, preprocessor);
 }

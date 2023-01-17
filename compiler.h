@@ -2116,6 +2116,8 @@ size_t datatype_size_for_array_access(struct datatype *datatype);
 size_t datatype_element_size(struct datatype *datatype);
 size_t datatype_size_no_ptr(struct datatype *datatype);
 
+off_t datatype_offset(struct compile_process* compiler, struct datatype* datatype, struct node* member_node);
+
 /**
  * Gets the given return datatype for the provided node.
  * If its a variable the variable datatype is returned

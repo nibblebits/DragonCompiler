@@ -714,6 +714,75 @@ size_t datatype_size_for_array_access(struct datatype *datatype)
     return datatype_size(datatype);
 }
 
+off_t datatype_offset_for_identifier(struct compile_process* compiler, struct datatype* struct_union_datatype, struct node* identifier_node)
+{
+    assert(datatype_is_struct_or_union(struct_union_datatype));
+    assert(identifier_node->type == NODE_TYPE_IDENTIFIER);
+    off_t offset = 0;
+    struct symbol* sym = symresolver_get_symbol(compiler, struct_union_datatype->type_str);
+    assert(sym);
+    assert(sym->type == SYMBOL_TYPE_NODE);
+    struct node* symbol_node = sym->data;
+    assert(node_is_struct_or_union(symbol_node));
+
+    // Okay we have the structure/union _struct can be used since the substructures are the same
+    struct node* body_node = symbol_node->_struct.body_n;
+    vector_set_peek_pointer(body_node->body.statements, 0);
+    struct node* statement_node = vector_peek_ptr(body_node->body.statements);
+    while(statement_node)
+    {
+        if (statement_node->type == NODE_TYPE_VARIABLE)
+        {
+            if (S_EQ(statement_node->var.name, identifier_node->sval))
+            {
+                break;
+            }
+            offset += variable_size(statement_node);
+        }
+
+        statement_node = vector_peek_ptr(body_node->body.statements);
+    }
+
+    // Align the offset and return
+    return align_value(offset, variable_size(symbol_node->_struct.body_n->body.largest_var_node));
+}
+
+off_t _datatype_offset(struct compile_process* compiler, off_t current_offset, struct datatype* struct_union_datatype, struct node* member_node)
+{
+    assert(datatype_is_struct_or_union(struct_union_datatype));
+    off_t offset = current_offset;
+    switch(member_node->type)
+    {
+        case NODE_TYPE_EXPRESSION:
+            FAIL_ERR("TODO Not implemented offsets for expressions");
+        break;
+
+        case NODE_TYPE_EXPRESSION_PARENTHESIS:
+            FAIL_ERR("TODO not impelmenet for parentheses");
+        break;
+
+        case NODE_TYPE_IDENTIFIER:
+           offset += datatype_offset_for_identifier(compiler, struct_union_datatype, member_node);
+        break;
+    }
+
+    return offset;
+}
+off_t datatype_offset(struct compile_process* compiler, struct datatype* datatype, struct node* member_node)
+{
+    off_t offset = 0;
+
+    // We can only make offsets from within structures, if a non structure
+    // is provided then return zero
+    if (!datatype_is_struct_or_union(datatype))
+    {
+       return 0;
+    }
+
+    
+    return _datatype_offset(compiler, 0, datatype, member_node);
+}
+
 size_t datatype_size(struct datatype *datatype)
 {
     if (datatype->flags & DATATYPE_FLAG_IS_POINTER && datatype->pointer_depth > 0)

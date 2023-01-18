@@ -714,11 +714,11 @@ size_t datatype_size_for_array_access(struct datatype *datatype)
     return datatype_size(datatype);
 }
 
-off_t datatype_offset_for_identifier(struct compile_process* compiler, struct datatype* struct_union_datatype, struct node* identifier_node)
+off_t datatype_offset_for_identifier(struct compile_process* compiler, struct datatype* struct_union_datatype, struct node* identifier_node, struct datatype* datatype_out, off_t current_offset)
 {
     assert(datatype_is_struct_or_union(struct_union_datatype));
     assert(identifier_node->type == NODE_TYPE_IDENTIFIER);
-    off_t offset = 0;
+    off_t offset = current_offset;
     struct symbol* sym = symresolver_get_symbol(compiler, struct_union_datatype->type_str);
     assert(sym);
     assert(sym->type == SYMBOL_TYPE_NODE);
@@ -735,6 +735,10 @@ off_t datatype_offset_for_identifier(struct compile_process* compiler, struct da
         {
             if (S_EQ(statement_node->var.name, identifier_node->sval))
             {
+                if (datatype_out)
+                {
+                    *datatype_out = statement_node->var.type;
+                }
                 break;
             }
             offset += variable_size(statement_node);
@@ -744,17 +748,43 @@ off_t datatype_offset_for_identifier(struct compile_process* compiler, struct da
     }
 
     // Align the offset and return
-    return align_value(offset, variable_size(symbol_node->_struct.body_n->body.largest_var_node));
+    size_t largest_var_node_size = 0;
+    if (symbol_node->_struct.body_n->body.largest_var_node)
+    {
+        largest_var_node_size = variable_size(symbol_node->_struct.body_n->body.largest_var_node);
+        return align_value(offset, largest_var_node_size);
+    }
+
+    return offset;
 }
 
-off_t _datatype_offset(struct compile_process* compiler, off_t current_offset, struct datatype* struct_union_datatype, struct node* member_node)
+off_t _datatype_offset(struct compile_process* compiler, off_t current_offset, struct datatype* struct_union_datatype, struct node* member_node, struct datatype* datatype_out);
+
+off_t datatype_offset_for_expression(struct compile_process* compiler, struct datatype* struct_union_datatype, struct node* expression_node, off_t current_offset, struct datatype* datatype_out)
+{
+    off_t offset = current_offset;
+    assert(datatype_is_struct_or_union(struct_union_datatype));
+    assert(expression_node->type == NODE_TYPE_EXPRESSION);
+    struct node* left_node = expression_node->exp.left;
+    struct node* right_node = expression_node->exp.right;
+    struct datatype left_datatype = {0};
+
+    offset = _datatype_offset(compiler, offset, struct_union_datatype, left_node, &left_datatype);
+    assert(datatype_is_struct_or_union(&left_datatype));
+
+    // Change the structure union datatype to the left type
+    offset = _datatype_offset(compiler, offset, &left_datatype, right_node, datatype_out);
+    return offset;
+}
+off_t _datatype_offset(struct compile_process* compiler, off_t current_offset, struct datatype* struct_union_datatype, struct node* member_node,  struct datatype* datatype_out)
 {
     assert(datatype_is_struct_or_union(struct_union_datatype));
     off_t offset = current_offset;
     switch(member_node->type)
     {
         case NODE_TYPE_EXPRESSION:
-            FAIL_ERR("TODO Not implemented offsets for expressions");
+            offset = datatype_offset_for_expression(compiler, struct_union_datatype, member_node, offset, datatype_out);
+
         break;
 
         case NODE_TYPE_EXPRESSION_PARENTHESIS:
@@ -762,7 +792,7 @@ off_t _datatype_offset(struct compile_process* compiler, off_t current_offset, s
         break;
 
         case NODE_TYPE_IDENTIFIER:
-           offset += datatype_offset_for_identifier(compiler, struct_union_datatype, member_node);
+           offset = datatype_offset_for_identifier(compiler, struct_union_datatype, member_node, datatype_out, offset);
         break;
     }
 
@@ -780,7 +810,7 @@ off_t datatype_offset(struct compile_process* compiler, struct datatype* datatyp
     }
 
     
-    return _datatype_offset(compiler, 0, datatype, member_node);
+    return _datatype_offset(compiler, 0, datatype, member_node, NULL);
 }
 
 size_t datatype_size(struct datatype *datatype)

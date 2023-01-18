@@ -1,17 +1,29 @@
 #include <stddef.h>
 #include <stdio.h>
 
-struct address {
-   char m;
-   char d;
-   int mm;
-   char c;
+struct doggy
+{
+   int a;
+   int b;
+};
+struct abc
+{
+   int a;
+   int b;
+   struct doggy d;
+
+};
+
+struct address
+{
+   struct abc kk;
 };
 
 struct address a;
 
-int main () {
-   int pos = offsetof(struct address, c);
+int main()
+{
+   int pos = offsetof(struct address, kk.d.b);
 
-   return 0;
-} 
+   return pos;
+}

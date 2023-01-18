@@ -1,29 +1,21 @@
 #include <stddef.h>
 #include <stdio.h>
 
-struct doggy
-{
-   int a;
-   int b;
+struct address {
+   char name[50];
+   char street[50];
+   int phone;
 };
-struct abc
-{
-   int a;
-   int b;
-   struct doggy d;
+   
+int main () {
+   printf("name offset = %d byte in address structure.\n",
+   offsetof(struct address, name));
 
-};
+   printf("street offset = %d byte in address structure.\n",
+   offsetof(struct address, street));
 
-struct address
-{
-   struct abc kk;
-};
+   printf("phone offset = %d byte in address structure.\n",
+   offsetof(struct address, phone));
 
-struct address a;
-
-int main()
-{
-   int pos = offsetof(struct address, kk.d.b);
-
-   return pos;
-}
+   return(0);
+} 

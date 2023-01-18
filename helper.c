@@ -747,14 +747,6 @@ off_t datatype_offset_for_identifier(struct compile_process* compiler, struct da
         statement_node = vector_peek_ptr(body_node->body.statements);
     }
 
-    // Align the offset and return
-    size_t largest_var_node_size = 0;
-    if (symbol_node->_struct.body_n->body.largest_var_node)
-    {
-        largest_var_node_size = variable_size(symbol_node->_struct.body_n->body.largest_var_node);
-        return align_value(offset, largest_var_node_size);
-    }
-
     return offset;
 }
 
@@ -809,8 +801,15 @@ off_t datatype_offset(struct compile_process* compiler, struct datatype* datatyp
        return 0;
     }
 
+    struct datatype datatype_of_member = {0};
+    offset =_datatype_offset(compiler, 0, datatype, member_node, &datatype_of_member);
     
-    return _datatype_offset(compiler, 0, datatype, member_node, NULL);
+    off_t aligned_offset = offset;
+    if (datatype_size(&datatype_of_member) > 0)
+    {
+        aligned_offset = align_value(offset, datatype_size(&datatype_of_member));
+    }
+    return aligned_offset;
 }
 
 size_t datatype_size(struct datatype *datatype)

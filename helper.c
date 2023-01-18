@@ -788,7 +788,7 @@ off_t _datatype_offset(struct compile_process* compiler, off_t current_offset, s
         break;
 
         case NODE_TYPE_EXPRESSION_PARENTHESIS:
-            FAIL_ERR("TODO not impelmenet for parentheses");
+            compiler_error(compiler, "Parenthesis is not allowed in a structure/union member offsetof expression");
         break;
 
         case NODE_TYPE_IDENTIFIER:

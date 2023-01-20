@@ -2,20 +2,13 @@
 #include <stdio.h>
 
 struct address {
-   char name[50];
-   char street[50];
+   int god;
    int phone;
+   char e;
 };
    
 int main () {
-   printf("name offset = %d byte in address structure.\n",
-   offsetof(struct address, name));
-
-   printf("street offset = %d byte in address structure.\n",
-   offsetof(struct address, street));
-
-   printf("phone offset = %d byte in address structure.\n",
-   offsetof(struct address, phone));
-
-   return(0);
+   int a; 
+   int sizeof_offset = sizeof(a);
+   return sizeof_offset;
 } 

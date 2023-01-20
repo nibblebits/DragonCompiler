@@ -1152,6 +1152,7 @@ void parse_sizeof(struct history *history)
     // Get rid of the sizeof
     expect_keyword("sizeof");
     expect_op("(");
+    
     // Now for our expression
     struct datatype dtype;
     parse_datatype(&dtype);

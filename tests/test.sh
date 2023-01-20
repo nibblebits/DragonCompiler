@@ -633,5 +633,15 @@ else
 fi
 
 
+echo -e "Offset Of test "
+./build/offsetof_test
+if [ $? -ne 150 ]; then
+    echo -e "Offsetof test failed"
+    res_code=1
+else
+    echo -e "Offsetof test passed"
+fi
+
+
 echo -e "All tests finished"
 exit $res_code

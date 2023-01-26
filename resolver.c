@@ -560,7 +560,8 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
         rule.left.flags = RESOLVER_ENTITY_FLAG_NO_MERGE_WITH_NEXT_ENTITY;
 
         // Function calls return addresses of structures, no need for indirection
-        if (left_entity->type != RESOLVER_ENTITY_TYPE_FUNCTION_CALL)
+        // Obviously theirs no indirection if we are getting the address as we dont want to peek into the next pointer in this regard.
+        if (left_entity->type != RESOLVER_ENTITY_TYPE_FUNCTION_CALL && !(result->flags & RESOLVER_RESULT_FLAG_DOES_GET_ADDRESS))
         {
             rule.right.flags = RESOLVER_ENTITY_FLAG_DO_INDIRECTION;
         }
@@ -805,6 +806,8 @@ struct resolver_entity *resolver_follow_indirection(struct resolver_process *res
 }
 struct resolver_entity *resolver_follow_unary_address(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
+    result->flags |= RESOLVER_RESULT_FLAG_DOES_GET_ADDRESS;
+
     // Okay this is an address unary i.e &a.b.c;
     resolver_follow_part(resolver, node->unary.operand, result);
 
@@ -849,6 +852,14 @@ struct resolver_entity *resolver_follow_cast(struct resolver_process *resolver, 
     operand_entity->flags |= RESOLVER_ENTITY_FLAG_WAS_CASTED;
 
     struct resolver_entity *cast_entity = resolver_create_new_cast_entity(resolver, operand_entity->scope, &node->cast.dtype);
+    if (datatype_is_struct_or_union(&node->cast.dtype))
+    {
+        if (!cast_entity->scope)
+        {
+            cast_entity->scope = resolver->scope.current;
+        }
+        result->last_struct_union_entity = cast_entity;
+    }
     resolver_result_entity_push(result, cast_entity);
     return cast_entity;
 }

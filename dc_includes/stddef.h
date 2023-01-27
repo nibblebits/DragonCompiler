@@ -4,6 +4,7 @@
 typedef int __builtin_va_list;
 #include <stddef-internal.h>
 
+#define offsetof(TYPE, MEMBER) &((TYPE *)0)->MEMBER
 
 int va_start(__builtin_va_list list, void *x);
 void va_copy(__builtin_va_list list, __builtin_va_list list2);

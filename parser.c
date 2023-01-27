@@ -1163,26 +1163,6 @@ void parse_sizeof(struct history *history)
     expect_sym(')');
 }
 
-void parse_offsetof(struct history* history)
-{
-     // Get rid of the sizeof
-    expect_keyword("offsetof");
-    expect_op("(");
-    // Now for our expression
-    struct datatype dtype;
-    parse_datatype(&dtype);
-
-    // Now we have the datatype lets see what the argument is
-    expect_op(",");
-    parse_expressionable(history);
-    struct node* member_iden_node = node_pop();
-    
-    node_create(&(struct node){NODE_TYPE_NUMBER, .llnum = datatype_offset(current_process, &dtype, member_iden_node)});
-
-
-    expect_sym(')');
-
-}
 void parse_keyword_parentheses_expression(const char *keyword)
 {
     struct history history;
@@ -1416,12 +1396,7 @@ void parse_keyword(struct history *history)
         parse_sizeof(history);
         return;
     }
-    else if(S_EQ(token->sval, "offsetof"))
-    {
-        parse_offsetof(history);
-        return;
-    }
-
+ 
     // keyword_is_datatype is temporary because custom types can exist
     // Therefore variable declarations will be the appropaite action
     // if all other keywords are not present.

@@ -1,11 +1,16 @@
+#include <stddef.h>
+#include <stdio.h>
 
-int main()
-{
-  int x;
-  x = 20;
-  int* ptr;
-  ptr = &x;
-  *ptr = 30;
-  
-  return x;
-}
+struct address {
+   char name[50];
+   char street[50];
+   int phone;
+};
+   
+int main () {
+   int name_offset = offsetof(struct address, name);
+   int street_offset = offsetof(struct address, street);
+   int phone_offset = offsetof(struct address, phone);
+
+   return name_offset + street_offset + phone_offset;
+} 

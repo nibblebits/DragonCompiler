@@ -852,7 +852,7 @@ struct resolver_entity *resolver_follow_cast(struct resolver_process *resolver, 
     operand_entity->flags |= RESOLVER_ENTITY_FLAG_WAS_CASTED;
 
     struct resolver_entity *cast_entity = resolver_create_new_cast_entity(resolver, operand_entity->scope, &node->cast.dtype);
-    if (datatype_is_struct_or_union(&node->cast.dtype))
+    if (datatype_is_struct_or_union(&node->cast.dtype) && result->flags & RESOLVER_RESULT_FLAG_DOES_GET_ADDRESS)
     {
         if (!cast_entity->scope)
         {

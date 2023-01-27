@@ -1491,6 +1491,7 @@ void codegen_generate_entity_access_for_variable_or_general(struct resolver_resu
 {
     // Restore EBX
     asm_push_ins_pop("ebx", STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, "result_value");
+    asm_push("; Entity=%i", entity->type);
     if (entity->flags & RESOLVER_ENTITY_FLAG_DO_INDIRECTION)
     {
         asm_push("mov ebx, [ebx]");

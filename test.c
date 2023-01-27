@@ -15,5 +15,6 @@ int main()
     dd.x = 50;
     d = &dd;
     // lol it works :) 
-    return ((struct wolf*)(d))->d;
+    return ((struct dog*)d)->x;
 }
+

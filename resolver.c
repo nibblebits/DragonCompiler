@@ -548,6 +548,14 @@ struct resolver_entity *resolver_get_function(struct resolver_result *result, st
 
 static void resolver_follow_part(struct resolver_process *resolver, struct node *node, struct resolver_result *result);
 
+
+bool resolver_do_indirection(struct resolver_entity *entity)
+{
+    struct resolver_result* result = entity->result;
+    return entity->type != RESOLVER_ENTITY_TYPE_FUNCTION_CALL && !(result->flags & RESOLVER_RESULT_FLAG_DOES_GET_ADDRESS) 
+        && entity->type != RESOLVER_ENTITY_TYPE_CAST;
+}
+
 static struct resolver_entity *resolver_follow_struct_exp(struct resolver_process *resolver, struct node *node, struct resolver_result *result)
 {
     struct resolver_entity *result_entity = NULL;
@@ -561,7 +569,7 @@ static struct resolver_entity *resolver_follow_struct_exp(struct resolver_proces
 
         // Function calls return addresses of structures, no need for indirection
         // Obviously theirs no indirection if we are getting the address as we dont want to peek into the next pointer in this regard.
-        if (left_entity->type != RESOLVER_ENTITY_TYPE_FUNCTION_CALL && !(result->flags & RESOLVER_RESULT_FLAG_DOES_GET_ADDRESS))
+        if (resolver_do_indirection(left_entity))
         {
             rule.right.flags = RESOLVER_ENTITY_FLAG_DO_INDIRECTION;
         }
@@ -852,13 +860,14 @@ struct resolver_entity *resolver_follow_cast(struct resolver_process *resolver, 
     operand_entity->flags |= RESOLVER_ENTITY_FLAG_WAS_CASTED;
 
     struct resolver_entity *cast_entity = resolver_create_new_cast_entity(resolver, operand_entity->scope, &node->cast.dtype);
-    if (datatype_is_struct_or_union(&node->cast.dtype) && result->flags & RESOLVER_RESULT_FLAG_DOES_GET_ADDRESS)
+    if (datatype_is_struct_or_union(&node->cast.dtype))
     {
         if (!cast_entity->scope)
         {
             cast_entity->scope = resolver->scope.current;
         }
         result->last_struct_union_entity = cast_entity;
+        
     }
     resolver_result_entity_push(result, cast_entity);
     return cast_entity;

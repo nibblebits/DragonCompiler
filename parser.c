@@ -1727,10 +1727,19 @@ struct node *parser_evaluate_identifier_to_numerical_node(struct node *node)
 
     struct resolver_entity *entity = NULL;
     entity = resolver_result_entity(result);
-    struct variable *var = &variable_node(entity->node)->var;
+    struct variable *var = NULL;
+
+    if (entity && entity->node)
+    {
+        struct node* var_node = variable_node(entity->node);
+        if (var_node)
+        {
+            var = &var_node->var;
+        }
+    }
     // Only if the constant is not a pointer will we pull a literal and push a number node
     // this is to prevent const char* ptr being interpreted as a literal number.
-    if (var->type.flags & DATATYPE_FLAG_IS_CONST && !(var->type.flags & DATATYPE_FLAG_IS_POINTER))
+    if (var && var->type.flags & DATATYPE_FLAG_IS_CONST && !(var->type.flags & DATATYPE_FLAG_IS_POINTER))
     {
         // Okay its constant
         long literal_val = var->val->llnum;
@@ -1794,8 +1803,8 @@ struct node *parser_const_to_literal(struct node *node)
 void parse_expressionable_root(struct history *history)
 {
     parse_expressionable(history);
-    struct node *result_node = parser_const_to_literal(node_pop());
-    node_push(result_node);
+    //struct node *result_node = parser_const_to_literal(node_pop());
+   // node_push(result_node);
 }
 
 void parse_expressionable(struct history *history)

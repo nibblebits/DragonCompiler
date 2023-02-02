@@ -307,6 +307,14 @@ struct node *struct_for_access(struct resolver_process *process, struct node *no
     return _struct_for_access(process, node, type_str, flags, details_out);
 }
 
+
+void datatype_set_void(struct datatype* dtype)
+{
+    dtype->type_str = "void";
+    dtype->type = DATA_TYPE_VOID;
+    dtype->size = 0;
+}
+
 bool datatype_is_void_no_ptr(struct datatype *dtype)
 {
     return S_EQ(dtype->type_str, "void") && !(dtype->flags & DATATYPE_FLAG_IS_POINTER);

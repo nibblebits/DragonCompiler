@@ -629,6 +629,7 @@ enum
 {
     RESOLVER_ENTITY_TYPE_VARIABLE,
     RESOLVER_ENTITY_TYPE_FUNCTION,
+    RESOLVER_ENTITY_TYPE_NATIVE_FUNCTION,
     RESOLVER_ENTITY_TYPE_STRUCTURE,
     RESOLVER_ENTITY_TYPE_FUNCTION_CALL,
     RESOLVER_ENTITY_TYPE_ARRAY_BRACKET,
@@ -703,6 +704,11 @@ struct resolver_entity
             // for this function call.
             size_t stack_size;
         } func_call_data;
+
+        struct resolver_entity_native_function
+        {   
+            struct symbol* symbol;
+        } native_func;
 
         struct resolver_entity_rule
         {
@@ -981,11 +987,11 @@ struct generator_entity_address
 
 typedef void (*ASM_PUSH_PROTOTYPE)(const char *ins, ...);
 
-// orinating_function is the function this function call originated from
-typedef void (*NATIVE_FUNCTION_CALL)(struct generator *generator, struct node *orinating_function, struct native_function *func, struct vector *arguments);
+typedef void (*NATIVE_FUNCTION_CALL)(struct generator *generator, struct native_function *func, struct vector *arguments);
 typedef void (*GENERATOR_GENERATE_EXPRESSION)(struct generator *generator, struct node *node, int flags);
 typedef void (*GENERATOR_ENTITY_ADDRESS)(struct generator *generator, struct resolver_entity *entity, struct generator_entity_address *address_out);
 typedef void (*GENERATOR_END_EXPRESSION)(struct generator *generator);
+typedef void (*GENERATOR_FUNCTION_RETURN)(struct datatype* dtype, const char* fmt, ...);
 
 struct generator
 {
@@ -993,6 +999,8 @@ struct generator
     GENERATOR_GENERATE_EXPRESSION gen_exp;
     GENERATOR_END_EXPRESSION end_exp;
     GENERATOR_ENTITY_ADDRESS entity_address;
+    GENERATOR_FUNCTION_RETURN ret;
+
     struct compile_process *compiler;
 
     // Private data for the generator.
@@ -1010,6 +1018,8 @@ struct native_function
 };
 
 struct symbol *native_create_function(struct compile_process *compiler, const char *name, struct native_function_callbacks *callbacks);
+struct native_function* native_function_get(struct compile_process* compiler, const char* name);
+
 enum
 {
     PARSE_ALL_OK,
@@ -1997,6 +2007,12 @@ int compute_sum_padding_for_body(struct node *node);
 int padding(int val, int to);
 
 bool datatype_is_void_no_ptr(struct datatype* dtype);
+
+
+/**
+ * Sets the datatype to void.
+*/
+void datatype_set_void(struct datatype* dtype);
 
 /**
  * @brief Returns the datatype that is a pointer, if neither are pointer datatypes then NULL is returend

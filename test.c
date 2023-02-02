@@ -1,20 +1,11 @@
-struct dog
-{
-    int x;
-};
+#include <stdarg.h>
+#include <stddef.h>
 
-struct wolf
-{
-    char d;
-};
-
-struct dog* d;
-struct dog dd;
 int main()
 {
-    dd.x = 50;
-    d = &dd;
-    // lol it works :) 
-    return ((struct dog*)d)->x;
+    va_list abc;
+    int num_args = 4;
+    va_start(abc, num_args);
+    return 22;
 }
 

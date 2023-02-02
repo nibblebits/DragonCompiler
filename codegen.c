@@ -20,6 +20,9 @@ void codegen_gen_exp(struct generator *generator, struct node *node, int flags);
 void codegen_entity_address(struct generator *generator, struct resolver_entity *entity, struct generator_entity_address *address_out);
 void codegen_end_exp(struct generator *generator);
 void codegen_restore_assignment_right_operand(const char *output_register);
+void asm_push_ins_with_datatype(struct datatype* dtype, const char* fmt, ...);
+
+
 
 struct _x86_generator_private
 {
@@ -37,6 +40,7 @@ struct generator x86_codegen = {
     .gen_exp = codegen_gen_exp,
     .end_exp = codegen_end_exp,
     .entity_address = codegen_entity_address,
+    .ret = asm_push_ins_with_datatype,
     .private = &_x86_generator_private};
 
 struct _x86_generator_private *x86_generator_private(struct generator *gen)
@@ -619,6 +623,18 @@ void asm_push_ins_push_with_flags(const char *fmt, int stack_entity_type, const 
     stackframe_push(current_function, &(struct stack_frame_element){.flags = flags, .type = stack_entity_type, .name = stack_entity_name});
 }
 
+void asm_push_ins_with_datatype(struct datatype* dtype, const char* fmt, ...)
+{
+    char tmp_buf[200];
+    sprintf(tmp_buf, "push %s", fmt);
+    va_list args;
+    va_start(args, fmt);
+    asm_push_args(tmp_buf, args);
+    va_end(args);
+
+    stackframe_push(current_function, &(struct stack_frame_element){.type = STACK_FRAME_ELEMENT_TYPE_PUSHED_VALUE, .name = "result_value", .flags = STACK_FRAME_ELEMENT_FLAG_HAS_DATATYPE, .data.dtype = *dtype});
+}
+
 void asm_push_ins_push_with_data(const char *fmt, int stack_entity_type, const char *stack_entity_name, int flags, struct stack_frame_data *data, ...)
 {
     char tmp_buf[200];
@@ -906,7 +922,8 @@ void codegen_generate_new_expressionable(struct node *node, struct history *hist
 
 void codegen_gen_exp(struct generator *generator, struct node *node, int flags)
 {
-    codegen_generate_expressionable(node, history_down(x86_generator_private(generator)->remembered.history, flags));
+    struct history history;
+    codegen_generate_expressionable(node, history_begin(&history, flags));
 }
 
 void codegen_end_exp(struct generator *generator)
@@ -1504,6 +1521,7 @@ void codegen_generate_entity_access_for_variable_or_general(struct resolver_resu
 
 void codegen_generate_entity_access_for_function_call(struct resolver_result *result, struct resolver_entity *entity)
 {
+
     vector_set_flag(entity->func_call_data.arguments, VECTOR_FLAG_PEEK_DECREMENT);
     vector_set_peek_pointer_end(entity->func_call_data.arguments);
 
@@ -1858,6 +1876,22 @@ void codegen_generate_entity_access_for_assignment_left_operand(struct resolver_
 
 void codegen_generate_entity_access(struct resolver_result *result, struct resolver_entity *root_assignment_entity, struct node *top_most_node, struct history *history)
 {
+    if (root_assignment_entity->type == RESOLVER_ENTITY_TYPE_NATIVE_FUNCTION)
+    {
+        //Is this a native function we are calling?
+        struct native_function* native_func = native_function_get(current_process, root_assignment_entity->name);
+        if (native_func)
+        {
+            asm_push("; NATIVE FUNCTION %s", root_assignment_entity->name);
+            // Since we have a native function the next entity should be the function call to that function
+            struct resolver_entity* func_call_entity = resolver_result_entity_next(root_assignment_entity);
+            assert(func_call_entity && func_call_entity->type == RESOLVER_ENTITY_TYPE_FUNCTION_CALL);
+
+            native_func->callbacks.call(&x86_codegen, native_func, func_call_entity->func_call_data.arguments);
+
+            return;
+        }
+    }
     codegen_generate_entity_access_start(result, root_assignment_entity, history);
     struct resolver_entity *current = resolver_result_entity_next(root_assignment_entity);
     while (current)
@@ -2234,13 +2268,6 @@ bool codegen_should_push_function_call_argument(struct response *res)
     return !codegen_response_acknowledged(res) || !(res->flags & RESPONSE_FLAG_PUSHED_STRUCTURE);
 }
 
-void codegen_generate_function_call_for_native(struct symbol *native_func_sym, struct node *node, struct resolver_entity *entity, struct history *history)
-{
-    // Okay lets call the function
-    struct native_function *func = native_func_sym->data;
-    x86_generator_private(&x86_codegen)->remembered.history = history;
-    func->callbacks.call(&x86_codegen, node->binded.function, func, entity->func_call_data.arguments);
-}
 
 bool codegen_resolve_node_return_result(struct node *node, struct history *history, struct resolver_result **result_out)
 {

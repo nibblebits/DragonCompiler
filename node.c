@@ -263,6 +263,11 @@ bool node_is_possibly_constant(struct node *node)
 
 bool node_is_constant(struct resolver_process *process, struct node *node)
 {
+    if (!node)
+    {
+        return false;
+    }
+    
     if (!node_is_possibly_constant(node))
     {
         return false;
@@ -557,6 +562,11 @@ struct node *variable_node_or_list(struct node *node)
 
 struct node *variable_node(struct node *node)
 {
+    if (!node)
+    {
+        return NULL;
+    }
+
     struct node *var_node = NULL;
     if (node->type == NODE_TYPE_VARIABLE)
     {

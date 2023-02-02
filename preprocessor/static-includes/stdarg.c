@@ -1,6 +1,6 @@
 #include "compiler.h"
 //void va_copy (__builtin_va_list dest, __builtin_va_list src);
-void native_va_copy(struct generator *generator, struct node *orinating_function, struct native_function *func, struct vector *arguments)
+void native_va_copy(struct generator *generator, struct native_function *func, struct vector *arguments)
 {
     struct compile_process *compiler = generator->compiler;
     if (vector_count(arguments) != 2)
@@ -29,7 +29,7 @@ void native_va_copy(struct generator *generator, struct node *orinating_function
 /**
  * va_start(__builtin_va_list list, void* last_stack_var)
  */
-void native_va_start(struct generator *generator, struct node *orinating_function, struct native_function *func, struct vector *arguments)
+void native_va_start(struct generator *generator, struct native_function *func, struct vector *arguments)
 {
     struct compile_process *compiler = generator->compiler;
     if (vector_count(arguments) != 2)
@@ -57,13 +57,17 @@ void native_va_start(struct generator *generator, struct node *orinating_functio
     // we got the final argument node, lets now load the address into list_arg.
     generator->asm_push("mov dword [%s], ebx", address_out.address);
     generator->asm_push("; va_start end for variable %s", stack_arg->sval);
+
+    struct datatype void_datatype;
+    datatype_set_void(&void_datatype);
+    generator->ret(&void_datatype, "0");
 }
 
 /**
  * 
  * void* __builtin_va_arg(__builtin_va_list list, int type)
  */
-void native___builtin_va_arg(struct generator *generator, struct node *orinating_function, struct native_function *func, struct vector *arguments)
+void native___builtin_va_arg(struct generator *generator, struct native_function *func, struct vector *arguments)
 {
 
     struct compile_process *compiler = generator->compiler;
@@ -89,7 +93,7 @@ void native___builtin_va_arg(struct generator *generator, struct node *orinating
     generator->asm_push("; va_arg end");
 }
 
-void native_va_end(struct generator *generator, struct node *orinating_function, struct native_function *func, struct vector *arguments)
+void native_va_end(struct generator *generator, struct native_function *func, struct vector *arguments)
 {
     // Nothing to do really..
 }

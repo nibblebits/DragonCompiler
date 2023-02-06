@@ -87,15 +87,24 @@ void native___builtin_va_arg(struct generator *generator, struct native_function
         compiler_error(compiler, "va_arg expects second argument to be numeric size of variable argument. Use macros for automation");
     }
     generator->asm_push("add dword [ebx], %i", size_argument->llnum);
-    generator->gen_exp(generator, list_arg, 0);
-    register_unset_flag(REGISTER_EAX_IS_USED);
-    generator->asm_push("mov dword eax, [eax]");
+    generator->asm_push("mov dword eax, [ebx] ");
+    struct datatype void_dtype;
+    datatype_set_void(&void_dtype);
+    void_dtype.pointer_depth++;
+    void_dtype.flags |= DATATYPE_FLAG_IS_POINTER;
+    generator->ret(&void_dtype, "dword [eax]");
+
     generator->asm_push("; va_arg end");
 }
 
 void native_va_end(struct generator *generator, struct native_function *func, struct vector *arguments)
 {
     // Nothing to do really..
+
+        struct datatype void_datatype;
+    datatype_set_void(&void_datatype);
+    generator->ret(&void_datatype, "0");
+    
 }
 
 void preprocessor_stdarg_internal_include(struct preprocessor *preprocessor, struct preprocessor_included_file *file)

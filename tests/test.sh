@@ -643,5 +643,16 @@ else
 fi
 
 
+echo -e "Valist test "
+./build/valist_test
+if [ $? -ne 100 ]; then
+    echo -e "Valist test failed"
+    res_code=1
+else
+    echo -e "Valist test passed"
+fi
+
+
+
 echo -e "All tests finished"
 exit $res_code

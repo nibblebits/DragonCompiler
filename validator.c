@@ -77,8 +77,24 @@ void validate_function_arguments(struct function_arguments* func_arguments)
     }
 }
 
+void validate_identifier(struct node* node)
+{
+    struct resoler_result* result = resolver_follow(validator_current_compile_process->resolver, node);
+    if (!resolver_result_ok(result))
+    {
+        compiler_error(validator_current_compile_process, "The variable does not exist");
+    }
+}
 void validate_expressionable(struct node* node)
 {
+
+    // Alright we have an assignment lets just make sure that the variable exists right.
+    switch(node->type)
+    {
+        case NODE_TYPE_IDENTIFIER:
+            validate_identifier(node);
+        break;
+    }
     
 }
 
@@ -91,9 +107,17 @@ void validate_return_node(struct node* node)
             // Why are we returning a value in a void return type
             compiler_node_error(node, "You are returning a value in function %s which has a return type of void", current_function->func.name);
         }
-        validate_expressionable(node);
+        validate_expressionable(node->stmt.ret.exp);
     }
 }
+
+void validate_if_stmt(struct node* node)
+{   
+    validation_new_scope(0);
+    validate_body(&node->stmt._if.body_node->body);
+    validation_end_scope();
+}
+
 
 void validate_statement(struct node* node)
 {
@@ -106,17 +130,27 @@ void validate_statement(struct node* node)
         case NODE_TYPE_STATEMENT_RETURN:
         validate_return_node(node);
         break;  
+
+        case NODE_TYPE_STATEMENT_IF:
+        validate_if_stmt(node);
+        break;
     }
 }
-void validate_function_body(struct node* node)
+
+void validate_body(struct body* body)
 {
-    vector_set_peek_pointer(node->body.statements, 0);
-    struct node* statement = vector_peek_ptr(node->body.statements);
+    vector_set_peek_pointer(body->statements, 0);
+    struct node* statement = vector_peek_ptr(body->statements);
     while(statement)
     {
         validate_statement(statement);
-        statement = vector_peek_ptr(node->body.statements);
-    }
+        statement = vector_peek_ptr(body->statements);
+    }   
+}
+
+void validate_function_body(struct node* node)
+{
+    validate_body(&node->body);
 }
 void validate_function_node(struct node* node)
 {
@@ -192,7 +226,6 @@ void validate_destruct(struct compile_process* process)
 
 int validate(struct compile_process* process)
 {
-    return 0;
     int res = 0;
     validate_initialize(process);
     res = validate_tree(process);
